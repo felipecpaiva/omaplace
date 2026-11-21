@@ -1,0 +1,4 @@
+[rule.editor]
+app = "org.example.Editor"
+monitor = "Example Corp EX27"
+slot = 4

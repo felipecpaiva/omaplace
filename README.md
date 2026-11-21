@@ -27,7 +27,22 @@ Add this line to your `hyprland.lua`:
 pcall(dofile, os.getenv("HOME") .. "/.config/omarchy/plugins/io.github.felipecpaiva.omaplace/lua/omaplace.lua")
 ```
 
-The `pcall` means a missing or broken file never breaks the rest of your config. (The module arrives in a later work package.)
+The `pcall` means a missing or broken file never breaks the rest of your config. Rules are read from `~/.config/omaplace/config.toml` when Hyprland loads.
+
+## Placement rules
+
+Put this in `~/.config/omaplace/config.toml` (made-up app and monitor):
+
+```toml
+[rule.editor]
+app = "org.example.Editor"      # the app's initial class
+monitor = "Example Corp EX27"    # the monitor's name as Omarchy knows it; empty = the focused monitor
+slot = 3                        # 1 to 10 inside that monitor
+follow = false                  # true: switch to that workspace when the app opens
+```
+
+The app then opens on that slot. If the monitor is unplugged, the rule switches itself off and the app opens as
+usual. It comes back when the monitor does.
 
 ## Remove
 

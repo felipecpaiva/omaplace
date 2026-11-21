@@ -47,7 +47,12 @@ function M.new()
   hl.dsp = dsp_proxy(fake.dsp_calls, "")
 
   -- One-shot timer: fires once, when advance() passes `ms`. Returns a handle with cancel().
+  -- Both call forms work: hl.timer(ms, fn) and Hyprland's own hl.timer(fn, { type = "oneshot", timeout = ms }).
   function hl.timer(ms, fn)
+    if type(ms) == "function" then
+      local opts = fn
+      ms, fn = type(opts) == "table" and opts.timeout or 0, ms
+    end
     fake.next_timer = fake.next_timer + 1
     local t = { id = fake.next_timer, due = fake.now + ms, fn = fn, live = true }
     fake.timers[#fake.timers + 1] = t
@@ -78,6 +83,15 @@ function M.new()
       if r.enabled ~= false then out[#out + 1] = r end
     end
     return out
+  end
+
+  -- How many timers are armed and have not fired or been cancelled.
+  function fake.pending_timers()
+    local n = 0
+    for _, t in ipairs(fake.timers) do
+      if t.live then n = n + 1 end
+    end
+    return n
   end
 
   -- Move the clock forward, firing due timers in time order (a timer made by a timer fires too if due).

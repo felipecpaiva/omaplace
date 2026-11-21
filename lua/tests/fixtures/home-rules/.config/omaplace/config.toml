@@ -1,0 +1,11 @@
+# made-up rules for the glue test
+[rule.editor]
+app = "org.example.Editor"
+monitor = "Example Corp EX27"
+slot = 3
+follow = false
+
+[rule.notes]
+app = "org.example.Notes"
+slot = 2
+follow = true
