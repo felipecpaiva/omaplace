@@ -37,7 +37,7 @@ body{{width:{w}px;height:{h}px;background:{t['bg']};color:{t['fg']};font-family:
  display:flex;flex-direction:column;justify-content:center;padding:0 {int(w*0.08)}px;gap:{int(h*0.035)}px;overflow:hidden;position:relative}}
 .lk svg{{height:{int(h*k[0])}px;width:auto;display:block;margin-bottom:{int(h*0.015)}px}}
 .tag{{font-size:{int(h*k[1])}px;font-weight:700;line-height:1.2}}
-.sub{{font-size:{int(h*k[2])}px;color:{t['mute']};line-height:1.4;max-width:{int(w*0.84)}px}}
+.sub{{font-size:{int(h*k[2])}px;color:{t['mute']};line-height:1.4;max-width:{int(w*0.84)}px;text-wrap:balance}}
 .col{{display:flex;flex-direction:column;gap:{int(h*0.035)}px}} .art{{margin-top:{int(h*0.03)}px}} .art svg{{width:{int(min(w*0.6,640))}px;display:block}}
 .url{{position:absolute;right:{int(w*0.04)}px;bottom:{int(h*0.05)}px;font-size:{max(16,int(h*0.026))}px;color:{t['mute']}}}
 </style>{banner_css if layout=='banner' else ''}<div class="col"><div class="lk">{lk}</div><div class="tag">{TAG}</div><div class="sub">{SUB}</div></div>{art}{url}"""
