@@ -19,7 +19,7 @@ const TIMING = [
 ]
 // Same list as EDITABLE in SceneStore.js (tests check it): the window fields a re-capture keeps once the user edited them.
 // `context` is not in it: it is half of the key a re-capture matches slots by, so it cannot be kept from the old slot.
-const KEEPABLE = ["app", "rect", "order", "floating", "launch", "folder"]
+const KEEPABLE = ["app", "context", "rect", "order", "floating", "launch", "folder"]
 const WINDOW_EDITS = ["folder", "launch", "context"]
 // Strategy name (AppResolve) to the browser's folder under ~/.config, where its `Local State` file lives.
 const PROFILE_DIRS = { chrome: "google-chrome", chromium: "chromium", brave: "BraveSoftware/Brave-Browser" }
@@ -155,6 +155,7 @@ function answerText(text, okText) {
     not_found: "Not found",
     bad_name: "Names use a to z, 0 to 9, dash and underscore, up to 40 characters",
     no_lua: "The omaplace Lua module is not loaded in Hyprland",
+    empty: "Nothing to save on this desktop",
     failed: "That did not work"
   }
   const base = words[a.code] || "That did not work"

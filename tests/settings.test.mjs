@@ -60,7 +60,7 @@ test("markEdited adds keepable fields once", () => {
   assert.equal(S.markEdited("", "folder"), "folder")
   assert.equal(S.markEdited("folder", "folder"), "folder")
   assert.equal(S.markEdited("folder  launch", "rect"), "folder launch rect")
-  assert.equal(S.markEdited("launch", "context"), "launch")
+  assert.equal(S.markEdited("launch", "context"), "launch context") // a picked profile or folder is kept by a re-capture
   assert.equal(S.markEdited(undefined, "class"), "")
 })
 
@@ -80,6 +80,7 @@ test("windowEdit changes a copy and marks the field", () => {
   assert.notEqual(r.win.rect, win.rect)
   assert.equal(S.windowEdit(win, "launch", "htop -d 5").win.edited, "launch")
   assert.equal(S.windowEdit({ ...win, context: "?" }, "context", "Profile 1").win.context, "Profile 1")
+  assert.equal(S.windowEdit({ ...win, context: "?" }, "context", "Profile 1").win.edited, "context")
   assert.equal(S.windowEdit(win, "class", "x").ok, false)
   assert.equal(S.windowEdit(win, "launch", 'say "hi"').ok, false)
   assert.equal(S.windowEdit(win, "context", "--incognito").ok, false)
