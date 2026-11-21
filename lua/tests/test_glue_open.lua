@@ -17,6 +17,8 @@ local function clean()
   for _, name in ipairs(written) do os.remove(runtime .. "/omaplace/" .. name) end
 end
 clean() -- a failed earlier run may have left files
+-- app memory from an earlier run of this test would place the idle windows below
+os.remove(dir .. "/fixtures/home-session-off/.local/state/omaplace/memory.lua")
 local real_getenv = os.getenv
 os.getenv = function(k)
   if k == "HOME" then return dir .. "/fixtures/home-session-off" end
