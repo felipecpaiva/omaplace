@@ -7,7 +7,7 @@ import qs.Ui
 import "js/Settings.js" as Settings
 import "pages"
 
-// omaplace settings window (WP6): a side list of four pages (Scenes, Rules, Session, General), like omahop's (D24).
+// omaplace settings window (WP6, WP13): a side list of five pages (Desktops, Scenes, Rules, Session, General), like omahop's (D24).
 // It reads and writes nothing itself: every read and every change is a function of Service.qml, which the shell hands
 // in as `service`. Opened with `omarchy-shell shell toggle io.github.felipecpaiva.omaplace` or the launcher entry.
 Item {
@@ -19,12 +19,12 @@ Item {
   property var service: null
 
   property bool opened: false
-  property string page: "scenes"
+  property string page: "desktops"
   property var info: Settings.emptyData()
   property string status: ""
   property bool failed: false
   property string waitReq: ""      // a slow request this window started; its result is shown when it ends
-  property var confirm: null       // { kind: "scene" | "rule", name } while the delete question is open
+  property var confirm: null       // { kind: "scene" | "plan" | "rule", name } while the delete question is open
 
   property color background: Color.menu.background
   property color foreground: Color.menu.text
@@ -33,7 +33,7 @@ Item {
   property string fontFamily: Style.font.menuFamily
 
   readonly property var pages: [
-    { id: "scenes", title: "Scenes" }, { id: "rules", title: "Rules" },
+    { id: "desktops", title: "Desktops" }, { id: "scenes", title: "Scenes" }, { id: "rules", title: "Rules" },
     { id: "session", title: "Session" }, { id: "general", title: "General" }
   ]
 
@@ -42,6 +42,7 @@ Item {
     if (root.service) {
       root.service.ensureDirs()
       root.service.refreshMonitors()
+      root.service.desktopsInfo()
     }
     root.reload()
     Qt.callLater(function () { content.forceActiveFocus() })
@@ -82,6 +83,14 @@ Item {
   function addMenu() { if (root.service) root.act(root.service.menuAdd(), "Added to the Omarchy menu, the old file is kept as omarchy-menu.jsonc.omaplace.bak") }
   function removeMenu() { if (root.service) root.act(root.service.menuRemove(), "Removed from the Omarchy menu") }
   function restore(instance) { if (root.service) root.act(root.service.startRestore(instance), "Restoring") }
+  // A plan edit from a Desktops card (Desktops.edit); the service's answer brings its own status text.
+  function editPlan(card, op, arg) {
+    if (!root.service) return
+    let a = root.service.editPlan(card.identity, card.slot, card.focused, op, arg, card.mode)
+    let text = "Saved"
+    try { text = JSON.parse(a).text || text } catch (e) {}
+    root.act(a, text)
+  }
   function askDelete(kind, name) { root.confirm = { kind: kind, name: name } }
   function confirmDelete() {
     let c = root.confirm
@@ -96,6 +105,7 @@ Item {
     // A slow request ended (finish() writes the result right after it clears req, hence callLater).
     function onReqChanged() {
       if (root.service.req !== null || !root.opened) return
+      root.service.desktopsInfo() // an Open all may have switched a desktop's mode
       Qt.callLater(function () {
         if (root.waitReq !== "") root.act(root.service.resultOf(root.waitReq) || '{"ok":true}', "Done")
         else root.reload()
@@ -225,6 +235,11 @@ Item {
                 font.pixelSize: Style.font.body
               }
 
+              DesktopsPage {
+                anchors.fill: parent
+                visible: !!root.service && root.page === "desktops"
+                panel: root
+              }
               ScenesPage {
                 anchors.fill: parent
                 visible: !!root.service && root.page === "scenes"

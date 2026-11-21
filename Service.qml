@@ -16,6 +16,7 @@ import "js/LuaCall.js" as LuaCall
 import "js/PlansFile.js" as PlansFile
 import "js/PlanMoves.js" as PlanMoves
 import "js/ModeSwitch.js" as ModeSwitch
+import "js/Desktops.js" as Desktops
 
 // omaplace service (design 4.3, 6.2, 6.3, 7.2): the CLI's IPC target and the only file that runs processes.
 // All data work goes through the js/ modules. One slow request (save, open, rule add) runs at a time; every other
@@ -81,6 +82,17 @@ Item {
   property var chainNext: null
   property int chainToken: 0
   readonly property string instance: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
+
+  // Desktops page (WP13): the live desktops, read only when the page asks (desktopsInfo), never on a timer.
+  // desktopsLive: { monitors (Lua desktops()), modes: { workspace: tiled | scrolling | floating }, windows: { workspace: count },
+  // reason }. deskBusy/deskAgain: one read at a time, one more if asked meanwhile. deskModes: workspaces still to ask.
+  property var desktopsLive: ({})
+  property bool deskBusy: false
+  property bool deskAgain: false
+  property int deskCounter: 0
+  property string deskId: ""
+  property var deskNext: ({})
+  property var deskModes: []
 
   // DesktopEntries is lazy: the first read is empty, so it is touched at load (no process, no timer).
   // The folders come first: plans.lua and the login marker are written once mkdirProc is done.
@@ -813,6 +825,98 @@ Item {
     return text
   }
 
+  // ---- Desktops page (WP13): live desktops for the cards, and plan edits. Commands run one at a time through async
+  // Process: desktops() through hyprctl eval (its own ids and files, not a request's), hyprctl workspaces -j for the window
+  // counts, then omarchy-hyprland-workspace-layout-current per shown workspace. revision++ when the read is done.
+
+  function desktopsInfo() {
+    if (root.deskBusy) { root.deskAgain = true; return }
+    if (!root.dirsReady) { root.ensureDirs(); return }
+    root.deskBusy = true
+    root.deskAgain = false
+    root.deskNext = { reason: "", monitors: [], windows: {}, modes: {} }
+    root.deskId = "panel-" + (++root.deskCounter)
+    deskEval.command = ["hyprctl", "eval", LuaCall.wrap("desktops", [LuaLiteral.encode(root.deskId)], LuaLiteral.encode(root.deskReplyPath()))]
+    deskEval.running = true
+  }
+
+  function deskReplyPath() { return root.runtimeDir + "/reply-" + root.deskId + "-desktops.txt" }
+  function deskJsonPath() { return root.runtimeDir + "/desktops-" + root.deskId + ".json" }
+
+  // One cat reads the reply code and desktops-<id>.json together (like onDesktops); both files are removed after.
+  function onDeskReply(text) {
+    Quickshell.execDetached(["rm", "-f", "--", root.deskReplyPath(), root.deskJsonPath()])
+    let c = LuaCall.code(text)
+    let brace = text.indexOf("{")
+    let d = c === "ok" && brace !== -1 ? Summary.parseJson(text.slice(brace)) : null
+    root.deskNext.monitors = d && Array.isArray(d.monitors) ? d.monitors : []
+    if (!d) root.deskNext.reason = c === "no_lua" ? "The omaplace Lua module is not loaded in Hyprland" : "No desktop list from the Lua module (" + (c || "no answer") + ")"
+    deskWs.running = true
+  }
+
+  function onDeskWorkspaces(text) {
+    let counts = {}
+    let list = Summary.parseJson(text)
+    for (let w of (Array.isArray(list) ? list : [])) if (w && Number.isInteger(w.id) && w.id > 0) counts[w.id] = Number(w.windows) || 0
+    root.deskNext.windows = counts
+    let wsList = []
+    for (let m of root.deskNext.monitors) {
+      for (let s of (m && Array.isArray(m.slots) ? m.slots : [])) if (s && Number.isInteger(s.workspace) && s.workspace > 0) wsList.push(s.workspace)
+    }
+    root.deskModes = wsList
+    root.nextDeskMode()
+  }
+
+  function nextDeskMode() {
+    if (root.deskModes.length === 0) {
+      root.desktopsLive = root.deskNext
+      root.deskBusy = false
+      root.revision++
+      if (root.deskAgain) root.desktopsInfo()
+      return
+    }
+    deskMode.command = ["omarchy-hyprland-workspace-layout-current", String(root.deskModes[0])]
+    deskMode.running = true
+  }
+
+  function onDeskMode(text) {
+    let ws = root.deskModes.shift()
+    let mode = ModeSwitch.fromOmarchy(text)
+    if (mode !== "") root.deskNext.modes[ws] = mode
+    root.nextDeskMode()
+  }
+
+  // Installed apps for the page's app picker: id, name, icon, StartupWMClass (Desktops.appChoices).
+  function appChoices() { return Desktops.appChoices(DesktopEntries.applications.values) }
+
+  // The page model, read now from scenes.toml and config.toml plus the last desktopsInfo().
+  function desktopCards() {
+    try {
+      let doc = SceneStore.parse(root.readNow(scenesFile))
+      let m = Desktops.cards(root.desktopsLive, doc, { rules: root.config().rules, apps: root.appChoices(), liveNames: root.liveMonitors })
+      m.reason = root.desktopsLive.reason || ""
+      m.loading = root.deskBusy && !root.desktopsLive.monitors
+      return m
+    } catch (e) { return { groups: [], reason: String(e.message || e), loading: false } }
+  }
+
+  // One plan edit from a card (Desktops.edit) on a fresh read of scenes.toml, with the same guards as every scenes write.
+  // mode: the desktop's mode now, for the status text. The answer carries `text` for the status line.
+  function editPlan(identity, slot, focused, op, arg, mode) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    try {
+      let w = root.writableScenes()
+      if (w.error) return Summary.answer(w.error)
+      // the app picker gives an entry id; its class comes from the entry or a captured scene (design 14.7)
+      if (op === "app" && arg) arg = { pos: arg.pos, id: String(arg.id || ""), class: Desktops.classOf(String(arg.id || ""), root.appChoices(), Desktops.seenClasses(w.doc.scenes)).class }
+      let e = Desktops.edit(w.doc, { identity: identity, slot: slot, focused: focused }, op, arg)
+      if (e.error) return Summary.answer(root.fail("failed", e.error))
+      let err = e.changed ? root.writeScenes(w.text, SceneStore.serialize(e.doc)) : ""
+      if (err !== "") return Summary.answer(root.fail("failed", err))
+      return Summary.answer({ ok: true, scene: e.name, text: op === "layout" ? Desktops.layoutSavedText(String(arg).trim(), mode, e.dropped) : "Saved" })
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
   // ---- processes (argv only)
 
   Process {
@@ -858,6 +962,13 @@ Item {
   Process { id: chainCat; stdout: StdioCollector { onStreamFinished: if (root.chainNext) root.chainNext(text) } }
   Process { id: chainOut; stdout: StdioCollector { onStreamFinished: if (root.chainNext) root.chainNext(text) } }
   Process { id: chainRun; onExited: (code) => { if (root.chainNext) root.chainNext(code) } }
+  // Desktops page reads (WP13), one after another.
+  // shortcut: a command that cannot start sends no exit and leaves deskBusy set until the shell restarts; hyprctl and the
+  // Omarchy command are always there on Omarchy, add an onRunningChanged guard (like pickProc) if a report says otherwise.
+  Process { id: deskEval; onExited: { deskCat.command = ["cat", "--", root.deskReplyPath(), root.deskJsonPath()]; deskCat.running = true } }
+  Process { id: deskCat; stdout: StdioCollector { onStreamFinished: root.onDeskReply(text) } }
+  Process { id: deskWs; command: ["hyprctl", "workspaces", "-j"]; stdout: StdioCollector { onStreamFinished: root.onDeskWorkspaces(text) } }
+  Process { id: deskMode; stdout: StdioCollector { onStreamFinished: root.onDeskMode(text) } }
   Process { id: settingsProc; command: ["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omaplace"] }
 
   Process {
