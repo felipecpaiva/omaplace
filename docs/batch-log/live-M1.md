@@ -38,3 +38,14 @@ Plugin installed by cloning the repo into `~/.config/omarchy/plugins/io.github.f
 | Service code reload | a rescan or a disable and enable keeps the old JavaScript; `omarchy restart shell` loads it (then close the theme picker with `omarchy-shell image-selector cancel <path>`) |
 | `omaplace open livetest` on workspace 9 after the fixes | pass in 2.6 s: foot and Omacalc started and placed, view on 9 |
 | `omaplace open livetest` on workspace 7 with the windows still open (`existing = move`) | pass: both moved to 7, nothing started twice |
+
+# Live check WP7 session (Lua + service), 2026-11-21
+
+| Check | Result |
+|---|---|
+| Snapshot written after window events (debounce 15 s) | pass: `session-<instance>.json` with 7 windows, keys class, floating, fullscreen, minimized, monitor, order, rect, slot; no title, no pid; index `sessions.json` written |
+| Close burst: 4 windows closed in under a second | pass: 25 s later the snapshot still holds the 10 windows from before |
+| `omaplace restore` with a hand-made previous session (instance `testprev`: foot on slot 8 tiled, Omacalc on slot 9 floating at 0.1, 0.1, 0.25, 0.58) | pass in 2.6 s: picked the previous instance, not the current one; foot on 8, Omacalc on 9 at 160,122 size 400x565 (exact) |
+| A real restore after a new Hyprland login | not done (needs a logout or reboot) |
+
+Note: `omaplace restore` prints only `ok`; a counts line like `open` would be nicer.
