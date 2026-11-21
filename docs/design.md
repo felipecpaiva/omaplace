@@ -729,3 +729,87 @@ Milestones: **M1** = WP0, WP1, WP2 (rules work from config.toml). **M2** = WP3 t
 | Wrong window in a slot when two apps share a class | Accepted and documented: order decides, not content |
 | Apps that never send a new window | Ticket expires, reported as `not_reopened` |
 | Core PR #18858 lands with scenes | Our F1 and F4 still stand; revisit F2 overlap then |
+
+## 14. Desktops page and desktop plans (F6, M5, designed 2026-11-21)
+
+Felipe asked for one page that shows every desktop and lets him set up how each one looks, without arranging windows first.
+
+### 14.1 What the user sees
+
+The settings window gets a **Desktops** page: one card per desktop (slot) per monitor. Each card shows:
+
+| Part | What it does |
+|---|---|
+| Layout badge | The layout this desktop has now, always visible: Tiled, Scrolling, Zones (with the zone name, for example "2 columns"), Full screen, Free floating |
+| Layout picker | Change the layout. Zones use omagnet's names and editor format: `columns:N`, `rows:N`, `grid:CxR`, `priority`, custom zones text |
+| Preview | A picture of the monitor with the zones, each filled with the app name and icon that goes there (omagnet's `LayoutThumb` idea). Tiled and scrolling show the apps as columns in order |
+| App picker per zone | Choose an app from the installed apps (desktop entries through `AppResolve`), plus profile, folder or program (D12, D18) |
+| Open all | Start the planned apps that are missing (the scene opener) |
+| Open at login | Off by default (D20) |
+
+### 14.2 Model: a plan is a scene bound to a desktop
+
+No new placement engine. A plan is a scene in `scenes.toml` with three more keys, so save, open, profiles, folders,
+the session and app memory all keep working:
+
+```toml
+[scene.desk-2]
+plan = true                    # made on the Desktops page, not captured
+layout = "columns:2"           # tiled | scrolling | full | free | an omagnet zone layout name or zones text
+home_monitor = "Example Corp EX27"
+home_slot = 2
+open_at_login = false
+
+[scene.desk-2.window.1]
+app = "code"
+class = "code"
+zone = 1                       # zone number in the layout; the rect is computed from it
+```
+
+At open, `Plan.js` turns `zone` into `rect` (zone fraction of the usable area, same math as omagnet) and `order` (zones
+left to right, then top to bottom). Everything after that is the existing opener (section 6.3).
+
+| Layout | Desktop mode | Windows |
+|---|---|---|
+| `tiled`, `scrolling` | dwindle or scrolling | opened in order (D13) |
+| zone layouts | floating (D19) | exact rect per zone |
+| `full` | unchanged | one app, maximized (Hyprland fullscreen state 1, keeps the bar; spike S11) |
+| `free` | floating | the saved rects (a captured scene, today's behaviour) |
+
+### 14.3 Decisions
+
+| # | Decision | Status |
+|---|---|---|
+| D19 | Choosing a zone layout switches the desktop to Omarchy's floating mode. Every card shows its layout clearly, the layout is easy to change, and a preview shows where each window goes | decided (Felipe, 2026-11-21) |
+| D20 | Apps snap, button fills: a planned app opened at any time goes to its desktop and zone (a rule plus the plan's rect through app memory); "Open all" starts the missing ones; nothing starts at login unless that desktop's "open at login" is ticked (off by default) | decided (Felipe, 2026-11-21) |
+| D21 | The plan stays fixed; it changes only on the Desktops page. When the user moves a planned window to another zone or desktop by hand, omaplace sends one notification with an "Update plan" action (`omarchy-notification-send --action`); pressing it writes the new place into the plan, ignoring it changes nothing. Uses the move report from `auto` mode (`moves.json`) | decided (Felipe, 2026-11-21) |
+| D22 | How the desktop mode is set for a desktop that is not focused | **open**, see 14.4 |
+
+### 14.4 Open: setting a desktop's mode (D22)
+
+Omarchy has `omarchy-hyprland-workspace-layout-toggle`, which only cycles the focused desktop, and Lua
+`o.workspace_mode({ workspace, mode })`, which applies a mode but does not save it. The toggle saves the mode in
+`~/.local/state/omarchy/workspace-layouts/<id>.lua`, and Omarchy's bar and `layout-current` read that file. omaplace
+promised never to write Omarchy's state (section 3). Options:
+
+1. Small upstream PR: `omarchy-hyprland-workspace-layout-set <workspace> <mode>` (the toggle's apply and save steps for any
+   desktop). omaplace calls it when present. Until it lands, the card asks the user to focus that desktop and runs the
+   toggle until the mode matches. Recommended: extends Omarchy, never writes its state.
+2. omaplace calls `o.workspace_mode` live and re-applies the plan's mode at every load from its own plan. Nothing of
+   Omarchy's is written, but Omarchy's bar shows the wrong mode for that desktop.
+
+### 14.5 Spikes
+
+| # | Question | For |
+|---|---|---|
+| S11 | Does fullscreen state 1 on a floating and a tiled desktop keep the bar and survive a new window on that desktop? | WP12 |
+| S12 | Does `o.workspace_mode` through `hyprctl eval` switch a desktop that is not focused, and arrange its windows? | WP11 |
+| S13 | Does an `--action` notification from the service run its command when pressed? | WP13 |
+
+### 14.6 Work packages
+
+| WP | Scope | Owns | Tests | Depends on |
+|---|---|---|---|---|
+| WP11 | Plan data: `plan`, `layout`, `zone`, `open_at_login` in `SceneStore.js` and `ConfigIO.js`; `js/Zones.js` copied from omagnet `LayoutOps.js` (built-in layouts and text parse only) with a parity test; zone to rect and order in `Plan.js`; desktop mode set (D22) | those | Node tests; parity against omagnet golden zones | M4 |
+| WP12 | Snap and fill: planned apps become rules plus app memory rects; `full` layout; open at login (one load-time check, no timer) | next editor of `lua/omaplace.lua`, `Service.qml` | fake-`hl`: planned app opened by hand lands in its zone; full layout maximizes; login opens only ticked desktops | WP11 |
+| WP13 | Desktops page: cards, badge, picker, preview, app picker, Open all; hand-move notification with "Update plan" | `pages/DesktopsPage.qml`, `pages/DesktopCard.qml`, `pages/ZoneThumb.qml`; next editor of `SettingsPanel.qml`, `Service.qml` | qmllint; Node test of the plan update from a move; hand checks with a screenshot | WP11, WP12 |

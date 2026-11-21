@@ -70,6 +70,18 @@ Menu entry with consent (WP8), `app_memory = auto` (WP10), restore at login (`as
 
 Status 2026-11-21: WP8 and WP10 built; auto mode passes live; the menu block round-trips on a copy of the real file. Open: clicking a real menu row (S6), restore at login, release work.
 
+### M5: Desktops page and desktop plans (F6, design section 14)
+
+Done when:
+1. The Desktops page shows one card for each desktop on each monitor, and each card shows its layout.
+2. Choosing "2 columns" with App A left and App B right, then pressing "Open all", gives that desktop in floating mode with A left and B right.
+3. Opening App A by hand later puts it in its zone on that desktop.
+4. Moving A by hand sends one "Update plan" notification; pressing it changes the plan, ignoring it does not.
+5. Tiled, full screen and free floating plans work the same way, and the preview matches what opens.
+6. Nothing starts at login unless "open at login" is ticked.
+
+Work packages: WP11, WP12, WP13. Open decision: D22 (how a desktop's mode is set).
+
 ## Not goals (for now)
 
 - Replacing or patching any part of Omarchy, or editing the user's Hyprland files.
