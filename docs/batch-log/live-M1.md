@@ -57,3 +57,13 @@ Note: `omaplace restore` prints only `ok`; a counts line like `open` would be ni
 | `omaplace open livetest` on 9 writes `~/.local/state/omaplace/memory.lua` (mode scene) | pass: foot and omacalc remembered with monitor fingerprint, slot 9 and rect |
 | Omacalc closed, then started by hand from workspace 2 | pass: it opened on 9 at its scene spot (600,229 400x568); the view stayed on 2 |
 | Finding: Hyprland's Lua monitor object has no `make` or `model` (only `description`, `serial`) | fixed: the model key now comes from the description without the serial, so the "model" fallback works live |
+
+# Live checks M2 contexts and terminals, 2026-11-21
+
+| Check | Result |
+|---|---|
+| Two scenes with Chrome profile `Default` (opened on 8) and `Profile 1` (opened on 9); both profiles already running (checked in Chrome's `Local State` first, so new windows are empty and safe to close) | pass: one new window each, on 8 and 9, tagged `omaplace-ctx` with the right profile; the two existing untagged Chrome windows on 1 were not moved |
+| Re-save the Chrome scene on 8 | pass: `context = "Default"` read from the tag, nothing to pick |
+| Terminal running a program: `foot --working-directory=<dir> sleep 300`, save, close, open on another workspace | pass: foot came back running `sleep 300` in `<dir>` |
+| App memory vs a hand-opened terminal | as designed: the hand-opened foot went to its remembered slot 9 (from an earlier scene) |
+| Saving an empty workspace | reports `failed`; should say "nothing to save" (follow-up) |
