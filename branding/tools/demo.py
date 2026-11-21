@@ -48,7 +48,7 @@ OPEN_ALL = (595, 738)          # the "Open all" button of desktop 8's editor (af
 OMACALC_GRAB = (60, 14)      # where to press on Omacalc to drag it, from its top-left corner (its title bar)
 DRAG_BY = -600               # how far the drag moves Omacalc: its centre ends in the left zone, a strip of the terminal stays
 NOTIF_ZOOM = 2               # the notification part shows the top right 1/NOTIF_ZOOM of the area, scaled up to the same size
-NOTIF_BUTTON = (0, 0)        # the "Update plan" button on the notification card
+NOTIF_BUTTON = (1409, 105)      # the "Update plan" button on the notification card
 TOAST_WAIT = 10              # seconds to wait for other notification cards to expire before the update scene
 
 REL = os.path.relpath(ROOT, HOME)
