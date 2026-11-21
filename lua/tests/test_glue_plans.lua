@@ -280,8 +280,14 @@ eq(n_moves(), 0, "a run's moves are not plan reports")
 
 -- desktop move by hand: reported once, again only after coming back
 reset()
+fake.exec_log = {}
 user_move(ed, 13)
 eq(n_moves(), 1, "desktop move reported")
+eq(#fake.exec_log, 1, "one notification for the move")
+eq(fake.exec_log[1], "'omarchy-notification-send' '-g' '" .. M.NOTIFY_GLYPH .. "' 'omaplace' "
+  .. "'org.example.Editor moved. Update the plan desk-2?' '--action' 'Update plan' '" .. M.PLUGIN_DIR
+  .. "/bin/omaplace' 'plan-update' '1'", "notification argv, every part quoted, the move id last")
+eq(fake.exec_log[1]:find("Made up title", 1, true), nil, "no title in the notification")
 local mf = moves_file()
 eq(mf:find('"kind":"desktop"', 1, true) ~= nil, true, "kind desktop")
 eq(mf:find('"scene":"desk-2"', 1, true) ~= nil, true, "scene named")
@@ -296,6 +302,8 @@ eq(n_moves(), 1, "coming back is not a report")
 user_move(ed, 15)
 eq(n_moves(), 2, "after coming back, a new move is reported")
 user_move(ed, 12)
+eq(#fake.exec_log, 2, "one notification per reported move, none for the others")
+eq(fake.exec_log[2]:sub(-17), "'plan-update' '2'", "second notification carries move id 2")
 
 -- zone drift (D23): checked when focus leaves the window
 local other = new_window("org.example.Other", 12)
@@ -427,18 +435,46 @@ os.remove(rt .. "/plan-moves.json") -- the old login's reports
 _G.omaplace.open({ run = "p2", scene = "desk-2", target = { fp = { identity = "Example Corp EX27" }, slot = 2 },
   existing = "new", layout = "floating", windows = {
     { class = "org.example.Chat", order = 1, rect = { 0.5, 0, 0.5, 1 }, mode = "launch", launch = { "chat" } },
-    { class = "org.example.Editor", order = 2, rect = { 0, 0, 0.5, 1 }, mode = "launch", launch = { "editor" } } } })
-fake.advance(300)
+    { class = "org.example.Editor", order = 2, rect = { 0, 0, 0.5, 1 }, mode = "launch", launch = { "editor" } },
+    { class = "org.example.Shared", order = 3, rect = { 0, 0, 1, 1 }, mode = "launch", launch = { "shared" } } } })
+fake.advance(450)
 local rchat = new_window("org.example.Chat", 3)
 fake.emit("window.open", rchat)
 local red = new_window("org.example.Editor", 3)
 fake.emit("window.open", red)
+local rsh = new_window("org.example.Shared", 3)
+fake.emit("window.open", rsh)
+fake.exec_log = {}
 fake.advance(3000)
 eq(_G.omaplace.status().state, "done", "plan run done")
 eq(red.workspace.id, 12, "run put Editor on the plan's desktop")
 eq(m2.snapped[red.address] and m2.snapped[red.address].window, 1, "Editor tracked as window 1")
 eq(m2.snapped[rchat.address] and m2.snapped[rchat.address].window, 2, "Chat tracked as window 2")
+eq(m2.snapped[rsh.address] and m2.snapped[rsh.address].window, 3, "snap = false window placed by the run tracked too")
 eq(moves_file():find('"kind"', 1, true), nil, "the run's own moves are not reported")
+eq(#fake.exec_log, 0, "and send no notification")
+-- a reload keeps the run's windows on their own scene and window number (no lookup that drops snap = false ones)
+eq(_G.omaplace.reload_plans(), true, "plans reloaded")
+eq(m2.snapped[rsh.address] and m2.snapped[rsh.address].window, 3, "snap = false window kept over a reload")
+eq(m2.snapped[red.address] and m2.snapped[red.address].window, 1, "Editor kept as window 1")
+
+-- focus moving between two tracked windows is never a desktop report and keeps own-move marks
+land(rsh, 16) -- off its desktop, its move event not seen yet
+m2.plan_own[rsh.address] = true
+fake.emit("window.active", rsh)
+fake.emit("window.active", red)
+fake.emit("window.active", rsh)
+eq(moves_file():find('"kind"', 1, true), nil, "focus changes are no desktop report")
+eq(m2.plan_own[rsh.address], true, "own-move mark kept")
+m2.plan_own[rsh.address] = nil
+land(rsh, 12)
+
+-- a window gone without a close event is dropped on reload
+for i, x in ipairs(fake.windows) do
+  if x == rsh then table.remove(fake.windows, i) end
+end
+_G.omaplace.reload_plans()
+eq(m2.snapped[rsh.address], nil, "a window Hyprland no longer has is dropped")
 user_move(red, 13)
 eq(moves_file():find('"kind":"desktop"', 1, true) ~= nil and moves_file():find('"window":1', 1, true) ~= nil, true,
   "a run-placed window moved by hand is reported")
@@ -459,6 +495,21 @@ fake.emit("window.open", rchat2)
 fake.advance(3000)
 eq(m2.snapped[rchat2.address], nil, "not a plan scene: untracked")
 close(rchat2)
+
+-- a file reload (same Lua state) with a bad plans.lua: the plans kept still have their subscriptions
+write(state .. "/plans.lua", "return { plans = ")
+load()
+eq(_G.omaplace._m.plans ~= nil, true, "plans kept over a reload with a bad file")
+eq(#_G.omaplace._m.plan_subs, 3, "and stay subscribed")
+-- plans.lua gone: no plans, nothing tracked
+_G.omaplace._m.snapped["0xkept"], _G.omaplace._m.plan_own["0xkept"] = { scene = "desk-2" }, true
+os.remove(state .. "/plans.lua")
+eq(select(2, _G.omaplace.reload_plans()), "no_file", "no file")
+eq(next(_G.omaplace._m.snapped), nil, "no file: nothing tracked")
+eq(next(_G.omaplace._m.plan_own), nil, "no file: no own-move marks")
+eq(#_G.omaplace._m.plan_subs, 0, "no file: unsubscribed")
+write(state .. "/plans.lua", PLANS)
+_G.omaplace.reload_plans()
 
 -- desktops(): every monitor's slots, also as a file for the service
 local d = _G.omaplace.desktops()

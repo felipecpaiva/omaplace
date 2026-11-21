@@ -65,6 +65,8 @@ M.plans = old_m and old_m.plans or nil
 M.snapped = old_m and type(old_m.snapped) == "table" and old_m.snapped or {} -- address -> the plan window it snapped to
 M.plan_moves = old_m and type(old_m.plan_moves) == "table" and old_m.plan_moves or nil -- else seeded from the file at load
 M.MAX_PLAN_MOVES = 20
+M.PLUGIN_DIR = dir:match("^(.*)/lua$") or (dir .. "/..") -- the folder that holds bin/omaplace
+M.NOTIFY_GLYPH = "\u{F0770}"
 M.last_active = old_m and old_m.last_active or nil
 M.login_checked = old_m and old_m.login_checked or false
 
@@ -1103,7 +1105,13 @@ local function report_plan_move(e, kind, w)
   while #mv.list > M.MAX_PLAN_MOVES do table.remove(mv.list, 1) end
   local text, err = Json.encode({ seq = mv.seq, moves = mv.list })
   if not text then log("plan moves encode failed: " .. tostring(err)); return false end
-  return write_atomic("plan-moves.json", text .. "\n") == true
+  if write_atomic("plan-moves.json", text .. "\n") ~= true then return false end
+  -- Lua sends the notification itself: the service's watch can miss a renamed-in file. Async, class and scene only.
+  local cmd = Shellquote.join({ "omarchy-notification-send", "-g", M.NOTIFY_GLYPH, "omaplace",
+    e.class .. " moved. Update the plan " .. e.scene .. "?",
+    "--action", "Update plan", M.PLUGIN_DIR .. "/bin/omaplace", "plan-update", tostring(mv.seq) })
+  if cmd then pcall(hl.exec_cmd, cmd) end
+  return true
 end
 
 -- The monitor and workspace of a plan's home desktop, or nil (an empty home_monitor is the focused one, as for rules).
@@ -1193,6 +1201,7 @@ function M.on_plan_event(event, w)
     if not (p and p.rect) then return end
     if not Plans.drifted(p.rect, e.rect) then e.zone_reported = false; return end
     if not e.zone_reported then e.zone_reported = report_plan_move(e, "zone", now_w) end
+    return
   end
   local a = w and w.address
   if not a then return end
@@ -1251,17 +1260,30 @@ function M.reload_plans()
     local d = state_dir()
     local t, err
     if d then t, err = load_literal(d .. "/plans.lua", "plans") end
-    if not d or err == "no_file" then M.plans = nil; sync_plans(); return nil, "no_file" end
+    if not d or err == "no_file" then
+      M.plans, M.snapped, M.plan_own = nil, {}, {}
+      sync_plans()
+      return nil, "no_file"
+    end
     local set
     if t then set, err = Plans.validate(t) end
-    if not set then log("plans.lua " .. tostring(err) .. ", ignored"); return nil, "bad_plans" end
+    if not set then log("plans.lua " .. tostring(err) .. ", ignored"); sync_plans(); return nil, "bad_plans" end
     for _, skip in ipairs(set.skipped) do log("plans.lua: " .. skip .. ", skipped") end
     M.plans = set
     -- a snapped window follows its plan as it is now (an "Update plan" or a page edit); gone from the plans, it is dropped
+    local open = {}
+    for _, x in ipairs(hl.get_windows()) do
+      if x.address then open[x.address] = true end
+    end
     for address, e in pairs(M.snapped) do
-      local plan, index, pw = Plans.lookup(set, e.class, e.context)
+      -- the same scene and window number while it still holds this app (keeps windows Open all placed), else a lookup
+      local plan, index = Plans.by_scene(set, e.scene), e.window
+      local pw = plan and plan.windows[index]
+      if not (pw and pw.class == e.class and pw.context == e.context) then
+        plan, index, pw = Plans.lookup(set, e.class, e.context)
+      end
       local ws
-      if plan then ws = select(2, plan_target(plan)) end
+      if plan and open[address] then ws = select(2, plan_target(plan)) end
       if ws then
         e.scene, e.window, e.ws, e.rect, e.floating = plan.scene, index, ws, pw.rect, pw.floating
         e.desk_reported, e.zone_reported = false, false
@@ -1273,7 +1295,11 @@ function M.reload_plans()
     login_check()
     return true
   end)
-  if not ok then log("plans load failed: " .. tostring(res)); return nil, "failed" end
+  if not ok then
+    log("plans load failed: " .. tostring(res))
+    pcall(sync_plans)
+    return nil, "failed"
+  end
   return res, why
 end
 

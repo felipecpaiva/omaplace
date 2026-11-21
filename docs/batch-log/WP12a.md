@@ -31,14 +31,20 @@
     windows it placed like snapped ones when it ends (`track_run`). Run windows come sorted by order, so
     `Plans.match_run` maps them back to the scene window index by class and context, same rect first. Windows open
     before Lua loaded stay untracked.
-  - On every plans load a snapped window is looked up again: it follows its plan's new desktop, rect and window index
-    (flags cleared), or is dropped when no plan snaps it any more.
+  - On every plans load a tracked window is looked up again: it keeps its scene and window number while that window
+    still holds its class and context (so snap = false or same-class windows placed by Open all stay), else a lookup;
+    it follows the new desktop and rect (flags cleared), or is dropped when no plan holds it or Hyprland no longer has
+    the window. A missing plans.lua clears all tracking; a bad one keeps the plans and their subscriptions.
+  - Notification (review fix 5): after a move is written to plan-moves.json, Lua runs, through `hl.exec_cmd` (async)
+    with every argument quoted by `shellquote.lua`: `omarchy-notification-send -g <glyph> omaplace "<class> moved.
+    Update the plan <scene>?" --action "Update plan" <plugin dir>/bin/omaplace plan-update <id>`. Plugin dir is the
+    folder above `lua/` of omaplace.lua's own path. Class and scene only, never a title. Own moves send nothing.
   - `login.json` `{ instance, plans }` once per Lua state when a plan has `open_at_login`, skipped when the file already
     names this instance; a failed write (at a real login the runtime folder can still be missing, mkdir is async) is
     tried again on the next plans load, so the service must call reload_plans() at start.
   - `_G.omaplace.desktops(req_id)`: returns the table, and with a request id also writes
     `$XDG_RUNTIME_DIR/omaplace/desktops-<req_id>.json` (LuaCall cannot return a table through `hyprctl eval`).
-- Tests: `lua/tests/test_plans.lua` (44 checks), `lua/tests/test_glue_plans.lua` (124 checks, fixture
+- Tests: `lua/tests/test_plans.lua` (44 checks), `lua/tests/test_glue_plans.lua` (143 checks, fixture
   `lua/tests/fixtures/home-plans`). Live checks: `docs/checklist/WP12a.md`.
 
 ## Verified
