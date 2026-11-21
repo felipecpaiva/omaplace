@@ -25,11 +25,16 @@
   - `plan-moves.json` (last 20, `seq` and the list kept over a reload): `desktop` when a snapped window is moved by hand
     to another desktop (once, until it is back or closed); `zone` when focus leaves a placed floating snapped window on
     its desktop that is more than 2 percent off (once, until back within 2 percent or closed). Not while a run is live.
+    A move that cannot be read (special workspace) does not count as reported. Move ids go on from the file's seq in a
+    new Lua state, so an old "Update plan" action never hits a new move.
+  - On every plans load a snapped window is looked up again: it follows its plan's new desktop, rect and window index
+    (flags cleared), or is dropped when no plan snaps it any more.
   - `login.json` `{ instance, plans }` once per Lua state when a plan has `open_at_login`, skipped when the file already
-    names this instance; a failed write is tried again on the next plans load.
+    names this instance; a failed write (at a real login the runtime folder can still be missing, mkdir is async) is
+    tried again on the next plans load, so the service must call reload_plans() at start.
   - `_G.omaplace.desktops(req_id)`: returns the table, and with a request id also writes
     `$XDG_RUNTIME_DIR/omaplace/desktops-<req_id>.json` (LuaCall cannot return a table through `hyprctl eval`).
-- Tests: `lua/tests/test_plans.lua` (37 checks), `lua/tests/test_glue_plans.lua` (103 checks, fixture
+- Tests: `lua/tests/test_plans.lua` (37 checks), `lua/tests/test_glue_plans.lua` (116 checks, fixture
   `lua/tests/fixtures/home-plans`). Live checks: `docs/checklist/WP12a.md`.
 
 ## Verified

@@ -63,7 +63,7 @@ M.plan_subs = {}
 M.plan_own = {} -- addresses a plan snap just moved: their one move event is not a user's move
 M.plans = old_m and old_m.plans or nil
 M.snapped = old_m and type(old_m.snapped) == "table" and old_m.snapped or {} -- address -> the plan window it snapped to
-M.plan_moves = old_m and type(old_m.plan_moves) == "table" and old_m.plan_moves or { seq = 0, list = {} }
+M.plan_moves = old_m and type(old_m.plan_moves) == "table" and old_m.plan_moves or nil -- else seeded from the file at load
 M.MAX_PLAN_MOVES = 20
 M.last_active = old_m and old_m.last_active or nil
 M.login_checked = old_m and old_m.login_checked or false
@@ -1093,15 +1093,22 @@ end
 -- tiled window has no `rect` key (the encoder writes no null). Never writes a title.
 local function report_plan_move(e, kind, w)
   local p = place_of(w)
-  if not p then return end
+  if not p then return false end
   local mv = M.plan_moves
   mv.seq = mv.seq + 1
   mv.list[#mv.list + 1] = { id = mv.seq, scene = e.scene, window = e.window, class = e.class, context = e.context,
     kind = kind, to = { identity = p.fp.identity, slot = p.slot, rect = p.floating and p.rect or nil, floating = p.floating } }
   while #mv.list > M.MAX_PLAN_MOVES do table.remove(mv.list, 1) end
   local text, err = Json.encode({ seq = mv.seq, moves = mv.list })
-  if not text then log("plan moves encode failed: " .. tostring(err)); return end
-  write_atomic("plan-moves.json", text .. "\n")
+  if not text then log("plan moves encode failed: " .. tostring(err)); return false end
+  return write_atomic("plan-moves.json", text .. "\n") == true
+end
+
+-- The monitor and workspace of a plan's home desktop, or nil (an empty home_monitor is the focused one, as for rules).
+local function plan_target(plan)
+  local live = hl.get_monitors()
+  local mon = plan.home_monitor == "" and focused_of(live) or Monitors.resolve({ identity = plan.home_monitor }, live, "skip")
+  return mon, mon and Slots.with(rawget(_G, "o")).workspace_id(mon, plan.home_slot)
 end
 
 -- A window opened while no run is live. Returns true when a plan holds its class and context (snapped or not), so app
@@ -1117,9 +1124,7 @@ function M.place_from_plan(w)
   if not ws or (ws.id or 0) < 0 or (ws.name or ""):sub(1, 8) == "special:" or others_of(cls, w.address) > 0 then
     return true
   end
-  local live = hl.get_monitors()
-  local mon = plan.home_monitor == "" and focused_of(live) or Monitors.resolve({ identity = plan.home_monitor }, live, "skip")
-  local target = mon and Slots.with(rawget(_G, "o")).workspace_id(mon, plan.home_slot)
+  local mon, target = plan_target(plan)
   if not target then log("plan " .. plan.scene .. ": desktop not found, " .. cls .. " not snapped"); return true end
   local address = w.address
   local e = { scene = plan.scene, window = index, class = cls, context = pw.context, ws = target, rect = pw.rect,
@@ -1164,9 +1169,7 @@ function M.on_plan_event(event, w)
     local p = place_of(now_w)
     if not (p and p.rect) then return end
     if not Plans.drifted(p.rect, e.rect) then e.zone_reported = false; return end
-    if e.zone_reported then return end
-    e.zone_reported = true
-    return report_plan_move(e, "zone", now_w)
+    if not e.zone_reported then e.zone_reported = report_plan_move(e, "zone", now_w) end
   end
   local a = w and w.address
   if not a then return end
@@ -1180,9 +1183,7 @@ function M.on_plan_event(event, w)
   if M.plan_own[a] then M.plan_own[a] = nil; return end
   if M.run and M.run.live then return end -- "Open all" moves its own windows
   if w.workspace and w.workspace.id == e.ws then e.desk_reported = false; return end
-  if e.desk_reported then return end
-  e.desk_reported = true
-  report_plan_move(e, "desktop", w)
+  if not e.desk_reported then e.desk_reported = report_plan_move(e, "desktop", w) end
 end
 
 -- Subscribe while some plan is loaded.
@@ -1233,6 +1234,18 @@ function M.reload_plans()
     if not set then log("plans.lua " .. tostring(err) .. ", ignored"); return nil, "bad_plans" end
     for _, skip in ipairs(set.skipped) do log("plans.lua: " .. skip .. ", skipped") end
     M.plans = set
+    -- a snapped window follows its plan as it is now (an "Update plan" or a page edit); gone from the plans, it is dropped
+    for address, e in pairs(M.snapped) do
+      local plan, index, pw = Plans.lookup(set, e.class, e.context)
+      local ws
+      if plan then ws = select(2, plan_target(plan)) end
+      if ws then
+        e.scene, e.window, e.ws, e.rect, e.floating = plan.scene, index, ws, pw.rect, pw.floating
+        e.desk_reported, e.zone_reported = false, false
+      else
+        M.snapped[address] = nil
+      end
+    end
     sync_plans()
     login_check()
     return true
@@ -1267,6 +1280,12 @@ _G.omaplace = { version = M.version, reload_config = M.reload_config, status = M
 
 ensure_dir()
 make_dir(state_dir())
+-- move ids go on from the file, so an "Update plan" action left from before a restart never hits a new move
+if not M.plan_moves then
+  local base = runtime_dir()
+  local seq = base and (read_file(base .. "/plan-moves.json", 65536) or ""):match('"seq":(%d+)')
+  M.plan_moves = { seq = math.tointeger(tonumber(seq or 0)) or 0, list = {} }
+end
 interrupt_stale(old_m)
 -- A reload keeps the memory in this Lua state (it can be newer than the file); a save the old timer still owed is done now.
 if old_m and type(old_m.memory) == "table" then

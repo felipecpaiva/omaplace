@@ -323,6 +323,36 @@ eq(n_moves(), 4, "drift again after returning: reported again")
 fake.emit("window.active", nil) -- focus to nothing: fine
 eq(fake.pending_timers(), 0, "reports arm no timer")
 
+-- a move that cannot be read (a special workspace) is not counted as reported: the next real move still is
+ed.workspace = { id = -98, name = "special:scratch" }
+fake.emit("window.move_to_workspace", ed)
+eq(n_moves(), 4, "special workspace: no report")
+user_move(ed, 13)
+eq(n_moves(), 5, "the next real move is reported")
+user_move(ed, 12)
+
+-- the plan changes (an "Update plan" or a page edit): the snapped window follows it, flags cleared, new index
+local SHIFTED = PLANS:gsub('home_slot = 2, layout = "columns:2"', 'home_slot = 3, layout = "columns:2"')
+  :gsub("open_at_login = true, windows = {\n", "open_at_login = true, windows = {\n"
+    .. '      { class = "org.example.New", context = "", rect = { 0, 0, 1, 1 }, floating = true, snap = true },\n', 1)
+write(state .. "/plans.lua", SHIFTED)
+eq(_G.omaplace.reload_plans(), true, "shifted plans loaded")
+eq(M.snapped[ed.address].ws, 13, "snapped window now belongs on desktop 13")
+eq(M.snapped[ed.address].window, 2, "and is window 2 of its plan")
+user_move(ed, 13)
+eq(n_moves(), 5, "moving to its new home is no report")
+user_move(ed, 14)
+eq(n_moves(), 6, "moving away from the new home is")
+eq(moves_file():find('"window":2', 1, true) ~= nil, true, "with the new index")
+-- a plan that no longer holds the app drops the window
+write(state .. "/plans.lua", (PLANS:gsub("org%.example%.Editor", "org.example.Renamed")))
+_G.omaplace.reload_plans()
+eq(M.snapped[ed.address], nil, "gone from the plans: no longer tracked")
+user_move(ed, 15)
+eq(n_moves(), 6, "and never reported")
+write(state .. "/plans.lua", PLANS)
+_G.omaplace.reload_plans()
+
 -- closing forgets the window
 close(ed)
 eq(M.snapped[ed.address], nil, "closed: forgotten")
@@ -338,12 +368,20 @@ eq(read(rt .. "/login.json"):find("marker", 1, true) ~= nil, true, "reload_confi
 -- a new Lua state in the same instance reads the file and leaves it
 load(true)
 eq(read(rt .. "/login.json"):find("marker", 1, true) ~= nil, true, "same instance, new Lua state: not written")
--- a new instance (a new login) writes it again
+-- a new login: the runtime folder is not there yet at load (mkdir is async), so the write waits for the service's
+-- reload_plans()
 sig = "inst_b"
+runtime = home .. "/no-runtime-yet"
+printed = {}
 load(true)
+eq(logged("cannot write login.json"), true, "first try fails and is logged")
+eq(_G.omaplace._m.login_checked, false, "not counted as done")
+runtime = dir .. "/fixtures/runtime"
+eq(_G.omaplace.reload_plans(), true, "the service reloads the plans")
 eq(read(rt .. "/login.json"), '{"instance":"inst_b","plans":["desk-2"]}\n', "new login: written for the new instance")
-local seq_before = _G.omaplace._m.plan_moves.seq
-eq(seq_before, 0, "a new Lua state starts the move ids again")
+-- move ids go on from the file in a new Lua state
+load(true)
+eq(_G.omaplace._m.plan_moves.seq, 6, "a new Lua state goes on from the file's seq")
 
 -- bad or oversize plans.lua: ignored with a log line, never raising; the plans loaded before stay
 for _, bad in ipairs({ "return { plans = ", "return 5", "while true do end", "return { nope = 1 }",
