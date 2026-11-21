@@ -79,6 +79,8 @@ Item {
   function addRule() { if (root.service) root.act(root.service.startRuleAdd(), "Adding a rule") }
   function setRule(name, field, value) { if (root.service) root.act(root.service.setRuleField(name, field, value), "Saved") }
   function setSetting(key, value) { if (root.service) root.act(root.service.setSetting(key, value), "Saved") }
+  function addMenu() { if (root.service) root.act(root.service.menuAdd(), "Added to the Omarchy menu, the old file is kept as omarchy-menu.jsonc.omaplace.bak") }
+  function removeMenu() { if (root.service) root.act(root.service.menuRemove(), "Removed from the Omarchy menu") }
   function restore(instance) { if (root.service) root.act(root.service.startRestore(instance), "Restoring") }
   function askDelete(kind, name) { root.confirm = { kind: kind, name: name } }
   function confirmDelete() {

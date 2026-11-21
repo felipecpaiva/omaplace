@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # omaplace command line (design 7.3). Maps words to the service's IPC methods and prints the answer.
-# Exit codes: 0 ok, 2 bad usage, 3 not found, 4 partial, 5 failed, 6 Lua module not loaded.
+# Exit codes: 0 ok (also a picker closed without a choice), 2 bad usage, 3 not found or nothing to save, 4 partial,
+# 5 failed, 6 Lua module not loaded.
 set -euo pipefail
 
 target=io.github.felipecpaiva.omaplace
@@ -12,7 +13,9 @@ usage() {
 Usage: omaplace [--json] <command>
 
   save <name>           save the focused desktop as a scene
+  save --ask            ask for the name in the Omarchy menu (Enter alone: the desktop's name)
   open <name>           open a scene on the focused desktop
+  open --pick           pick the scene from a list in the Omarchy menu
   restore [generation]  restore the last session
   list                  list scenes
   rename <from> <to>    rename a scene
@@ -23,7 +26,8 @@ Usage: omaplace [--json] <command>
   settings              open the settings window
 
   --json                print the service's JSON answer instead of text
-Exit codes: 0 ok, 2 bad usage, 3 not found, 4 partial, 5 failed, 6 Lua module not loaded.
+Exit codes: 0 ok (also a picker closed without a choice), 2 bad usage, 3 not found or nothing to save,
+4 partial, 5 failed, 6 Lua module not loaded.
 USAGE
 }
 bad() { echo "omaplace: $1" >&2; usage >&2; exit 2; }
@@ -33,6 +37,21 @@ if [ "${1:-}" = "--json" ]; then json=1; shift; fi
 [ $# -gt 0 ] || bad "a command is needed"
 word=$1; shift
 need() { [ "$1" -eq "$2" ] || bad "$word takes $2 argument(s)"; }
+
+# The menu rows (WP8): the name comes from Omarchy's pickers. Closing a picker exits 0 and does nothing.
+if [ "$word" = save ] && [ "${1:-}" = --ask ] && [ $# -eq 1 ]; then
+  ws=$(hyprctl activeworkspace -j 2>/dev/null | sed -n -E 's/.*"name": *"([^"]*)".*/\1/p' | head -n1 | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_\n-' '-' | cut -c1-40 || true)
+  name=$(omarchy-menu-input "Scene name${ws:+ (Enter for $ws)}") || exit 0
+  set -- "${name:-$ws}"
+  [ -n "$1" ] || bad "a scene name is needed"
+elif [ "$word" = open ] && [ "${1:-}" = --pick ] && [ $# -eq 1 ]; then
+  listed=$(omarchy-shell "$target" list) || { echo "omaplace: the omaplace service is not reachable (is the plugin installed and enabled?)" >&2; exit 5; }
+  mapfile -t names < <(grep -oE '"name":"[^"]*"' <<< "$listed" | sed -E 's/"name":"([^"]*)"/\1/')
+  [ ${#names[@]} -gt 0 ] || { echo "omaplace: no scenes yet, save one first" >&2; exit 3; }
+  name=$(omarchy-menu-select "Open a scene" "${names[@]}") || exit 0
+  [ -n "$name" ] || exit 0
+  set -- "$name"
+fi
 
 case $word in
   -h | --help | help) usage; exit 0 ;;
@@ -86,6 +105,7 @@ if [ "$ok" != true ]; then
   case $code in
     not_found) [ "$json" = 1 ] || echo "omaplace: not found" >&2; exit 3 ;;
     bad_name) [ "$json" = 1 ] || echo "omaplace: names are 1 to 40 of a-z, 0-9, _ and -" >&2; exit 2 ;;
+    empty) [ "$json" = 1 ] || echo "omaplace: nothing to save on this desktop" >&2; exit 3 ;;
     no_lua)
       if [ "$json" = 0 ]; then
         echo "omaplace: the Lua module is not loaded. Add this line to ~/.config/hypr/hyprland.lua:" >&2
@@ -101,6 +121,7 @@ if [ "$json" = 0 ]; then
   case $word in
     save) echo "saved ${args[1]}: $(n saved) windows, $(n skipped) skipped, $(n need_profile) need a profile" ;;
     open) echo "opened ${args[1]}: $(n placed) placed ($(n started) started), $(n skipped) skipped, $(n not_reopened) not reopened, $(n failed) failed" ;;
+    restore) echo "restored the last session: $(n placed) placed ($(n started) started), $(n skipped) skipped, $(n not_reopened) not reopened, $(n failed) failed" ;;
     list) grep -oE '"name":"[^"]*","windows":[0-9]+' <<< "$answer" | sed -E 's/"name":"([^"]*)","windows":([0-9]+)/\1  \2 windows/' || true ;;
     status) echo "run: $(field "$answer" run) ${state:-idle}" ;;
     rule) [ "${args[0]}" = ruleAddFocused ] && echo "rule added: $(field "$answer" rule)" || echo "rule removed" ;;

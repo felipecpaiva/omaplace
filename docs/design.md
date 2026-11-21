@@ -586,13 +586,15 @@ never wait.
 | `status` | `""` | current status JSON |
 
 A pending request ends with `result-<req>.json`, written by the service when the Lua side reports done, partial or
-failed, or after `request_timeout_s`. Errors use `{"ok":false,"code":"not_found|busy|no_lua|bad_name|failed"}`.
+failed, or after `request_timeout_s`. Errors use `{"ok":false,"code":"not_found|busy|no_lua|bad_name|empty|failed"}`
+(`empty`: a save found nothing to save on the desktop).
 
 ### 7.3 CLI `bin/omaplace`
 
-Words: `save`, `open`, `restore`, `list`, `rename`, `remove`, `rule add`, `rule remove`, `status`, `settings`. For a
+Words: `save`, `open`, `restore`, `list`, `rename`, `remove`, `rule add`, `rule remove`, `status`, `settings`. `save --ask` and `open --pick` (the menu rows, WP8) take the name from `omarchy-menu-input` and
+`omarchy-menu-select`; a closed picker exits 0 and does nothing. For a
 pending answer the CLI waits for `result-<req>.json`: with `inotifywait` when installed, else a check every 200 ms, never
-longer than `request_timeout_s`. This short wait lives only while the user's command runs; nothing resident polls. Exit codes: 0 ok, 2 bad usage, 3 not found, 4 partial (some windows not placed), 5 failed,
+longer than `request_timeout_s`. This short wait lives only while the user's command runs; nothing resident polls. Exit codes: 0 ok, 2 bad usage, 3 not found or nothing to save, 4 partial (some windows not placed), 5 failed,
 6 Lua module not loaded (`_G.omaplace` missing: prints the README line to add). Plain text output by default, `--json` passes
 the IPC line through. The CLI lives in the plugin folder; the menu row calls it by full path. Users may alias it.
 

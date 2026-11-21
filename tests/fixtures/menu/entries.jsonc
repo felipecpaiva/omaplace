@@ -1,0 +1,4 @@
+{
+  "personal": {"icon":"","label":"Personal"},
+  "personal.notes": {"icon":"","label":"Notes","action":"made-up-notes ~/notes"}
+}

@@ -1,0 +1,8 @@
+{
+  // Extend the menu with JSONC (made-up user file).
+  //
+  // "personal": {"icon":"","label":"Personal"},
+  "about": {"icon":"","label":"About","action":"made-up-about"},
+  // a comment between entries, and a trailing comma below
+  "personal.files": {"icon":"","label":"Files","action":"made-up-files ~/Documents"},
+}

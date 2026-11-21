@@ -66,6 +66,20 @@ Flickable {
     Binding { target: ignoreField; property: "text"; value: page.settings.ignore || ""; restoreMode: Binding.RestoreNone }
     Note { panel: page.panel; text: "Window classes omaplace leaves alone, separated by commas." }
 
+    PanelSectionHeader { text: "Omarchy menu"; foreground: page.panel.foreground; fontFamily: page.panel.fontFamily }
+    Button {
+      text: page.panel.info.menu ? "Remove from the menu" : "Add omaplace to the Omarchy menu"
+      enabled: page.panel.info.ok
+      foreground: page.panel.foreground
+      accent: page.panel.accent
+      fontFamily: page.panel.fontFamily
+      onClicked: if (page.panel.info.menu) page.panel.removeMenu(); else page.panel.addMenu()
+    }
+    Note {
+      panel: page.panel
+      text: "Adds a Scenes menu (save, open, restore, always open here, settings). The menu file is backed up first, as omarchy-menu.jsonc.omaplace.bak."
+    }
+
     Button {
       text: page.advanced ? "Hide advanced settings" : "Show advanced settings (7)"
       foreground: page.panel.foreground

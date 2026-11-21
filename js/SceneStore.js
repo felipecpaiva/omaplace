@@ -28,7 +28,8 @@ const WINDOW_SPECS = {
   folder: { type: "string", def: "" },
   edited: { type: "string", def: "" }
 }
-const EDITABLE = ["app", "rect", "order", "floating", "launch", "folder"] // class and context are the match key, never kept from old
+// class is the match key, never kept from old. context is kept when the user picked it (a re-capture may see "?").
+const EDITABLE = ["app", "context", "rect", "order", "floating", "launch", "folder"]
 
 function copyDefault(spec) { return Array.isArray(spec.def) ? spec.def.slice() : spec.def }
 function defaultsOf(specs) {
@@ -218,30 +219,50 @@ function serialize(doc) {
 // ---- merge a capture into an old scene
 
 // capture: { saved_on?, windows: [{app, class, context, rect, order, floating, launch, folder}] }. The capture is the truth about
-// which windows exist; for a slot found again by (class, context), the fields listed in its `edited` value are kept from the old slot.
+// which windows exist; for a slot found again, the fields listed in its `edited` value are kept from the old slot.
+// Matching: first every exact (class, context) pair. Then a captured window whose context is unknown ("?") takes an unused
+// old slot of its class (one whose context the user picked first), and one with no context ("") takes only such a picked
+// slot. Such a window gets the old slot's context, since its own capture says nothing.
+function contextPicked(ow) { return String(ow.edited || "").split(/\s+/).indexOf("context") !== -1 }
+
 function mergeCapture(oldScene, capture) {
   const old = oldScene || newScene()
   const scene = Object.assign(newScene(), old)
   scene.windows = []
   if (old.extra) scene.extra = Object.assign({}, old.extra)
   if (capture.saved_on !== undefined) scene.saved_on = capture.saved_on
-  const used = {}
   const oldWindows = old.windows || []
-  for (const cw of capture.windows || []) {
+  const caps = capture.windows || []
+  const used = {}
+  const match = caps.map(() => -1)
+  const take = (ci, ok) => {
+    for (let i = 0; i < oldWindows.length; i++) {
+      if (used[i] || oldWindows[i].class !== caps[ci].class || !ok(oldWindows[i])) continue
+      used[i] = true
+      match[ci] = i
+      return
+    }
+  }
+  caps.forEach((cw, ci) => take(ci, (ow) => (ow.context || "") === (cw.context || "")))
+  for (const picked of [true, false]) {
+    caps.forEach((cw, ci) => {
+      const ctx = cw.context || ""
+      if (match[ci] !== -1 || (ctx !== "?" && ctx !== "") || (!picked && ctx === "")) return
+      take(ci, (ow) => !picked || contextPicked(ow))
+    })
+  }
+  caps.forEach((cw, ci) => {
     const win = Object.assign(defaultsOf(WINDOW_SPECS), cw)
     win.edited = ""
-    const ctx = cw.context || ""
-    for (let i = 0; i < oldWindows.length; i++) {
-      const ow = oldWindows[i]
-      if (used[i] || ow.class !== cw.class || (ow.context || "") !== ctx) continue
-      used[i] = true
+    const ow = match[ci] === -1 ? null : oldWindows[match[ci]]
+    if (ow) {
       const keep = String(ow.edited || "").split(/\s+/).filter((f) => EDITABLE.indexOf(f) !== -1)
       for (const f of keep) win[f] = Array.isArray(ow[f]) ? ow[f].slice() : ow[f]
+      if ((win.context || "") !== (ow.context || "")) win.context = ow.context || ""
       win.edited = keep.join(" ")
       if (ow.extra) win.extra = Object.assign({}, ow.extra)
-      break
     }
     scene.windows.push(win)
-  }
+  })
   return scene
 }

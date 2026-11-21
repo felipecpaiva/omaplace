@@ -9,12 +9,16 @@ import "js/Plan.js" as Plan
 import "js/LuaLiteral.js" as LuaLiteral
 import "js/Summary.js" as Summary
 import "js/Settings.js" as Settings
+import "js/MenuExt.js" as MenuExt
+import "js/MovesFeed.js" as MovesFeed
+import "js/AutoMove.js" as AutoMove
+import "js/LuaCall.js" as LuaCall
 
 // omaplace service (design 4.3, 6.2, 6.3, 7.2): the CLI's IPC target and the only file that runs processes.
 // All data work goes through the js/ modules. One slow request (save, open, rule add) runs at a time; every other
 // request answers busy meanwhile, so two writers never race on scenes.toml or config.toml.
-// Idle cost: no timer armed, no process running, no file watched. While a request runs: two one-shot timers (the 2 s
-// Lua check and request_timeout_s) and a watch on status.json during an open.
+// Idle cost: no timer armed, no process running. One file watched only while app_memory is "auto" (moves.json). While a
+// request runs: two one-shot timers (the 2 s Lua check and request_timeout_s) and a watch on status.json during an open.
 Item {
   id: root
 
@@ -40,6 +44,7 @@ Item {
   property var liveMonitors: []
   property bool picking: false
   property var pickTarget: null
+  property bool pickStarted: false
   property int revision: 0
   property string lastAnswer: ""
 
@@ -49,8 +54,18 @@ Item {
   readonly property string launcherMarker: "X-Omaplace-Managed=true"
   property bool launcherInstalled: false
 
+  // Omarchy menu rows (WP8): written only from the settings window's button, never at load, with a backup first.
+  readonly property string menuPath: root.home + "/.config/omarchy/extensions/omarchy-menu.jsonc"
+  readonly property string cliPath: Summary.fromUrl(Qt.resolvedUrl("bin/omaplace"))
+
+  // Auto app memory (WP10): on while app_memory is "auto"; the highest moves.json `at` already handled.
+  property bool autoMemory: false
+  property real lastMovesAt: -1
+  // The result file of the request before this one: deleted when the next one ends (the CLI read it long before).
+  property string lastResultPath: ""
+
   // DesktopEntries is lazy: the first read is empty, so it is touched at load (no process, no timer).
-  Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher() }
+  Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher(); root.markMoves(); root.refreshAuto() }
   // find deletes the file only when grep finds the marker line in it: argv only, no shell.
   Component.onDestruction: {
     if (root.launcherInstalled)
@@ -88,7 +103,9 @@ Item {
     if (oldText !== "") bakConfig.setText(oldText)
     if (root.writeError === "") configFile.setText(text)
     if (root.writeError === "" && !reloadProc.running) reloadProc.running = true
-    return root.writeError
+    let err = root.writeError
+    root.refreshAuto() // may write scenes.toml, which resets writeError
+    return err
   }
 
   function config() { return ConfigIO.parse(root.readNow(configFile)) }
@@ -202,6 +219,7 @@ Item {
       let current = Summary.instanceName(Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "")
       let instance = Summary.pickSession(Summary.parseJson(root.readNow(sessionsFile)), current, String(gen || ""))
       if (instance === "") return Summary.answer(root.fail("not_found", "no previous session"))
+      if (!/^[A-Za-z0-9_]{1,128}$/.test(instance)) return Summary.answer(root.fail("failed", "sessions.json names a bad instance"))
       sessionFile.path = root.stateDir + "/session-" + instance + ".json"
       let snap = Summary.parseJson(root.readNow(sessionFile))
       if (!snap || !Array.isArray(snap.windows) || snap.windows.length === 0) return Summary.answer(root.fail("not_found", "that session has no windows"))
@@ -225,7 +243,7 @@ Item {
   }
 
   function evalCapture() {
-    evalProc.command = ["hyprctl", "eval", "_G.omaplace.capture(" + LuaLiteral.encode(root.req.id) + ", \"focused\")"]
+    evalProc.command = ["hyprctl", "eval", LuaCall.wrap("capture", [LuaLiteral.encode(root.req.id), "\"focused\""])]
     evalProc.running = true
   }
 
@@ -236,16 +254,22 @@ Item {
       r.run = "r" + root.counter + "-" + Date.now()
       let plan = r.snapshot
         ? Plan.fromSession(r.snapshot, root.launchesFor(r.snapshot.windows, cfg), { run: r.run, expiry_s: cfg.settings.expiry_seconds })
-        : Plan.fromScene(r.scene, root.launchesFor(r.scene.windows, cfg), Summary.planTarget(r.scene, r.run, cfg.settings.expiry_seconds), cfg.rules)
+        : Plan.fromScene(r.scene, root.launchesFor(r.scene.windows, cfg), Object.assign(Summary.planTarget(r.scene, r.run, cfg.settings.expiry_seconds), { scene: r.name }), cfg.rules)
       r.planPath = root.runtimeDir + "/plan-" + r.run + ".lua"
       planFile.path = r.planPath
       planFile.setText("return " + LuaLiteral.encode(plan) + "\n")
     } catch (e) { root.finish(root.fail("failed", String(e.message || e))) }
   }
 
-  function afterEval() {
+  // text: what hyprctl printed (LuaCall's answer). A missing module or an error Lua returned at once ends the request now;
+  // an answer we cannot read falls back to the status watch and the 2 s check.
+  function afterEval(text) {
     let r = root.req
     if (!r) return
+    let c = LuaCall.code(text)
+    if (c === "no_lua") { root.finish(root.fail("no_lua")); return }
+    if (c !== "" && c !== "ok") { root.finish(c === "busy" ? root.fail("busy") : root.fail("failed", c)); return }
+    r.luaOk = c === "ok"
     if (r.kind === "open") {
       r.evaluated = true
       root.watching = true
@@ -267,7 +291,7 @@ Item {
     if (!r) return
     let cap = Summary.parseJson(text)
     if (!cap) {
-      if (r.retried) { root.finish(root.fail("no_lua")); return }
+      if (r.retried) { root.finish(r.luaOk ? root.fail("failed", "no capture from the Lua module") : root.fail("no_lua")); return }
       r.retried = true
       luaCheck.restart()
       return
@@ -311,7 +335,7 @@ Item {
     let r = root.req
     try {
       let sc = Summary.sceneCapture(r.capture, r.resolved, r.terms, root.strategies(root.config()))
-      if (sc.capture.windows.length === 0) { root.finish(root.fail("failed", "no app on this desktop can be saved")); return }
+      if (sc.capture.windows.length === 0) { root.finish(root.fail("empty", "nothing to save on this desktop")); return }
       let w = root.writableScenes()
       if (w.error) { root.finish(w.error); return }
       w.doc.scenes[r.name] = SceneStore.mergeCapture(w.doc.scenes[r.name], sc.capture)
@@ -346,7 +370,9 @@ Item {
   function onLuaCheck() {
     let r = root.req
     if (!r) return
-    if (r.kind === "open") { if (!r.seen) root.finish(root.fail(r.other ? "busy" : "no_lua")) }
+    if (r.kind === "open") {
+      if (!r.seen) root.finish(r.other ? root.fail("busy") : r.luaOk ? root.fail("failed", "no status from the Lua module") : root.fail("no_lua"))
+    }
     else root.readCapture()
   }
 
@@ -358,13 +384,82 @@ Item {
     luaCheck.stop()
     root.watching = false
     root.req = null
+    // Spent files of this request (plans hold launch arguments) and the previous result. Paths come from our own ids.
+    let spent = []
+    if (r.planPath) spent.push(r.planPath)
+    if (r.kind !== "open") spent.push(root.runtimeDir + "/capture-" + r.id + ".json")
+    if (root.lastResultPath !== "") spent.push(root.lastResultPath)
+    if (spent.length > 0) Quickshell.execDetached(["rm", "-f", "--"].concat(spent))
     resultFile.path = root.runtimeDir + "/result-" + r.id + ".json"
+    root.lastResultPath = resultFile.path
     resultFile.setText(Summary.answer(res) + "\n")
     if (r.kind === "open" && !notifyProc.running) {
       let text = res.state ? Summary.notifyText(res) : "could not open (" + res.code + ")"
       notifyProc.command = ["omarchy-notification-send", "omaplace: " + r.name, text]
       notifyProc.running = true
     }
+    root.refreshAuto()
+  }
+
+  // ---- auto app memory (WP10): moves Lua reported between scene desktops go into scenes.toml
+
+  // At load: events already in moves.json were handled by an earlier shell (or happened while it was down) and are
+  // never replayed. A replay could move a second window of the same class, since AutoMove matches by class and context.
+  function markMoves() { root.lastMovesAt = MovesFeed.pending(root.readNow(movesFile), -1).maxAt }
+
+  function refreshAuto() {
+    try { root.autoMemory = root.config().settings.app_memory === "auto" } catch (e) { root.autoMemory = false }
+    root.applyMoves()
+  }
+
+  // Runs when moves.json changes and after every request ends (the watch can miss a rename, design live lesson).
+  // Never while a request runs: finish() calls it again. Writes scenes.toml only when an event was applied.
+  function applyMoves() {
+    if (!root.autoMemory || root.req) return
+    try {
+      let p = MovesFeed.pending(root.readNow(movesFile), root.lastMovesAt)
+      if (p.events.length === 0) { root.lastMovesAt = p.maxAt; return }
+      let w = root.writableScenes()
+      if (w.error) { console.warn("omaplace: auto moves not applied: " + w.error.reason); return }
+      let res = AutoMove.apply(w.doc, p.events)
+      for (let s of res.skipped) {
+        if (s.reason !== "already applied") console.log("omaplace: auto move skipped: " + s.class + ", " + s.reason)
+      }
+      if (res.applied > 0) {
+        let err = root.writeScenes(w.text, SceneStore.serialize(res.doc))
+        if (err !== "") { console.warn("omaplace: auto moves not applied: " + err); return }
+      }
+      root.lastMovesAt = p.maxAt
+    } catch (e) { console.warn("omaplace: auto moves not applied: " + String(e.message || e)) }
+  }
+
+  // ---- Omarchy menu rows (WP8). Only the settings window's button calls these.
+
+  function menuInstalled() { return MenuExt.hasRows(root.readNow(menuFile)) }
+
+  function menuAdd() {
+    try {
+      let text = root.readNow(menuFile)
+      let r = MenuExt.addRows(text, root.cliPath)
+      if (!r.ok) return Summary.answer(root.fail("failed", r.why))
+      root.writeError = ""
+      if (text !== "") menuBak.setText(text)
+      if (root.writeError === "") menuFile.setText(r.text)
+      return Summary.answer(root.writeError === "" ? { ok: true } : root.fail("failed", root.writeError))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  // Takes out only our block; the backup from menuAdd is left as it was.
+  function menuRemove() {
+    try {
+      let text = root.readNow(menuFile)
+      let r = MenuExt.removeRows(text)
+      if (!r.ok) return Summary.answer(root.fail("failed", r.why))
+      if (r.text === text) return Summary.answer({ ok: true })
+      root.writeError = ""
+      menuFile.setText(r.text)
+      return Summary.answer(root.writeError === "" ? { ok: true } : root.fail("failed", root.writeError))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
   }
 
   // ---- settings window (WP6). Plain functions the panel calls; it never writes a file itself. Each write uses the same
@@ -407,7 +502,7 @@ Item {
       })
       let rules = Object.keys(cfg.rules).map(function (name) { return Object.assign({ name: name }, cfg.rules[name]) })
       return {
-        ok: true, settings: cfg.settings, rules: rules, scenes: scenes, sessions: root.sessionRows(),
+        ok: true, settings: cfg.settings, rules: rules, scenes: scenes, sessions: root.sessionRows(), menu: root.menuInstalled(),
         warnings: cfg.warnings.concat(doc.warnings), scenesWritable: !doc.readOnly && doc.errors.length === 0
       }
     } catch (e) {
@@ -492,6 +587,7 @@ Item {
     if (root.req || root.picking) return Summary.answer(root.fail("busy"))
     root.pickTarget = { scene: scene, index: index, cls: cls }
     root.picking = true
+    root.pickStarted = false
     pickProc.running = true
     return Summary.answer({ ok: true, pending: true })
   }
@@ -542,7 +638,7 @@ Item {
     }
   }
 
-  Process { id: evalProc; onExited: root.afterEval() }
+  Process { id: evalProc; stdout: StdioCollector { onStreamFinished: root.afterEval(text) } }
   Process { id: catProc; stdout: StdioCollector { onStreamFinished: root.onCaptureText(text) } }
   Process { id: procProc; stdout: StdioCollector { onStreamFinished: root.onProcinfo(text) } }
   Process { id: reloadProc; command: ["hyprctl", "eval", "_G.omaplace.reload_config()"] }
@@ -562,6 +658,9 @@ Item {
     stdout: StdioCollector { onStreamFinished: root.onPicked(text) }
     // A pick exits 0 and arrives through stdout, in either order; only a cancel or a failure clears the pick here.
     onExited: (code) => { if (code !== 0 && root.picking) root.onPicked("") }
+    // A chooser that never started sends no exit: clear the pick, or the window stays hidden and every pick busy.
+    onStarted: root.pickStarted = true
+    onRunningChanged: if (!running && !root.pickStarted && root.picking) root.onPicked("")
   }
 
   // ---- one-shot timers, armed only while a request runs
@@ -606,5 +705,9 @@ Item {
   FileView { id: countFile; blockLoading: true; printErrors: false }
   FileView { id: answerFile; blockLoading: true; printErrors: false }
   FileView { id: launcherSourceFile; path: root.launcherSource; blockLoading: true; printErrors: false }
+  FileView { id: menuFile; path: root.menuPath; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the Omarchy menu file" }
+  FileView { id: menuBak; path: root.menuPath + ".omaplace.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the menu backup" }
+  // moves.json is only ever replaced by a rename, which a watch can miss; finish() reads it too.
+  FileView { id: movesFile; path: root.runtimeDir + "/moves.json"; blockLoading: true; printErrors: false; watchChanges: root.autoMemory; onFileChanged: root.applyMoves() }
   FileView { id: launcherFile; path: root.launcherDest; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false }
 }

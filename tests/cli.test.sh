@@ -25,10 +25,27 @@ if [ -n "${FAKE_RESULT:-}" ]; then
     mv "$out.tmp" "$out"
   ) > /dev/null 2>&1 &
 fi
+if [ "${2:-}" = list ] && [ -n "${FAKE_LIST:-}" ]; then printf '%s\n' "$FAKE_LIST"; exit 0; fi
 [ -z "${FAKE_ANSWER:-}" ] || printf '%s\n' "$FAKE_ANSWER"
 exit "${FAKE_EXIT:-0}"
 FAKE
 chmod +x "$tmp/bin/omarchy-shell"
+# Fake Omarchy pickers and hyprctl (the real pickers would open the live menu): log the arguments, print FAKE_PICK
+# (FAKE_PICK_EXIT=1 is a closed picker, like the real ones).
+for picker in omarchy-menu-input omarchy-menu-select; do
+  cat > "$tmp/bin/$picker" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s|' "${0##*/}" "$@" >> "$FAKE_LOG.pick"; echo >> "$FAKE_LOG.pick"
+[ "${FAKE_PICK_EXIT:-0}" = 0 ] || exit "$FAKE_PICK_EXIT"
+printf '%s\n' "${FAKE_PICK:-}"
+FAKE
+  chmod +x "$tmp/bin/$picker"
+done
+cat > "$tmp/bin/hyprctl" <<'FAKE'
+#!/usr/bin/env bash
+printf '{\n    "id": 3,\n    "name": "%s",\n    "monitor": "made-up-1",\n    "windows": 2\n}\n' "${FAKE_WS-Dev Work}"
+FAKE
+chmod +x "$tmp/bin/hyprctl"
 # A PATH without inotifywait, for the 200 ms fallback.
 for t in bash sed head grep cat sleep mv mkdir; do ln -s "$(command -v "$t")" "$tmp/nobin/$t"; done
 ln -s "$tmp/bin/omarchy-shell" "$tmp/nobin/omarchy-shell"
@@ -36,7 +53,7 @@ export PATH="$tmp/bin:$PATH"
 
 cleanup() {
   sleep 0.6 # let the fake's late writers finish
-  rm -f "$tmp"/bin/* "$tmp"/nobin/* "$tmp/calls" "$tmp/out" "$XDG_RUNTIME_DIR"/omaplace/* "$HOME/.config/omaplace/config.toml"
+  rm -f "$tmp"/bin/* "$tmp"/nobin/* "$tmp/calls" "$tmp/calls.pick" "$tmp/out" "$XDG_RUNTIME_DIR"/omaplace/* "$HOME/.config/omaplace/config.toml"
   rmdir "$XDG_RUNTIME_DIR/omaplace" "$XDG_RUNTIME_DIR" "$HOME/.config/omaplace" "$HOME/.config" "$HOME" "$tmp/bin" "$tmp/nobin" "$tmp" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -49,13 +66,14 @@ check() { # check <label> <0 for pass>
 # run <args...>: runs the CLI with the current FAKE_* settings; sets $code and $out (stdout and stderr)
 run() {
   : > "$FAKE_LOG"
+  : > "$FAKE_LOG.pick"
   code=0
   "$bash_bin" "$cli" "$@" > "$tmp/out" 2>&1 || code=$?
   out=$(cat "$tmp/out")
 }
 is() { [ "$1" = "$2" ] && echo 0 || echo 1; }
 has() { [[ $1 == *"$2"* ]] && echo 0 || echo 1; }
-reset() { unset FAKE_ANSWER FAKE_EXIT FAKE_RESULT FAKE_REQ FAKE_DELAY; }
+reset() { unset FAKE_ANSWER FAKE_EXIT FAKE_RESULT FAKE_REQ FAKE_DELAY FAKE_LIST FAKE_PICK FAKE_PICK_EXIT FAKE_WS; }
 
 # ---- usage, exit 2, the shell is never called
 reset
@@ -180,6 +198,63 @@ check "timeout without inotifywait exits 5 in time" "$([ "$code" = 5 ] && [ $((S
 export FAKE_ANSWER='{"ok":true,"pending":true,"req":"../../etc"}'
 run open work
 check "a bad request id is refused" "$(is "$code" 5)"
+
+# ---- fix: saving an empty desktop, restore counts (the default 60 s limit again)
+rm -f "$HOME/.config/omaplace/config.toml"
+export FAKE_REQ=q8-1700000000007 FAKE_ANSWER='{"ok":true,"pending":true,"req":"q8-1700000000007"}'
+export FAKE_RESULT='{"ok":false,"code":"empty","reason":"nothing to save on this desktop"}'
+run save work
+check "an empty desktop exits 3" "$(is "$code" 3)"
+check "an empty desktop says so" "$(is "$out" "omaplace: nothing to save on this desktop")"
+export FAKE_REQ=q9-1700000000008 FAKE_ANSWER='{"ok":true,"pending":true,"req":"q9-1700000000008"}'
+export FAKE_RESULT='{"ok":true,"state":"done","run":"r9-1","placed":4,"started":3,"skipped":1,"not_reopened":0,"failed":0}'
+run restore
+check "restore prints counts" "$(is "$out" "restored the last session: 4 placed (3 started), 1 skipped, 0 not reopened, 0 failed")"
+check "restore done exits 0" "$(is "$code" 0)"
+reset
+
+# ---- the menu rows: save --ask and open --pick with fake pickers
+export FAKE_REQ=q10-1700000000009 FAKE_ANSWER='{"ok":true,"pending":true,"req":"q10-1700000000009"}'
+export FAKE_RESULT='{"ok":true,"saved":2,"skipped":0,"need_profile":0}'
+export FAKE_PICK="morning"
+run save --ask
+check "save --ask saves under the typed name" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace save morning")"
+check "save --ask offers the desktop name as the default" "$(is "$(cat "$FAKE_LOG.pick")" "omarchy-menu-input|Scene name (Enter for dev-work)|")"
+export FAKE_PICK=""
+run save --ask
+check "save --ask with Enter alone uses the desktop name" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace save dev-work")"
+export FAKE_WS="" FAKE_PICK=""
+run save --ask
+check "save --ask with no default and no name is a usage error" "$(is "$code" 2)"
+check "save --ask asks without a default when there is none" "$(is "$(cat "$FAKE_LOG.pick")" "omarchy-menu-input|Scene name|")"
+unset FAKE_WS
+export FAKE_PICK_EXIT=1
+run save --ask
+check "closing the name picker saves nothing and exits 0" "$(is "$code:$(cat "$FAKE_LOG")" "0:")"
+reset
+
+export FAKE_LIST='{"ok":true,"scenes":[{"name":"work","windows":4},{"name":"play","windows":0}]}'
+export FAKE_REQ=q11-1700000000010 FAKE_ANSWER='{"ok":true,"pending":true,"req":"q11-1700000000010"}'
+export FAKE_RESULT='{"ok":true,"state":"done","run":"r11-1","placed":1,"started":1,"skipped":0,"not_reopened":0,"failed":0}'
+export FAKE_PICK="play"
+run open --pick
+check "open --pick lists the scenes in the picker" "$(is "$(cat "$FAKE_LOG.pick")" "omarchy-menu-select|Open a scene|work|play|")"
+check "open --pick opens the choice" "$(is "$(tail -n1 "$FAKE_LOG")" "io.github.felipecpaiva.omaplace open play")"
+check "open --pick prints counts" "$(is "$out" "opened play: 1 placed (1 started), 0 skipped, 0 not reopened, 0 failed")"
+export FAKE_PICK_EXIT=1
+run open --pick
+check "closing the scene picker opens nothing and exits 0" "$(is "$code:$(cat "$FAKE_LOG")" "0:io.github.felipecpaiva.omaplace list")"
+unset FAKE_PICK_EXIT
+export FAKE_LIST='{"ok":true,"scenes":[]}'
+run open --pick
+check "open --pick with no scenes exits 3" "$(is "$code" 3)"
+check "open --pick with no scenes never opens the picker" "$(is "$(cat "$FAKE_LOG.pick")" "")"
+reset
+for bad in "save --ask x" "open --pick x"; do
+  # shellcheck disable=SC2086
+  run $bad
+  check "usage error: '$bad' exits 2" "$(is "$code" 2)"
+done
 
 echo "cli: $n checks, $([ $fail = 0 ] && echo all passed || echo FAILED)"
 exit $fail

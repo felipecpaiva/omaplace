@@ -7,7 +7,7 @@ Private for now. App placement rules, scenes and session restore for Omarchy, wi
 - Keep named scenes for the desktops you use often. Open one again in one step.
 - Restore the whole session after a reboot.
 
-Status: **design** (2026-11-21). Goals and today's plan: [docs/goals.md](docs/goals.md). How it is built: [docs/design.md](docs/design.md); research in [docs/research/](docs/research/00-summary.md).
+Status: **build**, all work packages in, live checks pending (2026-11-21). Goals and today's plan: [docs/goals.md](docs/goals.md). How it is built: [docs/design.md](docs/design.md); research in [docs/research/](docs/research/00-summary.md).
 
 ## Install
 
@@ -29,6 +29,46 @@ pcall(dofile, os.getenv("HOME") .. "/.config/omarchy/plugins/io.github.felipecpa
 
 The `pcall` means a missing or broken file never breaks the rest of your config. Rules are read from `~/.config/omaplace/config.toml` when Hyprland loads.
 
+## Use it
+
+From a terminal (the command is `bin/omaplace` in the plugin folder; add it to your PATH or an alias):
+
+```
+omaplace save <name>        save the focused desktop as a scene
+omaplace save --ask         same, asking for the name in the Omarchy menu (Enter alone: the desktop's name)
+omaplace open <name>        open a scene on the focused desktop
+omaplace open --pick        pick the scene from a list
+omaplace restore [n]        bring back the last session (n = 1 for the one before, 2 ...)
+omaplace list | rename <from> <to> | remove <name>
+omaplace rule add           the focused app always opens on this desktop and monitor
+omaplace rule remove <name>
+omaplace status
+omaplace settings           open the settings window
+```
+
+`--json` before the word prints the service's answer as is. Exit codes: 0 ok, 2 bad usage, 3 not found or nothing to
+save, 4 partial, 5 failed, 6 the Lua module is not loaded.
+
+## Settings window
+
+`omaplace settings`, or "omaplace" in the app launcher. Four pages: Scenes (open, rename, delete, pick a browser
+profile or a project folder for a window), Rules, Session (restore an older session) and General (app memory, what a
+scene does with open apps, missing monitors, ignored apps, timing). Every change is saved at once; the file before the
+change is kept as `.bak` next to it.
+
+## Omarchy menu
+
+omaplace never touches the Omarchy menu by itself. In the settings window, General, press "Add omaplace to the Omarchy
+menu". That adds a Scenes menu with Save this desktop, Open a scene, Restore last session, Always open here and
+Settings to `~/.config/omarchy/extensions/omarchy-menu.jsonc`, as one block between `// omaplace begin` and
+`// omaplace end`. The file as it was is kept as `omarchy-menu.jsonc.omaplace.bak`. "Remove from the menu" takes the
+block out again and leaves the rest of the file alone.
+
+## Automatic app memory
+
+With "App memory" set to `auto` in `config.toml`, moving an app by hand from one scene's desktop to another
+scene's desktop moves it from the first scene to the second in `scenes.toml` (a `.bak` is kept).
+
 ## Placement rules
 
 Put this in `~/.config/omaplace/config.toml` (made-up app and monitor):
@@ -46,9 +86,12 @@ usual. It comes back when the monitor does.
 
 ## Remove
 
-1. Delete the line above from `hyprland.lua`.
-2. Run `omarchy plugin remove io.github.felipecpaiva.omaplace`.
-3. If you want, delete `~/.config/omaplace` and `~/.local/state/omaplace`.
+1. If you added the menu: press "Remove from the menu" in the settings window first, or delete the lines from
+   `// omaplace begin` to `// omaplace end` in `~/.config/omarchy/extensions/omarchy-menu.jsonc` by hand.
+2. Delete the line above from `hyprland.lua`.
+3. Run `omarchy plugin remove io.github.felipecpaiva.omaplace`.
+4. If you want, delete `~/.config/omaplace`, `~/.local/state/omaplace` and
+   `~/.config/omarchy/extensions/omarchy-menu.jsonc.omaplace.bak`.
 
 ## Tests
 

@@ -158,9 +158,64 @@ test("mergeCapture into no old scene, and does not change its input", () => {
   assert.ok(S.serialize({ schema: 1, scenes: { fresh } }).includes("[scene.fresh.window.3]"))
 })
 
-test("an edited list cannot name the match key", () => {
+test("an edited list cannot name the class, the match key", () => {
   const old = oldScene()
-  old.windows[0].edited = "class context app"
+  old.windows[0].edited = "class app"
   const merged = S.mergeCapture(old, cap())
   assert.equal(merged.windows[0].edited, "app")
+})
+
+// A profile picked in settings for a window saved with context "?" (made-up profile, folder and program).
+const picked = () => {
+  const old = oldScene()
+  old.windows.push({ app: "google-chrome-stable", class: "google-chrome", context: "Profile 7", rect: [0, 0, 1, 1], order: 4,
+    floating: true, launch: "made-up --flag", folder: "~/made/up", edited: "context folder launch" })
+  return old
+}
+const unknown = (extra) => ({ app: "google-chrome-stable", class: "google-chrome", context: "?", rect: [0, 0, 0.5, 1], order: 4,
+  floating: true, launch: "", folder: "", ...extra })
+
+test("a re-capture that sees ? keeps the picked context, folder and program", () => {
+  const merged = S.mergeCapture(picked(), cap([unknown()]))
+  const w = merged.windows[3]
+  assert.equal(w.context, "Profile 7")
+  assert.equal(w.folder, "~/made/up")
+  assert.equal(w.launch, "made-up --flag")
+  assert.deepEqual(w.rect, [0, 0, 0.5, 1]) // not edited: the new capture wins
+  assert.equal(w.edited, "context folder launch")
+  assert.equal(merged.windows[2].context, "Profile 1") // the tagged window kept its own slot
+})
+
+test("a ? window never takes a slot an exact match needs, even when it comes first", () => {
+  const c = cap()
+  c.windows.unshift(unknown())
+  const merged = S.mergeCapture(picked(), c)
+  assert.equal(merged.windows[0].context, "Profile 7")
+  assert.deepEqual(merged.windows[3].rect, [0.5, 0.5, 0.5, 0.5]) // Profile 1 still found its edited slot
+})
+
+test("a ? window takes an unused old slot of its class even when no context was picked, and keeps that context", () => {
+  const old = oldScene()
+  const merged = S.mergeCapture(old, { windows: [cap().windows[0], unknown()] })
+  assert.equal(merged.windows[1].context, "Profile 1")
+  assert.deepEqual(merged.windows[1].rect, [0.5, 0.5, 0.5, 0.5]) // the old slot's edited rect
+})
+
+test("a window with no context takes only a slot whose context was picked", () => {
+  const old = picked()
+  old.windows.splice(2, 1) // only the picked Chrome slot is left
+  const plain = unknown({ context: "" })
+  assert.equal(S.mergeCapture(old, { windows: [plain] }).windows[0].context, "Profile 7")
+  old.windows[2].edited = "folder"
+  const merged = S.mergeCapture(old, { windows: [plain] })
+  assert.equal(merged.windows[0].context, "")
+  assert.equal(merged.windows[0].edited, "")
+})
+
+test("the picked context survives a serialize and parse round trip and a second re-capture", () => {
+  const once = S.mergeCapture(picked(), cap([unknown()]))
+  const again = S.parse(S.serialize({ schema: 1, scenes: { work: once } })).scenes.work
+  const twice = S.mergeCapture(again, cap([unknown()]))
+  assert.equal(twice.windows[3].context, "Profile 7")
+  assert.equal(twice.windows[3].folder, "~/made/up")
 })
