@@ -37,13 +37,16 @@ C.strategy_spec = {
   match = { default = "", kind = "string" },
   use = { default = "desktop", kind = "enum", values = C.strategy_names },
   launch_context = { default = "", kind = "string" },
-  context = { default = "", kind = "string" },
+  context = { default = "none", kind = "enum", values = { "profile", "folder", "none" } },
 }
 
 local function value(v)
   if v == "true" then return true elseif v == "false" then return false end
   local s = v:match('^"(.*)"$')
-  if s then return s end
+  if s then
+    if s:find('"', 1, true) then return nil end -- the subset has no escapes, so an inner quote is unreadable
+    return s
+  end
   -- plain decimals only: tonumber alone would also accept 0x10 and 1e999 (infinity)
   if v:match("^-?%d+%.?%d*$") then return tonumber(v) end
   return nil -- not a value we know
@@ -152,6 +155,8 @@ function C.load(text)
       if item_extra then item.extra = item_extra end
       if kind == "rule" and item.app == "" then
         warnings[#warnings + 1] = "rule " .. name .. " has no app, it matches nothing"
+      elseif kind == "strategy" and item.match == "" then
+        warnings[#warnings + 1] = "strategy " .. name .. " has no match, it matches nothing"
       end
       cfg[kind == "rule" and "rules" or "strategies"][name] = item
     else

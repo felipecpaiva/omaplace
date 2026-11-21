@@ -126,7 +126,10 @@ function parse(text) {
     const spec = sec.specs && sec.specs[k.key]
     if (!spec) {
       const p = parseValue(k.raw)
-      extra[sec.label + k.key] = p.ok ? p.value : k.raw
+      const v = p.ok ? p.value : k.raw
+      // unknown keys stay next to their rule or strategy (as the Lua side does); others go to the top-level extra
+      if (sec.kind === "rule" || sec.kind === "strategy") (sec.target.extra = sec.target.extra || {})[k.key] = v
+      else extra[sec.label + k.key] = v
       continue
     }
     const r = coerce(spec, k.raw)

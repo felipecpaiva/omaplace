@@ -24,7 +24,10 @@
       "monitor": "",
       "slot": 2,
       "follow": false,
-      "enabled": true
+      "enabled": true,
+      "extra": {
+        "color": "red"
+      }
     }
   },
   "strategies": {},
@@ -32,7 +35,6 @@
   "extra": {
     "future_option": "x",
     "number_option": 7,
-    "theme.accent": "#ff8800",
-    "rule.editor.color": "red"
+    "theme.accent": "#ff8800"
   }
 }
