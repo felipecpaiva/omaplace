@@ -13,7 +13,9 @@ ColumnLayout {
   property var card: ({})
   property var place: ({})
   property var apps: []
-  property bool more: false
+  property var view: null          // the DesktopsPage: which rows show More survives a rebuild there
+  readonly property string rowKey: row.card.key + "\n" + row.place.pos
+  readonly property bool more: !!row.view && !!row.view.openRows[row.rowKey]
   readonly property bool writable: row.panel.info.scenesWritable
 
   spacing: Style.spacing.xxs
@@ -49,7 +51,7 @@ ColumnLayout {
       foreground: row.panel.foreground
       accent: row.panel.accent
       fontFamily: row.panel.fontFamily
-      onClicked: row.more = !row.more
+      onClicked: row.view.toggleRow(row.rowKey)
     }
     Button {
       visible: !row.place.empty

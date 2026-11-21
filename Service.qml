@@ -831,7 +831,7 @@ Item {
 
   function desktopsInfo() {
     if (root.deskBusy) { root.deskAgain = true; return }
-    if (!root.dirsReady) { root.ensureDirs(); return }
+    if (!root.dirsReady) { root.deskAgain = true; root.ensureDirs(); return } // mkdirProc calls this again
     root.deskBusy = true
     root.deskAgain = false
     root.deskNext = { reason: "", monitors: [], windows: {}, modes: {} }
@@ -930,6 +930,7 @@ Item {
       // of a start always happens (plansText is empty) and reloads; only a build that failed needs the call here
       if (!root.writePlans()) root.reloadPlans()
       root.checkLogin()
+      if (root.deskAgain) root.desktopsInfo() // the Desktops page asked before the runtime folder existed
     }
   }
 

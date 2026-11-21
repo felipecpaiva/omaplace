@@ -8,6 +8,7 @@ ColumnLayout {
   id: mon
 
   property var panel: null
+  property var view: null          // the DesktopsPage, which keeps the editor state
   property var group: ({ name: "", cards: [] })
   property var apps: []
   property string selected: ""
@@ -42,6 +43,7 @@ ColumnLayout {
     visible: mon.chosen !== null
     Layout.fillWidth: true
     panel: mon.panel
+    view: mon.view
     model: mon.chosen || ({ key: "", slot: 0, monitorName: "", plan: false, name: "", badge: "", error: "", choice: "", layout: "", modeNote: "", rows: [], openAtLogin: false, mode: "" })
     apps: mon.apps
   }

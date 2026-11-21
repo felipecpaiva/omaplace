@@ -10,13 +10,30 @@ Flickable {
 
   property var panel: null
   property string selected: ""     // the selected card's key: monitor identity and slot
-  readonly property var desks: page.visible && page.panel.service ? page.build(page.panel.info, page.panel.service.revision) : ({ groups: [], reason: "", loading: false })
-  readonly property var apps: page.visible && page.panel.service ? page.panel.service.appChoices() : []
+  // Set by refresh(), never computed in a binding: desktopCards() reads files. The editor state lives here because the
+  // card delegates are rebuilt with every new model: which desktop has the custom zones field open, its typed text
+  // (kept when a save is refused), and which rows show More ("<card key>\n<pos>": true).
+  property var desks: ({ groups: [], reason: "", loading: false })
+  property var apps: []
+  property string customKey: ""
+  property var drafts: ({})
+  property var openRows: ({})
   readonly property string current: page.selected !== "" ? page.selected
     : page.desks.groups.length > 0 ? page.desks.groups[0].cards[0].key : ""
 
-  // info and revision are only there so the binding runs again when they change.
-  function build(info, revision) { return page.panel.service.desktopCards() }
+  function refresh() {
+    if (!page.visible || !page.panel.service) return
+    page.desks = page.panel.service.desktopCards()
+  }
+  function setDraft(key, text) { let d = Object.assign({}, page.drafts); d[key] = text; page.drafts = d }
+  function toggleRow(key) { let o = Object.assign({}, page.openRows); o[key] = !o[key]; page.openRows = o }
+
+  onVisibleChanged: {
+    if (visible && page.panel.service) page.apps = page.panel.service.appChoices()
+    page.refresh()
+  }
+  Connections { target: page.panel; function onInfoChanged() { page.refresh() } }
+  Connections { target: page.panel.service; ignoreUnknownSignals: true; function onRevisionChanged() { page.refresh() } }
 
   clip: true
   contentWidth: width
@@ -53,6 +70,7 @@ Flickable {
         required property var modelData
         width: monitors.width
         panel: page.panel
+        view: page
         group: modelData
         apps: page.apps
         selected: page.current

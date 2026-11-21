@@ -13,9 +13,10 @@ ColumnLayout {
   property var panel: null
   property var model: ({})
   property var apps: []
-  property string customKey: ""    // the desktop whose custom zones field the user opened
+  property var view: null          // the DesktopsPage: customKey, drafts and openRows survive a rebuild there
   readonly property bool writable: editor.panel.info.scenesWritable
-  readonly property bool custom: editor.model.choice === "custom" || editor.customKey === editor.model.key
+  readonly property bool custom: editor.model.choice === "custom" || (!!editor.view && editor.view.customKey === editor.model.key)
+  readonly property string draft: editor.view ? editor.view.drafts[editor.model.key] || "" : ""
   readonly property var layoutOptions: [{ value: "", label: "No plan" }].concat(Desktops.LAYOUT_CHOICES, [{ value: "custom", label: "Custom zones" }])
 
   spacing: Style.spacing.sm
@@ -56,7 +57,7 @@ ColumnLayout {
       accent: editor.panel.accent
       fontFamily: editor.panel.fontFamily
       onChanged: function (value) {
-        editor.customKey = value === "custom" ? editor.model.key : ""
+        editor.view.customKey = value === "custom" ? editor.model.key : ""
         if (value === "") { if (editor.model.plan) editor.panel.askDelete("plan", editor.model.name) }
         else if (value !== "custom" && value !== editor.model.layout) editor.panel.editPlan(editor.model, "layout", value)
       }
@@ -70,9 +71,13 @@ ColumnLayout {
       placeholderText: "0 0 0.5 1; 0.5 0 0.5 1"
       foreground: editor.panel.foreground
       accent: editor.panel.accent
-      onEditingFinished: if (text.trim() !== "" && text.trim() !== editor.model.layout) editor.panel.editPlan(editor.model, "layout", text)
+      onEditingFinished: {
+        if (text.trim() === "" || text.trim() === editor.model.layout) return
+        editor.view.setDraft(editor.model.key, text) // kept if the save is refused
+        editor.panel.editPlan(editor.model, "layout", text)
+      }
     }
-    Binding { target: zonesField; property: "text"; value: editor.model.choice === "custom" ? editor.model.layout : ""; restoreMode: Binding.RestoreNone }
+    Binding { target: zonesField; property: "text"; value: editor.draft !== "" ? editor.draft : editor.model.choice === "custom" ? editor.model.layout : ""; restoreMode: Binding.RestoreNone }
   }
   Note {
     panel: editor.panel
@@ -105,6 +110,7 @@ ColumnLayout {
       card: editor.model
       place: modelData
       apps: editor.apps
+      view: editor.view
     }
   }
 

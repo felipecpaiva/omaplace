@@ -129,7 +129,7 @@ function positions(scene) {
 // Why a planned window will not snap when opened by hand (design 14.7). snapOff: PlansFile said snap = false.
 function snapNotes(win, snapOff, rules, others) {
   const notes = []
-  if (snapOff) notes.push("Also in plan " + (others.join(", ") || "another") + ": it will not snap when you open it by hand. Open all still places it.")
+  if (snapOff) notes.push("Also in plan " + others.join(", ") + ": it will not snap when you open it by hand. Open all still places it.")
   const rule = Plan.ruleFor(win.class, rules)
   if (rule) notes.push("It has a placement rule (desktop " + rule.slot + "): the rule decides where it opens by hand. Open all still places it.")
   if (win.context) notes.push("Only a window omaplace opens gets this profile or folder: one you open from the app itself is not snapped.")

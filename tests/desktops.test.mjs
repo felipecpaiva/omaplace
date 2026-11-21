@@ -234,3 +234,25 @@ test("layoutSavedText: the floating switch (D19) and what was taken out", () => 
   assert.equal(D.layoutSavedText("tiled", "tiled", []), "Saved")
   assert.equal(D.layoutSavedText("full", "floating", ["b"]), "Saved. Taken out (no room): b")
 })
+
+test("positions: a bad layout has no rows, full without an app, tiled and free stop offering a row at 10", () => {
+  assert.deepEqual(D.positions({ layout: "nonsense", windows: [] }), [])
+  assert.deepEqual(D.positions({ layout: "full", windows: [] }).map((r) => [r.pos, r.index, r.win]), [[1, -1, null]])
+  const ten = Array.from({ length: 10 }, (_, i) => win("a" + i, i + 1))
+  assert.equal(D.positions({ layout: "tiled", windows: ten }).length, 10)
+  assert.equal(D.positions({ layout: "tiled", windows: ten.slice(0, 9) }).length, 10)
+  assert.equal(D.positions({ layout: "free", windows: ten }).length, 10)
+  assert.equal(D.positions({ layout: "free", windows: ten.slice(0, 9) }).length, 10)
+})
+
+test("edit layout: no free scene name for a new plan is an error", () => {
+  const taken = {}
+  for (let n = 0; n < 99; n++) taken[D.newSceneName(MON, 3, taken)] = { windows: [] }
+  assert.match(D.edit(doc(taken), desk(3), "layout", "tiled").error, /no free scene name/)
+})
+
+test("cards: a plan for the focused monitor with no monitor focused gets the not connected group", () => {
+  const m = D.cards({ monitors: [{ identity: MON, name: "DP-1", focused: false, slots: [] }] }, doc({ f: plan("tiled", [], { home_monitor: "", home_slot: 1 }) }), {})
+  assert.equal(m.groups[1].name, "Focused monitor (not connected)")
+  assert.equal(m.groups[1].cards[0].focused, true)
+})
