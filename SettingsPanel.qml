@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 
-// Stub. WP9 fills this in (the settings window).
+// Stub. WP6 fills this in (the settings window), then WP8 adds the menu button.
 Item {
   id: root
 
