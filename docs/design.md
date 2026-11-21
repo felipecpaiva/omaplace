@@ -263,7 +263,7 @@ classDiagram
 | `lua/rules.lua` | Turn config rules plus live monitors into named rule specs (enabled or disabled) | Call `hl.window_rule` itself |
 | `lua/memory.lua` | App memory: update the remembered place of a class from a run, a close or a move (by `app_memory` mode); look up a place for a new window | Touch files or `hl` |
 | `lua/shellquote.lua` | Turn a plan argv into one safely single-quoted command string for `hl.exec_cmd` (captured and edited fields included) | Pass any string unquoted |
-| `lua/tickets.lua` | Match new windows to waiting slots by class, in order, with expiry | Use title, pid or address as identity |
+| `lua/tickets.lua` | Match new windows to waiting slots by class (and context, one live context per class with a quiet window), in order, with expiry | Use title, pid or address as identity |
 | `lua/sessionpolicy.lua` | Decide when to write a session snapshot (debounce, close-burst freeze) | Read the clock or write files |
 | `lua/json.lua` | Encode tables to JSON | Decode (not needed) |
 | `lua/place.lua` | Resize, then move, check the size, retry at most twice; leave fullscreen first; settle after a workspace move | Decide where a window goes |
@@ -330,12 +330,45 @@ saved_on = "Example Corp EX27 #1"
 [scene.work.window.1]
 app = "org.example.Editor"   # desktop entry id, from AppResolve at capture
 class = "org.example.Editor" # initialClass, the match key
+context = ""                 # optional: profile or project folder (5.4a)
 rect = "0 0 0.5 1"           # x y w h fractions of the usable area (used on floating workspaces)
 order = 1                    # left-to-right rank (used on tiled and scrolling workspaces)
 floating = true
 launch = ""                  # captured program after ArgFilter, or typed
 folder = "~/code/demo"       # captured from the terminal (D12); shown in settings
 ```
+
+### 5.4a Context: many windows of one app (D18)
+
+Chrome runs every profile in one process, and its normal windows share one class (`google-chrome`) and show no profile in
+the title [tested 2026-11-21: 4 windows, 1 pid, profile not in titles]. Its web apps already differ by class
+(`chrome-<id>-Default`, the suffix is the profile). IDEs and terminals have the same problem with project folders. So a slot
+has an optional **context**: the thing that tells two windows of one app apart.
+
+| App kind | Context | Launch with context | Where the context comes from at save |
+|---|---|---|---|
+| Chromium browsers (Chrome, Brave, Chromium, Edge) | profile directory (`Default`, `Profile 1`); display name read from the browser's `Local State` for the UI | `<browser> --profile-directory=<ctx> --new-window` | the window's `omaplace-ctx` tag if omaplace opened it; else the user picks once in settings |
+| Firefox | profile name | `firefox -P <ctx> --new-window` (S10) | tag, else pick once |
+| IDEs (VS Code family, agentic IDEs) | project folder | `<ide> --new-window <folder>` | tag, else pick once (titles are never read) |
+| Terminals and TUIs | folder and program (D12) | as in 5.7 | `procinfo.sh` |
+
+Rules:
+
+1. **Launch one context at a time per class.** After launching context X, every new window of that class that opens before
+   the class is quiet for `context_quiet_ms` (default 2000) belongs to X. This also catches windows the browser restores
+   by itself for that profile. Different classes still launch in parallel.
+2. **Tag on claim**: `omaplace-ctx=<hex of the context>`. Tags die with the window, so a later save knows each window's
+   context without reading titles.
+3. **Unknown context at save** (a window the user opened from the browser's own profile menu): saved with
+   `context = "?"`; the result says "2 Chrome windows need a profile" and the settings window offers a picker of the
+   profiles found. After that the slot is known.
+4. **Moving existing windows** (`existing = move`) only claims windows whose tag matches the slot's context. Untagged
+   windows of a context app are left alone, never guessed.
+5. **App memory and rules** key on class plus context. A Hyprland rule cannot see a profile when a window opens, so a
+   context rule only places windows omaplace launched; windows opened from the browser's own menu are not placed (stated
+   in the UI).
+6. The strategy table (5.7) gets `context = "profile" | "folder" | "none"` and a `launch_context` template per entry, so new
+   multi-profile apps are added as data.
 
 ### 5.4 Plan (JS to Lua, as one Lua table literal)
 
@@ -386,7 +419,8 @@ Run states: `running`, `done`, `partial`, `interrupted` (Lua reloaded mid-run).
 | `webapp` | Class `chrome-*-Default` and a matching web app desktop entry | the entry id through `uwsm-app --` |
 | `terminal` | A terminal class; `folder` and foreground program captured (D12) | `uwsm-app -- xdg-terminal-exec --dir=<folder> <program argv>` |
 | `tui` | Class `org.omarchy.<cmd>` | `omarchy-launch-tui <cmd>` |
-| `place_only` | Browsers and Electron apps that restore their own windows (default list: chromium, google-chrome, firefox, code, obsidian, slack, spotify) | none |
+| `context` | Multi-profile browsers and multi-folder IDEs (5.4a): google-chrome, chromium, brave, firefox, code and its forks | the entry's `launch_context` template, one context at a time per class |
+| `place_only` | Apps that restore their own windows and have one window identity (default list: obsidian, slack, spotify) | none |
 | `command` | A `launch` the user typed or edited | that argv through `uwsm-app --` |
 
 Users add `[strategy.<name>]` sections in config.toml (`match = "class pattern"`, `use = "<strategy>"`). Unknown classes with
@@ -574,6 +608,7 @@ Placed windows get `omaplace-slot=<run>/<n>`. It stops a window being claimed tw
 | `request_timeout_s` | 60 | |
 | `restore_at_login` | `off` | later: `ask`, `auto` |
 | `app_memory` | `scene` | |
+| `context_quiet_ms` | 2000 | D18 |
 | `tiled_order` | `true` (on tiled and scrolling workspaces, open or move windows one at a time in saved order) | |
 | `ignore` | `""` | |
 
@@ -610,6 +645,7 @@ Any work package that adds per-event work records a measurement in `docs/batch-l
 | D14 | Soft link to omagnet (`fit_shadow`, slot tag) | decided (Felipe) |
 | D15 | Session snapshot and manual restore in this plan as M3; restore at login off | decided (Felipe, 2026-11-21) |
 | D16 | Private now; code written public-safe (scrub test from day one) | decided (Felipe) |
+| D18 | Context for many windows of one app (Chrome profiles, IDE folders): launch one context at a time per class, tag on claim, pick once when unknown, never read titles | decided (Felipe asked, design 2026-11-21) |
 | D17 | App memory (F5) with setting `app_memory` = `scene` (default) / `last_place` / `auto` | decided (Felipe) |
 
 ## 10. Spikes (live checks, approved by Felipe 2026-11-21 on the condition that each is asked for right before it runs; one harmless window, no input events)
@@ -623,6 +659,8 @@ Any work package that adds per-event work records a measurement in `docs/batch-l
 | S5 | What does `omarchy-shell shell call` print and return for a third-party service? | call a no-op method | WP5 |
 | S6 | Does a menu `action` row with a full path to our CLI run from the Omarchy menu? | add a row in a copy, then restore | WP8 |
 | S8 | On a tiled (dwindle) and a scrolling workspace, do 3 windows opened one at a time keep their left-to-right order? | open 3 test windows in order, read `at` | WP4 |
+| S9 | With Chrome running, does `--profile-directory=X --new-window` open one new window in profile X, and do restored windows of X arrive inside a 2 s quiet window? | launch one profile window | WP4 |
+| S10 | Do `firefox -P <name> --new-window` and an IDE `--new-window <folder>` behave the same way? | one window each | WP4 |
 | S7 | Two monitors: rule to slot of the second monitor, unplug, replug | needs a real second monitor, never a virtual one | WP2 sign-off |
 
 ## 11. Work packages (for builder sub-agents)
@@ -638,7 +676,7 @@ parallel packages never touch the same doc). `tests/run-all.sh` finds tests by g
 | WP1 | Lua pure core: `config.lua`, `geometry.lua` (vendored, header names the omagnet commit), `monitors.lua`, `slots.lua`, `json.lua`, `shellquote.lua`, `lua/tests/fake_hl.lua`, `lua/tests/fixtures/geometry-golden.lua` plus `tools/gen-geometry-golden.sh` (generates the golden vectors from a local omagnet checkout; the committed vectors are what the test uses, so builders never need `../omagnet`) | those + `lua/tests/test_*.lua` for them | unit tests; geometry against the golden vectors; `shellquote` with quotes, spaces and newlines | WP0 |
 | WP2 | F1 rules: `rules.lua`, and creates `lua/omaplace.lua` with load, `reload_config`, monitor debounce | `lua/rules.lua`, `lua/omaplace.lua` | unit tests for `rules.build`; fake-`hl`: rules created, replaced in place by name, disabled when the monitor is gone | WP1 |
 | WP3 | JS pure: `ConfigIO.js`, `SceneStore.js`, `AppResolve.js`, `ArgFilter.js`, `Plan.js`, `LuaLiteral.js` in `js/` | those + `tests/*.test.mjs` + `tests/fixtures/` | Node tests; ConfigIO and Lua `config.lua` parse the same fixtures to the same values (the Lua side of that test is added in WP3 as `lua/tests/test_config_crosscheck.lua`, reading the shared fixtures) | WP0 (parallel with WP1) |
-| WP4 | F2 engine: `capture.lua`, `tickets.lua`, `place.lua`; adds `open`, `capture`, status writing and rule-wins placement with focus follow to `lua/omaplace.lua` | `lua/capture.lua`, `lua/tickets.lua`, `lua/place.lua`; next editor of `lua/omaplace.lua` | unit tests; fake-`hl` runs: move mode, launch mode, expiry, busy, interrupted by reload, app with a rule goes to the rule's desktop and focus follows the last one | WP1, WP2 merged |
+| WP4 | F2 engine: `capture.lua`, `tickets.lua`, `place.lua`; adds `open`, `capture`, status writing and rule-wins placement with focus follow to `lua/omaplace.lua` | `lua/capture.lua`, `lua/tickets.lua`, `lua/place.lua`; next editor of `lua/omaplace.lua` | unit tests; fake-`hl` runs: move mode, launch mode, expiry, busy, interrupted by reload, app with a rule goes to the rule's desktop and focus follows the last one, two Chrome profiles land on two desktops, untagged window left alone | WP1, WP2 merged |
 | WP5 | Service and CLI: fills `Service.qml` (IPC methods, async `Process`, file watch, results, notifications, terminal capture), `bin/omaplace`, `libexec/procinfo.sh` | next editor of `Service.qml`; owns `bin/omaplace`, `libexec/procinfo.sh`, `tests/cli.test.sh`, `tests/procinfo.test.sh` | shellcheck; CLI exit codes against a fake `omarchy-shell` script; live check after S1 and S5 | WP3, WP4 |
 | WP6 | Settings window: fills `SettingsPanel.qml`, `pages/*.qml`, `SceneRow.qml`, launcher `.desktop`; next editor of `manifest.json` (launcher field only) | those | qmllint; hand checks | WP5 |
 | WP7 | F3 session: `sessionpolicy.lua`; session part of `lua/omaplace.lua`; `restore` wiring in `Service.qml` | `lua/sessionpolicy.lua`; next editor of `lua/omaplace.lua` and `Service.qml` | unit tests for burst freeze and debounce; fake-`hl`: one file per instance, previous instance chosen, old instances pruned | WP4, WP5 (parallel with WP6: no shared files) |
