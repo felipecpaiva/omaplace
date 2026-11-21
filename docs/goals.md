@@ -47,7 +47,7 @@ Done when:
 
 Work packages: WP3, WP4, WP5, WP6, WP9.
 
-Status 2026-11-21: checks 1, 2, 3 (floating within 1 px) and 7 pass live with the CLI ([batch-log/live-M1.md](batch-log/live-M1.md)); 4 to 6 and 8 wait for WP6 and WP9 and a live terminal-program and Chrome-profile check.
+Status 2026-11-21: checks 1 to 7 pass live ([batch-log/live-M1.md](batch-log/live-M1.md)); 8 (settings window) waits for WP6.
 
 ### M3: Session restore (F3)
 
