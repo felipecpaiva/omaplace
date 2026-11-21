@@ -257,11 +257,41 @@ run open --pick
 check "open --pick with no scenes exits 3" "$(is "$code" 3)"
 check "open --pick with no scenes never opens the picker" "$(is "$(cat "$FAKE_LOG.pick")" "")"
 reset
-for bad in "save --ask x" "open --pick x"; do
+for bad in "save --ask x" "open --pick x" "plan-update" "plan-update 1 2" "plan-update x1" "plan-update -3"; do
   # shellcheck disable=SC2086
   run $bad
   check "usage error: '$bad' exits 2" "$(is "$code" 2)"
+  check "usage error: '$bad' calls nothing" "$(is "$(cat "$FAKE_LOG")" "")"
 done
+
+# ---- plan-update (WP12b): the "Update plan" notification button
+export FAKE_ANSWER='{"ok":true,"scene":"desk-2","changed":true}'
+run plan-update 7
+check "plan-update maps to planUpdate with the id" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace planUpdate 7")"
+check "plan-update exits 0" "$(is "$code" 0)"
+check "plan-update says which plan" "$(is "$out" "plan desk-2 updated")"
+export FAKE_ANSWER='{"ok":true,"scene":"desk-2","changed":false}'
+run plan-update 7
+check "plan-update with nothing to change says so" "$(is "$out:$code" "the plan already says so:0")"
+export FAKE_ANSWER='{"ok":false,"code":"not_possible","reason":"zone 2 already holds org.example.Chat"}'
+run plan-update 8
+check "plan-update not possible exits 5" "$(is "$code" 5)"
+check "plan-update not possible gives the reason" "$(is "$out" "omaplace: plan not updated: zone 2 already holds org.example.Chat")"
+export FAKE_ANSWER='{"ok":false,"code":"not_found","reason":"that move is too old"}'
+run plan-update 9
+check "plan-update of an unknown move exits 3 with the reason" "$(is "$out:$code" "omaplace: not found (that move is too old):3")"
+export FAKE_ANSWER='{"ok":false,"code":"busy"}'
+run plan-update 9
+check "plan-update while busy exits 5" "$(is "$code" 5)"
+# From a notification button there is no terminal: the answer comes back as a notification.
+printf '#!/usr/bin/env bash\nprintf "%%s|" "$@" > "%s/notified"\n' "$tmp" > "$tmp/bin/omarchy-notification-send"; chmod +x "$tmp/bin/omarchy-notification-send"
+export FAKE_ANSWER='{"ok":false,"code":"not_possible","reason":"the window is outside every zone"}'
+code=0
+OMAPLACE_NOTIFY=1 "$bash_bin" "$cli" plan-update 3 >/dev/null 2>&1 </dev/null || code=$?
+check "no terminal: plan-update answer is a notification" "$(grep -q "plan not updated: the window is outside every zone" "$tmp/notified" 2>/dev/null && echo 0 || echo 1)"
+check "no terminal: plan-update keeps its exit code" "$(is "$code" 5)"
+rm -f "$tmp/bin/omarchy-notification-send" "$tmp/notified"
+reset
 
 echo "cli: $n checks, $([ $fail = 0 ] && echo all passed || echo FAILED)"
 exit $fail

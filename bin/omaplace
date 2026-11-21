@@ -23,6 +23,7 @@ Usage: omaplace [--json] <command>
   rule add              add a rule for the focused window (its desktop and monitor)
   rule remove <name>    delete a rule
   status                show the current or last run
+  plan-update <id>      write a hand move of a planned window into its plan (the "Update plan" notification button)
   settings              open the settings window
 
   --json                print the service's JSON answer instead of text
@@ -38,9 +39,10 @@ if [ "${1:-}" = "--json" ]; then json=1; shift; fi
 word=$1; shift
 need() { [ "$1" -eq "$2" ] || bad "$word takes $2 argument(s)"; }
 
-# Started from the Omarchy menu there is no terminal: show the answer of save and rule as a notification instead.
+# Started from the Omarchy menu or a notification button there is no terminal: show the answer of save, rule and
+# plan-update as a notification instead.
 # (open and restore already send their own summary from the service.)
-if [ "${OMAPLACE_NOTIFY:-1}" != 0 ] && [ ! -t 1 ] && [ ! -t 2 ] && { [ "$word" = save ] || [ "$word" = rule ]; } && command -v omarchy-notification-send >/dev/null; then
+if [ "${OMAPLACE_NOTIFY:-1}" != 0 ] && [ ! -t 1 ] && [ ! -t 2 ] && { [ "$word" = save ] || [ "$word" = rule ] || [ "$word" = plan-update ]; } && command -v omarchy-notification-send >/dev/null; then
   quiet_out=$(mktemp)
   exec >"$quiet_out" 2>&1
   trap 'omarchy-notification-send -g "󰕰" "omaplace" "$(head -c 300 "$quiet_out")" >/dev/null 2>&1; rm -f -- "$quiet_out"' EXIT
@@ -67,6 +69,7 @@ case $word in
   restore) [ $# -le 1 ] || bad "restore takes at most 1 argument"; args=(restore "${1:-}") ;;
   rename) need $# 2; args=(rename "$1" "$2") ;;
   list | status | settings) need $# 0; args=("$word") ;;
+  plan-update) need $# 1; [[ $1 =~ ^[0-9]+$ ]] || bad "plan-update takes a move id (a number)"; args=(planUpdate "$1") ;;
   rule)
     case "${1:-}" in
       add) shift; need $# 0; args=(ruleAddFocused) ;;
@@ -111,9 +114,10 @@ state=$(field "$answer" state)
 
 if [ "$ok" != true ]; then
   case $code in
-    not_found) [ "$json" = 1 ] || echo "omaplace: not found" >&2; exit 3 ;;
+    not_found) [ "$json" = 1 ] || { reason=$(field "$answer" reason); echo "omaplace: not found${reason:+ ($reason)}" >&2; }; exit 3 ;;
     bad_name) [ "$json" = 1 ] || echo "omaplace: names are 1 to 40 of a-z, 0-9, _ and -" >&2; exit 2 ;;
     empty) [ "$json" = 1 ] || echo "omaplace: nothing to save on this desktop" >&2; exit 3 ;;
+    not_possible) [ "$json" = 1 ] || echo "omaplace: plan not updated: $(field "$answer" reason)" >&2; exit 5 ;;
     no_lua)
       if [ "$json" = 0 ]; then
         echo "omaplace: the Lua module is not loaded. Add this line to ~/.config/hypr/hyprland.lua:" >&2
@@ -132,6 +136,7 @@ if [ "$json" = 0 ]; then
     restore) echo "restored the last session: $(n placed) placed ($(n started) started), $(n skipped) skipped, $(n not_reopened) not reopened, $(n failed) failed" ;;
     list) grep -oE '"name":"[^"]*","windows":[0-9]+' <<< "$answer" | sed -E 's/"name":"([^"]*)","windows":([0-9]+)/\1  \2 windows/' || true ;;
     status) echo "run: $(field "$answer" run) ${state:-idle}" ;;
+    plan-update) [ "$(field "$answer" changed)" = true ] && echo "plan $(field "$answer" scene) updated" || echo "the plan already says so" ;;
     rule) [ "${args[0]}" = ruleAddFocused ] && echo "rule added: $(field "$answer" rule)" || echo "rule removed" ;;
     *) echo "ok" ;;
   esac
