@@ -427,7 +427,7 @@ local function start_run(plan)
   local run = { id = plan.run, live = true, state = "running", book = book, info = {}, t0 = now, wall0 = os.time(),
     pending = 0, gen = 0, layout = layout, focus_ws = main and main.ws }
   for i, w in ipairs(plan.windows) do
-    local t = type(w) == "table" and target_of(w) or nil
+    local t = type(w) == "table" and target_of(w) or nil -- plain table: a plan window
     run.info[i] = { target = t, launch = w.launch, rect = valid_rect(w.rect),
       float_target = t ~= nil and layout == "floating" and (main == nil or t.ws == main.ws) }
     if not t and book.slots[i].state ~= "skipped" then Tickets.fail(book, i, "no_monitor") end
@@ -486,7 +486,9 @@ end
 -- A new window: only looked at while a run is live.
 function M.on_window_open(w)
   local run = M.run
-  if not (run and run.live) or type(w) ~= "table" then return end
+  -- Hyprland hands windows over as userdata (HL.Window), the tests as tables: accept both, nothing else.
+  local tw = type(w)
+  if not (run and run.live) or (tw ~= "table" and tw ~= "userdata") then return end
   local mine = M.SLOT_PREFIX .. run.id .. "/"
   for _, t in ipairs(Capture.tags_of(w)) do
     if t:sub(1, #mine) == mine then return end -- already claimed by this run

@@ -7,7 +7,7 @@ local SLOTS = 10
 -- Returns { mode, workspace_id, slot_of } bound to `o` (nil is allowed and means global mode).
 function M.with(o)
   local ws = type(o) == "table" and o.workspaces or nil
-  local per_monitor = type(ws) == "table" and type(ws.workspace_id) == "function"
+  local per_monitor = type(ws) == "table" and type(ws.workspace_id) == "function" -- plain table: Omarchy module
   local S = {}
 
   function S.mode() return per_monitor and "per_monitor" or "global" end
