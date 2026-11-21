@@ -20,7 +20,10 @@ rects only.
 2. [ ] Open an app, move it to desktop 4 and put it somewhere, then close it. About 2 s later `memory.lua` lists it on
    slot 4.
 3. [ ] Open it by hand from another desktop: it goes back to desktop 4 and its spot.
-4. [ ] Set `app_memory` back to `scene` and reload.
+4. [ ] Leave one app open on desktop 5, log out and back in, open it by hand. Note whether it went to desktop 5 (the
+   close at logout was saved) or to its older place (Hyprland exited before the 2 s debounce). Either is acceptable;
+   write the result in the batch log.
+5. [ ] Set `app_memory` back to `scene` and reload.
 
 ## Idle
 1. [ ] Open and close a few apps that are not in memory: nothing moves, nothing in `hyprland.log` from omaplace.

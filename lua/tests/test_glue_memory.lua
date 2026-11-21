@@ -76,6 +76,7 @@ fake.hl.dispatch = function(call)
   if call.name == "window.move" and a.workspace then
     w.workspace = { id = tonumber(a.workspace), tiled_layout = "dwindle" }
     moves[#moves + 1] = { ws = a.workspace, follow = a.follow }
+    fake.emit("window.move_to_workspace", w)
   elseif call.name == "window.move" then
     w.at = { x = a.x, y = a.y }
   elseif call.name == "window.resize" then
@@ -244,14 +245,19 @@ local m = Memory.lookup(read_memory(), "org.example.Mail")
 eq(m and m.slot, 6, "last window's desktop saved")
 eq(m and m.rect[3], 0.5, "last window's rect saved")
 eq(fake.pending_timers(), 0, "idle after the save")
--- it comes back there when opened by hand
+-- it comes back there when opened by hand; memory's own move is not recorded as a user's move, even when the
+-- settle is longer than the debounce (the window is still where the app opened it when the debounce fires)
+M.settings.settle_ms = 3000
 reset()
 local mail3 = new_window("org.example.Mail", 3)
 fake.emit("window.open", mail3)
 eq(mail3.workspace.id, 6, "reopened on its last desktop")
-fake.advance(1140)
+eq(fake.pending_timers(), 1, "only the settle timer: its own move arms no debounce")
+fake.advance(3040)
 eq(mail3.size.x, 1000, "at its last size")
-fake.advance(2000) -- the memory's own move event is not subscribed in the fake dispatch; nothing pending
+eq(Memory.lookup(read_memory(), "org.example.Mail").rect[3], 0.5, "rect not overwritten by its own move")
+eq(fake.pending_timers(), 0, "idle")
+M.settings.settle_ms = 1100
 -- a move to another desktop is read when the debounce fires
 mail3.workspace = { id = 8 }
 fake.emit("window.move_to_workspace", mail3)

@@ -45,6 +45,7 @@ M.subs = {}
 M.session_subs = {}
 M.memory_subs = {}
 M.memory_moved = {} -- addresses moved to another workspace, read when the memory debounce fires
+M.memory_own = {} -- addresses memory itself just moved: their one move event is not a user's move
 -- a freeze survives a reload of this file (a close-all can come with one)
 M.session_state = old_m and type(old_m.session_state) == "table" and old_m.session_state or Policy.new()
 
@@ -681,6 +682,9 @@ local function place_from_memory(w)
   if has_rule(cls) then
     if target ~= ws.id then return end -- the rule put it on another desktop: leave it there, no rect
   else
+    -- set before the move (its event can come during the dispatch): a long settle_ms would let the debounce read
+    -- the window before the put and overwrite the rect
+    if ws.id ~= target and #M.memory_subs > 0 then M.memory_own[w.address] = true end
     Place.to_workspace(w, target, true)
   end
   tag(w, "+" .. M.MEMORY_TAG)
@@ -690,7 +694,9 @@ local function place_from_memory(w)
   later(M.settings.settle_ms, function()
     local now_w = Place.find(address)
     if not (now_w and now_w.floating and has_tag(now_w, M.FLOAT_TAG)) then return end
-    Place.put(now_w, Geometry.place_frac(Geometry.usable(mon), rect))
+    Place.put(now_w, Geometry.place_frac(Geometry.usable(mon), rect), function(ok, reason)
+      if not ok then log("memory place of " .. cls .. " failed: " .. tostring(reason)) end
+    end)
   end)
 end
 M.place_from_memory = place_from_memory
@@ -720,7 +726,10 @@ function M.on_memory_event(event, w)
   local tw = type(w)
   if not memory_on() or (tw ~= "table" and tw ~= "userdata") then return end
   if event == "window.close" then
+    if w.address then M.memory_own[w.address] = nil end
     if remember("closed", w) then M.memory_dirty = true; arm_memory_save() end
+  elseif w.address and M.memory_own[w.address] then
+    M.memory_own[w.address] = nil
   elseif not (M.run and M.run.live) and w.address then -- a run's own moves are recorded when it ends
     M.memory_moved[w.address] = true
     arm_memory_save()

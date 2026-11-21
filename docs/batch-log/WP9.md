@@ -32,8 +32,13 @@
     (the window is gone later); a move is read when the debounce fires, after Omarchy re-arranged it. One 2 s one-shot
     debounce for both (generation number plus `set_enabled(false)`), one save per burst. Moves while a run is live are
     ignored (the run records its windows at the end). `auto` is `last_place` for now; WP10 adds the scene moves.
+  - Memory's own move of a hand-opened window is not recorded as a user's move: the address is marked before the
+    dispatch (the event can come during it) and its one move event is skipped. Without this, a `settle_ms` longer
+    than the 2 s debounce would read the window before the put and overwrite the remembered rect.
+  - A refused or failed put from memory is logged with the class and reason.
   - `state_dir` moved up the file (the run end needs it).
-- Tests: `test_memory.lua` (69 checks), `test_glue_memory.lua` (64 checks). `test_glue_open.lua` now removes
+- Tests: `test_memory.lua` (69 checks), `test_glue_memory.lua` (67 checks; its fake dispatch emits
+  `window.move_to_workspace` on a workspace move). `test_glue_open.lua` now removes
   `memory.lua` from its fixture home at the start, and `fixtures/home-session-off/.local/state/omaplace/.gitignore`
   keeps that file out of git. New fixture `fixtures/home-memory` (config with `session = "off"` and one rule).
 
@@ -42,6 +47,10 @@
   this package owns neither. The glue already treats `app_memory = "off"` as off (nothing placed, nothing recorded);
   the test sets it directly. Follow-up: add `off` to both enums (and a cross-check fixture).
 - **"Not modal"** (design 6.3) is not checked: the `HL.Window` stubs have no modal field.
+- **Brief deviations:** `update` takes a fourth argument `now` (unix seconds, display only) and the event carries
+  `others`; `decode(text)` was added so the load is pure and tested. Close and move subscriptions live in a new list
+  `M.memory_subs` (removed on a reload of the file like the others), because they must come and go with the mode, and
+  `test_glue_session.lua` counts exactly one `window.close` handler in the default mode.
 - **A move counts only for the class's last window**, like a close, so a browser with two windows does not keep
   rewriting its one memory entry.
 - **"A rule exists"** means an enabled rule (the spec Hyprland accepted, `M.enabled`) whose `app` is the class. A rule
@@ -54,12 +63,18 @@
 ## Verified
 - `bash tests/run-all.sh` (twice, `git status` clean after): all pass. `bash tests/scrub.sh`: ok.
 - Mutations, one at a time, each failed `test_glue_memory.lua`: no first-window check; rule check removed; the
-  floating-tag check before the rect removed; `others` forced to 0 on close.
+  floating-tag check before the rect removed; `others` forced to 0 on close; own-move mark removed.
 - Measurement (design 8), fake hl, Lua 5.5, this laptop, `os.clock`, 200 memory entries, 100 windows: `window.open`
   with no run and no entry for the class 0.0007 ms; with an entry and a second window (scans 100 windows) 0.004 ms;
-  `encode` of 200 entries 1.6 ms (once per run end or per debounce).
+  `encode` of 200 entries 1.6 ms (once per run end or per debounce); `last_place` close handler (one-window snapshot
+  plus a scan of 100 windows) 0.012 ms.
 
 ## Not done here
+- Not checked live: at logout the closes come in a burst and Hyprland may exit before the 2 s debounce fires, so
+  `last_place` can lose the places of the windows open at shutdown (the scene places stay).
+- Not checked live: the rule path assumes the rule already put the window on its workspace when `window.open` fires.
+- Not checked live: the first-window check assumes `hl.get_windows()` does not list hidden or unmapped windows of the
+  same class (the stubs have `mapped` and `hidden` fields; they are not filtered).
 - Not checked live: the argument of `window.close` and `window.move_to_workspace` is assumed to be the window (first
   argument), and the window is assumed to still have its workspace, monitor and place in the close handler.
 - The service does not show memory yet (design 4.1 lists `Service.qml` as a reader, for display).
