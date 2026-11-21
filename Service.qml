@@ -231,6 +231,7 @@ Item {
     if (root.req) return Summary.answer(root.fail("busy"))
     let scene = SceneStore.parse(root.readNow(scenesFile)).scenes[name]
     if (!scene) return Summary.answer(root.fail("not_found"))
+    if (scene.planError) return Summary.answer(root.fail("failed", "plan " + name + ": " + scene.planError))
     // A plan opens on its own desktop after the mode switch (design 14.8); `user`: started by a person, not by login.
     return root.begin("open", { name: name, scene: scene, plan: scene.plan === true, user: true })
   }
@@ -420,6 +421,7 @@ Item {
     let spent = []
     if (r.planPath) spent.push(r.planPath)
     if (r.kind !== "open") spent.push(root.runtimeDir + "/capture-" + r.id + ".json")
+    if (r.plan) spent.push(root.runtimeDir + "/desktops-" + r.id + ".json")
     spent.push(root.runtimeDir + "/reply-" + r.id + ".txt")
     if (root.lastResultPath !== "") spent.push(root.lastResultPath)
     if (spent.length > 0) Quickshell.execDetached(["rm", "-f", "--"].concat(spent))
@@ -563,7 +565,7 @@ Item {
     while (!root.req && root.loginQueue.length > 0) {
       let name = root.loginQueue.shift()
       let scene = SceneStore.parse(root.readNow(scenesFile)).scenes[name]
-      if (!scene || scene.plan !== true || scene.open_at_login !== true) { console.log("omaplace: login plan skipped: " + name); continue }
+      if (!scene || scene.plan !== true || scene.open_at_login !== true || scene.planError) { console.log("omaplace: login plan skipped: " + name); continue }
       root.begin("open", { name: name, scene: scene, plan: true, user: false })
       return
     }
@@ -579,13 +581,16 @@ Item {
     proc.running = true
   }
 
+  function desktopsPath() { return root.runtimeDir + "/desktops-" + root.req.id + ".json" }
+
   function planDesktops() {
     let r = root.req
     r.tries = 0
     r.want = Plan.planMode(r.scene.layout)
     if (r.want === "") { root.writePlan(); return } // full leaves the mode as it is
-    root.chain(chainRun, ["hyprctl", "eval", LuaCall.wrapData("desktops", [], LuaLiteral.encode(root.replyPath()))], function () {
-      root.chain(chainOut, ["cat", "--", root.replyPath()], root.onDesktops)
+    // desktops(req_id) writes desktops-<req_id>.json (like capture); one cat reads the reply code and that file together.
+    root.chain(chainRun, ["hyprctl", "eval", LuaCall.wrap("desktops", [LuaLiteral.encode(r.id)], LuaLiteral.encode(root.replyPath()))], function () {
+      root.chain(chainCat, ["cat", "--", root.replyPath(), root.desktopsPath()], root.onDesktops)
     })
   }
 
@@ -593,7 +598,8 @@ Item {
     let r = root.req
     let c = LuaCall.code(text)
     if (c === "no_lua") { root.finish(root.fail("no_lua")); return }
-    r.ws = ModeSwitch.workspaceOf(LuaCall.data(text), r.scene.home_monitor || "", r.scene.home_slot)
+    let brace = text.indexOf("{")
+    r.ws = ModeSwitch.workspaceOf(c === "ok" && brace !== -1 ? Summary.parseJson(text.slice(brace)) : null, r.scene.home_monitor || "", r.scene.home_slot)
     if (r.ws === 0) {
       r.modeNote = "mode not switched: " + (c === "ok" ? "the plan's desktop is not there" : "no desktop list from the Lua module (" + (c || "no answer") + ")")
       root.writePlan()
@@ -820,6 +826,7 @@ Item {
       if (code !== 0) { root.finish(root.fail("failed", "cannot create " + root.runtimeDir)); return }
       root.step()
       root.writePlans()
+      root.reloadPlans() // every start, even with plans.lua unchanged: it is also Lua's retry of its login.json write
       root.checkLogin()
     }
   }
@@ -849,7 +856,9 @@ Item {
   Process { id: noticeProc; onExited: { root.noticeBusy = false; root.nextNotice() } }
   Process { id: plansEval; onExited: { plansReply.command = ["cat", "--", root.runtimeDir + "/reply-plans.txt"]; plansReply.running = true } }
   Process { id: plansReply; stdout: StdioCollector { onStreamFinished: root.afterReloadPlans(text) } }
-  // The mode switch chain (opening a plan): chainOut answers with its output, chainRun with its exit code.
+  // The mode switch chain (opening a plan): chainOut and chainCat answer with their output, chainRun with its exit code.
+  // chainCat is separate because onDesktops starts chainOut from inside the cat's own answer.
+  Process { id: chainCat; stdout: StdioCollector { onStreamFinished: root.chainNext(text) } }
   Process { id: chainOut; stdout: StdioCollector { onStreamFinished: root.chainNext(text) } }
   Process { id: chainRun; onExited: (code) => root.chainNext(code) }
   Process { id: settingsProc; command: ["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omaplace"] }

@@ -16,22 +16,20 @@ Coded against the 14.8 contract only; the Lua side (WP12a) was built in parallel
   `edit(doc, move)` (the "Update plan" scene edit, see decisions). The input doc is never changed. Any plan the edit would
   make invalid (`SceneStore.planProblems`, compared with before) refuses it as `not_possible`, so `serialize()` never
   throws on an edit. Reasons hold no commas or double quotes (the CLI's field reader stops at either).
-- `js/LuaCall.js` (extended, next editor by need): `wrapData(method, args, replyPath)` and `data(output)`. `wrap()` only
-  writes `omaplace:<code>`, so the `desktops()` table had no way back. The new chunk carries a small JSON encoder and
-  writes `omaplace:ok`, a line break, then the table. Tested by running the chunk in Lua 5.5 (strings with quotes,
-  backslashes and tabs, empty tables as arrays).
 - `Service.qml`:
   - plans.lua: `writePlans()` builds `PlansFile.build` and writes `~/.local/state/omaplace/plans.lua` atomically at
     start (after `mkdirProc`, which now also makes the state folder and runs at load), after every `writeScenes`, and
     when `scenes.toml` changes on disk (now watched). Same text as last time: no write. After a write: `reload_plans`
     through `LuaCall.wrap` on its own Process pair and reply file (`reply-plans.txt`), one call at a time plus one more
-    if a write came meanwhile; a non-ok answer is logged.
-  - Opening a plan: `startOpen` marks plan scenes; `step()` sends them through `planDesktops` (desktops() through
-    `wrapData`, then `layout-current`, then set or focus + `activeworkspace` check + toggle, then `layout-current`
+    if a write came meanwhile; a non-ok answer is logged. `reload_plans` is also called at every start even when
+    plans.lua did not change (WP12a: it is Lua's retry of its login.json write).
+  - Opening a plan: `startOpen` marks plan scenes; `step()` sends them through `planDesktops` (`desktops(req_id)` through
+    `LuaCall.wrap`; Lua writes `desktops-<req>.json`, read with the reply in one `cat`, deleted in `finish()`; then `layout-current`, then set or focus + `activeworkspace` check + toggle, then `layout-current`
     again) before the existing `writePlan` flow. `full` skips all of it. A missing desktop, a skip or a fail does not
     stop the open: the reason goes into the result as `note` and into the open notification. `no_lua` from desktops()
     ends the request. The set command is called through `env`, whose exit 127 means not installed (argv only, no shell).
-    Each callback checks it still belongs to the running request. IPC `openPlan(name)` is the same entry as `open`.
+    A scene with a plan error is refused before anything runs. Each callback checks it still belongs to the running
+    request. IPC `openPlan(name)` is the same entry as `open`.
   - Moves: `plan-moves.json` watched; one `omarchy-notification-send <headline> <body> --action "Update plan" <cli path>
     plan-update <id>` per new move, queued on one Process. Moves in the file at load are marked as notified.
   - IPC `planUpdate(id)`: busy guard, finds the move by id, `writableScenes` guard, `PlanMoves.edit`, `writeScenes`
@@ -46,7 +44,8 @@ Coded against the 14.8 contract only; the Lua side (WP12a) was built in parallel
 
 ## Decisions (contract gaps, see report)
 
-1. `to.rect` is read as fractions of the usable area, like scene rects.
+1. `to.rect` is read as fractions of the usable area, like scene rects; absent or null (tiled windows, WP12a) is fine.
+   `seq` is not used, moves go by `id`. The set command is assumed to take Omarchy's mode words (`dwindle`).
 2. Zone move onto a zone another window of the plan holds: `not_possible` (no swap guessing).
 3. Desktop move, single-window plan: rebinds `home_monitor`/`home_slot`; when the target desktop already has a plan that
    would be two plans on one desktop, so `not_possible`.
@@ -60,6 +59,8 @@ Coded against the 14.8 contract only; the Lua side (WP12a) was built in parallel
 ## Known limits
 
 - A FileView watch on a file that is replaced by rename may still lose events (live-M1). Re-arming is unverified live.
+  A plan-moves.json that does not exist when the shell starts may not be watched at all, so the first move after a
+  login may wait for the next request end.
   A missed plan move is only noticed at the next request end. If the live check fails, the clean fix is Lua calling an
   IPC method after it writes plan-moves.json (no polling allowed).
 - Move ids restart with Hyprland; a notification left from an old instance can name a new move with the same id.
@@ -69,7 +70,6 @@ Coded against the 14.8 contract only; the Lua side (WP12a) was built in parallel
 ## Verified
 
 - `bash tests/run-all.sh`: 43 run, 0 failed, 3 skipped (luacheck, stylua, shellcheck not installed).
-- New tests: `tests/mode_switch.test.mjs` (8), `tests/plan_moves.test.mjs` (11), `tests/lua_call.test.mjs` (+1, runs in
-  Lua 5.5), `tests/cli.test.sh` (+15 checks for plan-update, 102 total). qmllint via `tests/qml_lint.test.sh`: ok.
+- New tests: `tests/mode_switch.test.mjs` (8), `tests/plan_moves.test.mjs` (11), `tests/cli.test.sh` (+15 checks for plan-update, 102 total). qmllint via `tests/qml_lint.test.sh`: ok.
 - `bash tests/scrub.sh`: ok.
 - Not verified: anything live (checklist `docs/checklist/WP12b.md`).

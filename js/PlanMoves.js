@@ -5,7 +5,7 @@
 // Hand moves of planned windows (design D21, D23, 14.8): read plan-moves.json, tell which moves are new, and turn a move
 // into a scene edit for "Update plan". Pure: text and docs in, no files, no clock. Rects are fractions of the usable area,
 // like scene rects.
-// move: { id, scene, window (1-based), class, context, kind: "desktop" | "zone", to: { identity, slot, rect | null, floating } }
+// move: { id, scene, window (1-based), class, context, kind: "desktop" | "zone", to: { identity, slot, rect (null or absent for tiled windows), floating } }
 
 const FIXED_LAYOUTS = ["tiled", "scrolling", "full", "free"]
 

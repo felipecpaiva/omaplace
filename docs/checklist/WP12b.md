@@ -8,7 +8,8 @@ and `omarchy restart shell` after the plugin update (the shell caches plugin JS)
 2. [ ] Edit a plan's layout in `scenes.toml` by hand and save: plans.lua changes within a second.
 3. [ ] `omaplace open <plan>` on a zone plan whose desktop is tiled: the desktop turns floating (set command, or the
    toggle after focusing it), then the apps land in their zones. A tiled plan on a tiled desktop presses nothing.
-4. [ ] Move a planned window to another desktop by hand: one notification with an "Update plan" button. Press it:
+4. [ ] First move after a fresh login (plan-moves.json did not exist when the shell started): move a planned window
+   to another desktop by hand: one notification with an "Update plan" button. Press it:
    `scenes.toml` has the new desktop (single-window plan) and a notification says `plan <name> updated`.
 5. [ ] Move a planned window to another zone, then focus another window: one notification; pressing it writes the zone.
 6. [ ] A second and third move in a row each give one notification (the watch was re-armed after the rename).

@@ -89,8 +89,9 @@ test("parse keeps only well formed moves; bad text gives none", () => {
   const good = mv(1)
   const text = JSON.stringify({ seq: 9, moves: [good, mv(0), mv(2, { kind: "resize" }), mv(3, { window: 0 }), mv(4, { class: "" }),
     mv(5, { to: { rect: [1, 2] } }), mv(6, { kind: "desktop", to: { identity: MON, slot: 11, rect: null } }),
-    mv(7, toDesk(3)), mv(8, { to: null }), null, "x"] })
-  assert.deepEqual(P.parse(text).map((m) => m.id), [1, 7])
+    mv(7, toDesk(3)), mv(8, { to: null }), null, "x",
+    mv(9, { kind: "desktop", to: { identity: MON, slot: 5, floating: false } })] }) // a tiled window has no rect (WP12a)
+  assert.deepEqual(P.parse(text).map((m) => m.id), [1, 7, 9])
   assert.deepEqual(P.parse("not json"), [])
   assert.deepEqual(P.parse('{"seq":1}'), [])
   assert.deepEqual(P.parse(""), [])
@@ -141,6 +142,8 @@ test("zone move: same zone changes nothing; taken zone, no zone, no zones in the
   assert.match(taken.reason, /zone 2 already holds chromium/)
   const outside = P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", to: { rect: null } }))
   assert.deepEqual(outside, { code: "not_possible", reason: "the window is outside every zone" })
+  const noRect = P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", to: {} }))
+  assert.equal(noRect.reason, "the window is outside every zone")
   const tiled = P.edit(doc(), mv(1, { scene: "desk-5", class: "org.example.Term" }))
   assert.equal(tiled.code, "not_possible")
   assert.match(tiled.reason, /layout tiled has no zones/)
