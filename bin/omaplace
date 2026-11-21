@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# omaplace command line (design 7.3). Maps words to the service's IPC methods and prints the answer.
+# Exit codes: 0 ok, 2 bad usage, 3 not found, 4 partial, 5 failed, 6 Lua module not loaded.
+set -euo pipefail
+
+target=io.github.felipecpaiva.omaplace
+runtime="${XDG_RUNTIME_DIR:-/run/user/$UID}/omaplace"
+config="${XDG_CONFIG_HOME:-$HOME/.config}/omaplace/config.toml"
+
+usage() {
+  cat <<'USAGE'
+Usage: omaplace [--json] <command>
+
+  save <name>           save the focused desktop as a scene
+  open <name>           open a scene on the focused desktop
+  restore [generation]  restore the last session
+  list                  list scenes
+  rename <from> <to>    rename a scene
+  remove <name>         delete a scene
+  rule add              add a rule for the focused window (its desktop and monitor)
+  rule remove <name>    delete a rule
+  status                show the current or last run
+  settings              open the settings window
+
+  --json                print the service's JSON answer instead of text
+Exit codes: 0 ok, 2 bad usage, 3 not found, 4 partial, 5 failed, 6 Lua module not loaded.
+USAGE
+}
+bad() { echo "omaplace: $1" >&2; usage >&2; exit 2; }
+
+json=0
+if [ "${1:-}" = "--json" ]; then json=1; shift; fi
+[ $# -gt 0 ] || bad "a command is needed"
+word=$1; shift
+need() { [ "$1" -eq "$2" ] || bad "$word takes $2 argument(s)"; }
+
+case $word in
+  -h | --help | help) usage; exit 0 ;;
+  save | open | remove) need $# 1; args=("$word" "$1") ;;
+  restore) [ $# -le 1 ] || bad "restore takes at most 1 argument"; args=(restore "${1:-}") ;;
+  rename) need $# 2; args=(rename "$1" "$2") ;;
+  list | status | settings) need $# 0; args=("$word") ;;
+  rule)
+    case "${1:-}" in
+      add) shift; need $# 0; args=(ruleAddFocused) ;;
+      remove) shift; need $# 1; args=(ruleRemove "$1") ;;
+      *) bad "rule add | rule remove <name>" ;;
+    esac ;;
+  *) bad "unknown command: $word" ;;
+esac
+
+field() { # field <json> <key>: a string or number value, empty when absent
+  sed -n -E 's/.*"'"$2"'":"?([^",}]*)"?.*/\1/p' <<< "$1" | head -n1
+}
+
+answer=$(omarchy-shell "$target" "${args[@]}") || {
+  echo "omaplace: the omaplace service is not reachable (is the plugin installed and enabled?)" >&2
+  exit 5
+}
+
+# A slow request answers pending at once; its result lands in result-<req>.json.
+if [[ $answer == *'"pending":true'* ]]; then
+  req=$(field "$answer" req)
+  [[ $req =~ ^[A-Za-z0-9_-]+$ ]] || { echo "omaplace: bad answer from the service" >&2; exit 5; }
+  file="$runtime/result-$req.json"
+  limit=$(grep -m1 -E '^[[:space:]]*request_timeout_s[[:space:]]*=[[:space:]]*[0-9]+' "$config" 2>/dev/null | grep -oE '[0-9]+$' || true)
+  limit=${limit:-60}
+  start=$SECONDS
+  while [ ! -f "$file" ]; do
+    [ $((SECONDS - start)) -lt "$limit" ] || { echo "omaplace: no answer after ${limit} s" >&2; exit 5; }
+    if [ -d "$runtime" ] && command -v inotifywait >/dev/null 2>&1; then
+      inotifywait -qq -t 1 -e moved_to -e close_write "$runtime" >/dev/null 2>&1 || true
+    else
+      sleep 0.2
+    fi
+  done
+  answer=$(cat "$file")
+fi
+
+if [ "$json" = 1 ]; then printf '%s\n' "$answer"; fi
+ok=$(field "$answer" ok)
+code=$(field "$answer" code)
+state=$(field "$answer" state)
+
+if [ "$ok" != true ]; then
+  case $code in
+    not_found) [ "$json" = 1 ] || echo "omaplace: not found" >&2; exit 3 ;;
+    bad_name) [ "$json" = 1 ] || echo "omaplace: names are 1 to 40 of a-z, 0-9, _ and -" >&2; exit 2 ;;
+    no_lua)
+      if [ "$json" = 0 ]; then
+        echo "omaplace: the Lua module is not loaded. Add this line to ~/.config/hypr/hyprland.lua:" >&2
+        echo '  pcall(dofile, os.getenv("HOME") .. "/.config/omarchy/plugins/io.github.felipecpaiva.omaplace/lua/omaplace.lua")' >&2
+      fi
+      exit 6 ;;
+    *) [ "$json" = 1 ] || echo "omaplace: failed (${code:-unknown}$([ -n "$state" ] && echo ", $state"))" >&2; exit 5 ;;
+  esac
+fi
+
+if [ "$json" = 0 ]; then
+  n() { local v; v=$(field "$answer" "$1"); echo "${v:-0}"; }
+  case $word in
+    save) echo "saved ${args[1]}: $(n saved) windows, $(n skipped) skipped, $(n need_profile) need a profile" ;;
+    open) echo "opened ${args[1]}: $(n placed) placed ($(n started) started), $(n skipped) skipped, $(n not_reopened) not reopened, $(n failed) failed" ;;
+    list) grep -oE '"name":"[^"]*","windows":[0-9]+' <<< "$answer" | sed -E 's/"name":"([^"]*)","windows":([0-9]+)/\1  \2 windows/' || true ;;
+    status) echo "run: $(field "$answer" run) ${state:-idle}" ;;
+    rule) [ "${args[0]}" = ruleAddFocused ] && echo "rule added: $(field "$answer" rule)" || echo "rule removed" ;;
+    *) echo "ok" ;;
+  esac
+fi
+case $word in save | open | restore) [ "$state" != partial ] || exit 4 ;; esac
+exit 0
