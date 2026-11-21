@@ -1,10 +1,9 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { load } from "./js_load.mjs"
 
-const load = (f) => readFileSync(new URL("../js/" + f, import.meta.url), "utf8").replace(".pragma library", "")
-const P = new Function(load("Plan.js") + "; return { fromScene, fromSession }")()
-const { encode } = new Function(load("LuaLiteral.js") + "; return { encode }")()
+const P = load("Plan.js")
+const { encode } = load("LuaLiteral.js")
 
 const scene = {
   existing: "move",

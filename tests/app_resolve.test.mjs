@@ -131,3 +131,15 @@ test("a terminal reopens as the same terminal, so its class matches the slot (li
   assert.deepEqual(other.argv, ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/srv/example/p"])
   assert.equal(A.resolve("foot", [], A.defaultStrategies(), { folder: "-rf" }).mode, "skip")
 })
+
+test("classFor: StartupWMClass first, then a class seen for the entry, else the id as an unconfirmed guess", () => {
+  const C = new Function(src + "; return { classFor }")()
+  assert.deepEqual(C.classFor({ id: "Example-Mail.desktop", startupWMClass: "Example-mail-client" }, { "Example-Mail": "other" }),
+    { class: "Example-mail-client", confirmed: true })
+  assert.deepEqual(C.classFor({ id: "org.example.Photos.desktop", startupWMClass: "" }, { "org.example.Photos": "photos" }),
+    { class: "photos", confirmed: true })
+  assert.deepEqual(C.classFor({ id: "org.example.Photos.desktop" }, { "org.example.Other": "x" }), { class: "org.example.Photos", confirmed: false })
+  assert.deepEqual(C.classFor({ id: "org.example.Photos" }, undefined), { class: "org.example.Photos", confirmed: false })
+  assert.deepEqual(C.classFor({ id: "toString" }, {}), { class: "toString", confirmed: false }, "no prototype keys")
+  assert.deepEqual(C.classFor({ id: "org.example.Photos" }, { "org.example.Photos": "" }), { class: "org.example.Photos", confirmed: false })
+})

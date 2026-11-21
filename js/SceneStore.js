@@ -1,4 +1,5 @@
 .pragma library
+.import "Zones.js" as Zones
 // omaplace scenes.toml: parse, serialize, migrate, and merge a re-capture. Pure: no files, no clock, no Hyprland.
 // Format: the family TOML subset with numbered window sections, [scene.<name>] and [scene.<name>.window.<n>].
 // A string cannot hold a double quote or a line break (no escapes): the parser warns and uses the default, serialize() throws.
@@ -6,6 +7,11 @@
 //              warnings: [], errors: [{code, name}], readOnly }
 // Window: { app, class, context, rect: [x, y, w, h], order, floating, launch, folder, edited, extra? }
 // `edited` is a space separated list of the window fields the user changed in settings; mergeCapture keeps those.
+// Plan scenes (design 14.2) also have plan = true, layout, open_at_login, and a `zone` per window. These keys are never
+// defaulted: a bad or misplaced one is a doc error {code: "bad_plan", name, reason}, the scene keeps what was read and gets
+// `planError` (the parse report only), and serialize() refuses any scene planProblem() or a desktop clash rejects
+// (Service.qml writes nothing while doc.errors is not empty). A scene without
+// `plan` never gets these keys written, so captured scenes round trip unchanged.
 
 const SCENE_NAME_RE = /^[a-z0-9_-]{1,40}$/
 const SUPPORTED_SCHEMA = 1
@@ -30,6 +36,8 @@ const WINDOW_SPECS = {
 }
 // class is the match key, never kept from old. context is kept when the user picked it (a re-capture may see "?").
 const EDITABLE = ["app", "context", "rect", "order", "floating", "launch", "folder"]
+const PLAN_SCENE_KEYS = ["plan", "layout", "open_at_login"]
+const PLAN_LAYOUTS = ["tiled", "scrolling", "full", "free"]
 
 function copyDefault(spec) { return Array.isArray(spec.def) ? spec.def.slice() : spec.def }
 function defaultsOf(specs) {
@@ -131,11 +139,11 @@ function parse(text) {
         continue
       }
       const scene = ensure(m[1])
-      if (m[2] === undefined) { sec = { kind: "scene", label: "scene." + m[1] + ".", target: scene, specs: SCENE_SPECS, scene }; continue }
+      if (m[2] === undefined) { sec = { kind: "scene", label: "scene." + m[1] + ".", target: scene, specs: SCENE_SPECS, scene, planKeys: PLAN_SCENE_KEYS }; continue }
       const win = defaultsOf(WINDOW_SPECS)
       numbered[m[1]].push({ n: Number(m[2]), win })
       win.order = Number(m[2])
-      sec = { kind: "window", label: k.name + ".", target: win, specs: WINDOW_SPECS }
+      sec = { kind: "window", label: k.name + ".", target: win, specs: WINDOW_SPECS, scene, planKeys: ["zone"] }
       continue
     }
     if (sec.kind === "skip") continue
@@ -145,8 +153,13 @@ function parse(text) {
       if (r.ok) { doc.schema = r.value; schemaSeen = true } else warn("schema: " + r.why + ", using 1")
       continue
     }
-    const spec = sec.specs[k.key]
     const p = parseValue(k.raw)
+    if (sec.planKeys.indexOf(k.key) !== -1) { // checked as a whole after the loop, never defaulted
+      if (p.ok) sec.target[k.key] = p.value
+      else if (!sec.scene.planError) sec.scene.planError = sec.label + k.key + ": " + p.why
+      continue
+    }
+    const spec = sec.specs[k.key]
     if (!spec) {
       if (p.ok) { (sec.target.extra = sec.target.extra || {})[k.key] = p.value } else warn(sec.label + k.key + ": " + p.why + ", ignored")
       continue
@@ -156,11 +169,22 @@ function parse(text) {
     else { sec.target[k.key] = copyDefault(spec); warn(sec.label + k.key + ": " + r.why + ", using " + JSON.stringify(spec.def)) }
   }
   for (const name of Object.keys(doc.scenes)) {
+    const scene = doc.scenes[name]
     numbered[name].sort((a, b) => a.n - b.n)
     for (const item of numbered[name]) {
-      if (item.win.class === "") { warn("scene." + name + ".window." + item.n + ".class: empty, window skipped"); continue }
-      doc.scenes[name].windows.push(item.win)
+      if (item.win.class === "") {
+        const what = "scene." + name + ".window." + item.n + ".class: empty"
+        if (scene.plan === true) { if (!scene.planError) scene.planError = what + ", a plan window needs a class" } else warn(what + ", window skipped")
+        continue
+      }
+      scene.windows.push(item.win)
     }
+  }
+  const problems = planProblems(doc.scenes)
+  for (const name of Object.keys(doc.scenes)) {
+    const scene = doc.scenes[name]
+    const why = scene.planError || problems[name]
+    if (why) { scene.planError = why; doc.errors.push({ code: "bad_plan", name, reason: why }) }
   }
   if (!schemaSeen && Object.keys(doc.scenes).length > 0) warn("schema: missing, read as 1")
   return migrate(doc)
@@ -179,6 +203,57 @@ function migrate(doc) {
   return out
 }
 
+// ---- plan keys
+
+function isZoneLayout(layout) { return PLAN_LAYOUTS.indexOf(layout) === -1 }
+
+// Why the plan keys of a scene are wrong, or null. A scene without plan = true must not have any of them.
+function planProblem(scene) {
+  const wins = scene.windows || []
+  if (scene.plan !== true) {
+    if (scene.plan !== undefined && scene.plan !== false) return "plan: expected true or false"
+    for (const k of ["layout", "open_at_login"]) if (scene[k] !== undefined) return k + ": only a plan scene (plan = true) has it"
+    if (wins.some((w) => w.zone !== undefined)) return "zone: only a plan scene (plan = true) has zones"
+    return null
+  }
+  if (scene.open_at_login !== undefined && typeof scene.open_at_login !== "boolean") return "open_at_login: expected true or false"
+  if (!Number.isInteger(scene.home_slot) || scene.home_slot < 1 || scene.home_slot > 10) return "home_slot: a plan is bound to a desktop, expected 1..10"
+  if (typeof scene.layout !== "string") return "layout: missing; expected " + PLAN_LAYOUTS.join(", ") + ", a zone layout name or zones text"
+  let count = Zones.MAX_ZONES
+  if (scene.layout === "full") count = 1
+  else if (isZoneLayout(scene.layout)) {
+    const z = Zones.ofLayout(scene.layout)
+    if (z.error) return "layout: " + JSON.stringify(scene.layout) + " is not " + PLAN_LAYOUTS.join(", ") + ", and " + z.error
+    count = z.zones.length
+  }
+  if (scene.layout === "full" && wins.length > 1) return "layout full holds one window, this plan has " + wins.length
+  const seen = {}
+  if (scene.layout === "free") return wins.some((w) => w.zone !== undefined) ? "zone: free places by rect, no zones" : null
+  for (const w of wins) {
+    if (!Number.isInteger(w.zone) || w.zone < 1) return "zone of " + w.class + ": expected a whole number from 1"
+    if (w.zone > count) return "zone " + w.zone + " of " + w.class + ": layout " + scene.layout + " has " + count + (count === 1 ? " zone" : " zones")
+    if (seen[w.zone]) return "zone " + w.zone + " is used twice"
+    seen[w.zone] = true
+  }
+  return null
+}
+
+// Why each scene of a doc is refused ({ name: reason }): planProblem(), then two plans on one desktop (same home_monitor
+// and home_slot), where the later one in the file is refused and the reason names the earlier.
+function planProblems(scenes) {
+  const out = {}, desk = {}
+  for (const name of Object.keys(scenes || {})) {
+    const scene = scenes[name]
+    const why = planProblem(scene)
+    if (why) { out[name] = why; continue }
+    if (scene.plan !== true) continue
+    const key = (scene.home_monitor || "") + "\n" + scene.home_slot
+    if (desk[key] !== undefined) out[name] = "desktop " + scene.home_slot + " of " + JSON.stringify(scene.home_monitor || "") + " already has plan " + desk[key]
+    else desk[key] = name
+  }
+  return out
+}
+
 // ---- serialize
 
 function format(v) {
@@ -191,11 +266,15 @@ function format(v) {
   throw new Error("bad_value: " + String(v))
 }
 
-function emit(out, obj, specs) {
+// `before` and `after` are optional keys (plan keys), written only when set.
+function emit(out, obj, specs, before, after) {
+  const optional = (keys) => { for (const key of keys) if (obj[key] !== undefined) out.push(key + " = " + format(obj[key])) }
+  optional(before)
   for (const key of Object.keys(specs)) {
     const v = obj[key] === undefined ? copyDefault(specs[key]) : obj[key]
     out.push(key + " = " + (specs[key].type === "rect" ? format(v.join(" ")) : format(v)))
   }
+  optional(after)
   const extra = obj.extra || {}
   for (const key of Object.keys(extra)) out.push(key + " = " + format(extra[key]))
 }
@@ -203,14 +282,17 @@ function emit(out, obj, specs) {
 function serialize(doc) {
   if (doc.readOnly) throw new Error("read_only: scenes.toml has a newer schema")
   const out = ["schema = " + format(doc.schema === undefined ? SUPPORTED_SCHEMA : doc.schema)]
+  const problems = planProblems(doc.scenes)
   for (const name of Object.keys(doc.scenes || {})) {
     if (!SCENE_NAME_RE.test(name)) throw new Error("bad_name: " + name)
     const scene = doc.scenes[name]
+    const why = problems[name]
+    if (why) throw new Error("bad_plan: scene " + name + ": " + why)
     out.push("", "[scene." + name + "]")
-    emit(out, scene, SCENE_SPECS)
+    emit(out, scene, SCENE_SPECS, PLAN_SCENE_KEYS, [])
     ;(scene.windows || []).forEach((win, i) => {
       out.push("", "[scene." + name + ".window." + (i + 1) + "]")
-      emit(out, win, WINDOW_SPECS)
+      emit(out, win, WINDOW_SPECS, [], ["zone"])
     })
   }
   return out.join("\n") + "\n"
@@ -226,6 +308,7 @@ function serialize(doc) {
 function contextPicked(ow) { return String(ow.edited || "").split(/\s+/).indexOf("context") !== -1 }
 
 function mergeCapture(oldScene, capture) {
+  if (oldScene && oldScene.plan === true) throw new Error("plan_scene: a plan changes only on the Desktops page, not by a capture")
   const old = oldScene || newScene()
   const scene = Object.assign(newScene(), old)
   scene.windows = []

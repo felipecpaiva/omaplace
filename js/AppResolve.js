@@ -178,3 +178,16 @@ function resolve(cls, entries, strategies, slot) {
   }
   return launch(name, kind, [idOf(e) + ".desktop"])
 }
+
+// The reverse of findEntry, for the Desktops page app picker (design 14.7): the window class to plan for an entry.
+// seen: { entry id: class } built by the caller from app memory and scenes (a window's `app` and `class`).
+// Returns { class, confirmed }: StartupWMClass, else a class seen for this entry, else the entry id as a guess (not confirmed).
+function classFor(entry, seen) {
+  const id = idOf(entry || {})
+  const wm = String((entry && entry.startupWMClass) || "")
+  if (wm !== "") return { class: wm, confirmed: true }
+  const s = seen || {}
+  const known = Object.prototype.hasOwnProperty.call(s, id) ? s[id] : ""
+  if (typeof known === "string" && known !== "") return { class: known, confirmed: true }
+  return { class: id, confirmed: false }
+}
