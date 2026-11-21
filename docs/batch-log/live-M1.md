@@ -67,3 +67,12 @@ Note: `omaplace restore` prints only `ok`; a counts line like `open` would be ni
 | Terminal running a program: `foot --working-directory=<dir> sleep 300`, save, close, open on another workspace | pass: foot came back running `sleep 300` in `<dir>` |
 | App memory vs a hand-opened terminal | as designed: the hand-opened foot went to its remembered slot 9 (from an earlier scene) |
 | Saving an empty workspace | reports `failed`; should say "nothing to save" (follow-up) |
+
+# Live checks after the second review, 2026-11-21
+
+| Check | Result |
+|---|---|
+| `window.close` payload | carries `workspace.id`, `monitor.name` and `at` (userdata window) |
+| Session cap with one reused timer (fix3) | **fail**: no write during 48 s of focus changes. Probe: a fired one-shot `HL.Timer` cannot be re-armed (`set_timeout` plus `set_enabled(true)`, or off then on, never fire again; `is_enabled` returns nil). The reused timer was dead after its first fire, so sessions would have stopped after one write. Fixed: a fresh timer per arm; the fake timer now refuses to re-arm a fired one-shot, and the session test fails on the old code |
+| Session cap after the fix | pass: written 34 s after the first of nonstop focus changes (cap 30 s plus the 4 s check step) |
+| One quiet cycle after that | pass: written 15 s after the last event |
