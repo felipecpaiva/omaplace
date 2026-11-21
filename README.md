@@ -40,9 +40,13 @@ Then pick an app for each zone from your installed apps. A preview shows each ap
   of its own). Ignore it and nothing changes.
 - **Open at login** per desktop, off by default.
 
+<p align="center"><img src="branding/demo/snap.gif" alt="Omacalc opened by hand goes straight to its zone of the plan" width="720"></p>
+
+<p align="center"><img src="branding/demo/update.gif" alt="Omacalc dragged onto the other zone, the Update plan notification, and the two windows swapping zones" width="720"></p>
+
 ### Scenes: save a desktop, open it again in one step
 
-<p align="center"><img src="branding/demo/scenes.gif" alt="Saving a desktop as a scene, then opening it on another desktop" width="720"></p>
+<p align="center"><img src="branding/demo/scenes.gif" alt="Saving a desktop as a scene, closing its windows, then opening the scene to bring them back" width="720"></p>
 
 A scene is the apps on one desktop of one monitor. On a floating desktop each window keeps its exact place; on a tiled
 desktop the left to right order is kept.
@@ -57,8 +61,6 @@ project folder, for example). Two Chrome profiles saved on two desktops open on 
 lists what was placed, started, skipped or not reopened. Nothing fails silently.
 
 ### Session restore
-
-<p align="center"><img src="branding/demo/restore.gif" alt="Restore last session bringing back every desktop after a new login" width="720"></p>
 
 While you work, omaplace keeps a snapshot of all desktops. It writes only after window events, at most once every 15
 seconds, and closing everything at shutdown never erases the last good snapshot. After a reboot, `omaplace restore`

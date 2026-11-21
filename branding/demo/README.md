@@ -2,8 +2,9 @@
 
 `branding/tools/demo.py` records the feature GIFs (and an MP4 of each) from the real plugin on the spare, empty
 workspace 8. It never makes a virtual monitor and sends no keys: mouse moves and clicks through `/dev/uinput`, pointer
-warps and window moves through `hyprctl eval`, plus the omaplace CLI. `gifkit.py` builds each file: 12 fps, 960 wide,
-a 96 colour palette, captions at the top.
+warps and window moves through `hyprctl eval`, plus the omaplace CLI. It is built on omakit (input, recorder, GIF
+builder and the Stage that guards workspace 8 and puts everything back): 12 fps, 960 wide, a 96 colour palette,
+captions at the top. The README and the v0.1.0 release notes show these four files.
 
 | Scene | File | What it shows |
 |-------|------|---------------|
@@ -11,6 +12,8 @@ a 96 colour palette, captions at the top.
 | `snap` | `snap.gif` | Omacalc opened by hand jumps into its zone |
 | `update` | `update.gif` | Omacalc dragged onto the left zone, the "Update plan" notification, its button, the two windows swap |
 | `scenes` | `scenes.gif` | Two windows arranged by hand, `omaplace save demo`, closed, `omaplace open demo` brings them back |
+
+Session restore has no GIF: it needs a new login.
 
 ## Before the first run: calibrate
 
@@ -22,14 +25,16 @@ depend on the live screen. Run
 ```
 
 It writes `calibrate.png` (the Desktops page), `calibrate-windows.png` (the plan opened) and `calibrate-notify.png`
-(a made-up notification with a button) here, all gitignored. Read the coordinates, put them in the constants, set
-`DESK8_CARD`, and run it again for `calibrate-card.png` (desktop 8's editor, to place `OPEN_ALL` and `EDITOR_SCROLL`).
-A scene refuses to run while a coordinate it needs is still `(0, 0)`.
+(a made-up notification with a button, which expires by itself) here, all gitignored. Read the coordinates, put them
+in the constants, set `DESK8_CARD`, and run it again for `calibrate-card.png` (desktop 8's editor, to place `OPEN_ALL`
+and `EDITOR_SCROLL`). A scene refuses to run while a coordinate it needs is still `(0, 0)`, and the run refuses a
+monitor whose size differs from `CALIBRATED_FOR`.
 
 ## Run
 
-Needs one monitor (the size in `SCREEN`, the bar height in `BAR`; recording crops the bar off), an empty workspace 8, no Omacalc open, the plugin enabled with its Lua line
-loaded, grim, ffmpeg, kitty, bat, omacalc, and the omahop repository next to this one (its uinput helper).
+Needs omakit next to this repository (`../omakit`, or set `OMAKIT_PATH`), one monitor, an empty workspace 8, no
+Omacalc open, the plugin enabled with its Lua line loaded, grim, ffmpeg, kitty, bat, omacalc and gio. The recorded
+area is the screen below the bar, read from the monitor.
 
 ```
 ! python3 branding/tools/demo.py                 # all scenes
@@ -40,12 +45,15 @@ Hands off the keyboard, mouse and screen for about 2 minutes (it waits 10 s firs
 
 ## Privacy and restore
 
-- Do Not Disturb is on for the whole run. The `update` scene turns it off only from the click that triggers the
-  notification until its button is pressed, zooms onto the notification area for that part, and writes no GIF if any
-  other notification showed meanwhile (run that scene again).
-- Demo windows show only this README (a terminal with class `omaplace-demo`, so your own terminals are never planned)
-  and Omacalc. App memory and the session snapshot are off during the run.
-- Put back after the run, also on an error: `scenes.toml`, `config.toml` and their `.bak` files (moved to the trash
-  if they did not exist), the demo launcher entry, workspace 8's mode (through Omarchy's own toggle, and its mode file
-  moved to the trash if it was new), Do Not Disturb, the pointer and your workspace. The last line it prints says
-  whether the files match and `plans.lua` no longer names the demo plan.
+- Do Not Disturb is on for the whole run, and your notifications are never dismissed. Before the `update` scene turns
+  Do Not Disturb off, it waits up to 10 s for any card on screen to expire; if one is still there it stops with "run
+  the update scene again". Do Not Disturb is then off only from the click that triggers the notification until the
+  pointer is on its button. The capture zooms onto the notification area for that part, and no GIF is written if any
+  other card showed meanwhile.
+- Demo windows show only this repository's README (a terminal with class `omaplace-demo`, so your own terminals are
+  never planned) and Omacalc. App memory and the session snapshot are off during the run.
+- Put back after the run, also on an error, by omakit's Stage: `scenes.toml`, `config.toml` and their `.bak` files and
+  the temporary launcher entry `omaplace-demo.desktop` (their bytes, or the trash if they did not exist), workspace
+  8's layout mode and Omarchy's layout file for it, Do Not Disturb, the pointer and your workspace. Then the script
+  reloads omaplace's Lua settings, rebuilds `plans.lua` and says whether it still names the demo plan. Both print a
+  `restored:` line.
