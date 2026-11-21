@@ -45,7 +45,7 @@ combines exact geometry with a port-proof monitor identity outside tmux windows.
 | Hyprland Lua API (`hl.on`, `hl.window_rule`, `hl.dsp`, `hl.get_*`, `hl.exec_cmd`, `hl.timer`) | Events, named rules, placement | omaplace Lua |
 | `o.workspaces.workspace_id(monitor, slot)` (`/usr/share/omarchy/default/hypr/monitor-workspaces.lua:298`, exported as `o.workspaces`) | Turn "monitor + slot" into a workspace id. Read through one adapter (`slots.lua`) only | Omarchy |
 | `uwsm-app -- <desktop-id>` and Omarchy launchers (`omarchy-launch-webapp`, `omarchy-launch-tui`, `xdg-terminal-exec`) | Launch apps the way Omarchy does (`uwsm-app` is Omarchy's form; `uwsm app` takes a desktop entry id, checked in its help) | Omarchy |
-| Shell plugin `service` and `panel` kinds; `omarchy-shell shell call <id> <method> <arg>` (one string argument, synchronous string answer, `shell.qml:1935`) and `shell toggle <id>` | Storage, app resolution, CLI target, settings window | omaplace QML |
+| Shell plugin `service` and `panel` kinds; the service's own `IpcHandler` target, called with `omarchy-shell io.github.felipecpaiva.omaplace <method> <args>` (7.2), and `omarchy-shell shell toggle <id>` for the panel | Storage, app resolution, CLI target, settings window | omaplace QML |
 | `~/.config/omarchy/extensions/omarchy-menu.jsonc` (read by `shell/plugins/menu/Menu.qml:57`) | One "Scenes" menu, added only when the user presses "Add to menu" in settings, with a backup first | omaplace, with consent |
 | `omarchy-notification-send` | Result of an open or restore | omaplace QML |
 | `_G.omagnet.fit_shadow` (optional) | After placing, if omagnet is loaded, looked up at use time inside `pcall` | omagnet |
@@ -239,7 +239,7 @@ classDiagram
   omaplace_lua --> memory_lua
   place_lua --> geometry_lua
   capture_lua --> geometry_lua
-  omaplace_cli --> Service_qml : omarchy-shell shell call
+  omaplace_cli --> Service_qml : omarchy-shell IPC target
   SettingsPanel_qml --> Service_qml
   Service_qml --> SceneStore_js
   Service_qml --> ConfigIO_js
@@ -385,8 +385,11 @@ Rules:
 
 `order` is the left-to-right rank at capture (by `x`, then `y`), saved for every window. On a floating target the run may
 launch in parallel ticks and place by rect. On a tiled or scrolling target (`layout` from Omarchy's workspace mode) the run
-is sequential: the next window is launched or moved only after the previous one is claimed or expired, so tiling inserts
-them in saved order. Rects are ignored there.
+is sequential: the next window is launched or moved only after the previous one is claimed or expired. Dwindle still
+splits the focused window, so the order can come out wrong (S8); when the last window is in, the run reads each window's
+`at`, and swaps windows with `hl.dsp.window.swap({ window = ..., target = ... })` until the left-to-right order matches.
+Rects are ignored there. At the end of any run the view goes back to the target workspace (or the last rule desktop, D9),
+because an app can open on another workspace and pull the view with it (S9).
 
 `mode`: `launch` (start it if no window to move), `place_only` (never start; apps that restore themselves),
 `skip` (unresolved app, reported). `launch` is always an argv array; Lua joins it with `shellquote.join` (every element
@@ -457,7 +460,7 @@ sequenceDiagram
   participant S as Service.qml
   participant G as omaplace.lua
   U->>CLI: omaplace save work
-  CLI->>S: omarchy-shell shell call omaplace save work
+  CLI->>S: omarchy-shell io.github.felipecpaiva.omaplace save work
   S->>G: hyprctl eval _G.omaplace.capture("q1","focused")
   G->>G: capture.snapshot(...) for the focused workspace
   G-->>S: writes $XDG_RUNTIME_DIR/omaplace/capture-q1.json
@@ -478,7 +481,7 @@ sequenceDiagram
   participant P as place
   participant H as Hyprland
   S->>S: SceneStore.parse, AppResolve, Plan.fromScene
-  S->>G: hyprctl eval _G.omaplace.open({...})
+  S->>G: write plan-<run>.lua, then hyprctl eval _G.omaplace.open_file(path)
   G->>H: get monitors, resolve target (monitors.resolve, slots.workspace_id)
   alt existing = move
     G->>H: find windows by class, claim in order
@@ -561,10 +564,14 @@ through `monitors.resolve` with policy `focused`. Restore at login is a later se
 | `status()` | table | Same as status.json |
 | `version` | string | For the service to check compatibility |
 
-### 7.2 Service IPC (`omarchy-shell shell call omaplace <method> ...`)
+### 7.2 Service IPC (`omarchy-shell io.github.felipecpaiva.omaplace <method> ...`)
 
-Form (checked in `/usr/share/omarchy/shell/shell.qml:1935`): `omarchy-shell shell call io.github.felipecpaiva.omaplace <method> <arg>`.
-Exactly one string argument; methods with more inputs take a JSON string. The answer is synchronous, so methods never wait.
+Form (S5, checked 2026-11-21): `Service.qml` declares its own `IpcHandler { target: "io.github.felipecpaiva.omaplace" }`
+with typed functions (`function save(name: string): string`), the same way the Spaces plugin does. The CLI calls
+`omarchy-shell io.github.felipecpaiva.omaplace <method> <args>`. Not `omarchy-shell shell call`: that only reaches panels
+that are open right now (`shell.qml` `callIfLoaded`), never a service. An unknown target or method prints `Target not found.`
+or `Function not found.` and exits 1; the default timeout is 2 s (`OMARCHY_SHELL_IPC_TIMEOUT`). Methods answer at once and
+never wait.
 
 | Method | Arg | Immediate answer |
 |---|---|---|
@@ -655,13 +662,13 @@ Any work package that adds per-event work records a measurement in `docs/batch-l
 | # | Question | How to check | Gates |
 |---|---|---|---|
 | S1 | Is `hyprctl eval` happy with a 10 kB Lua literal argument? | done 2026-11-21: 12 kB passes intact (quotes and backslashes), 148 kB is refused by Linux (one argument max 128 kB), so plans go through a file (`open_file`) | WP5 |
-| S2 | Does `window.open` arrive for an app started by `uwsm-app -- <id>.desktop`, and how long after? | launch one small app, log class and delay only | WP4 |
-| S3 | Does a single-instance app that only raises an old window send `window.open`? | open a second copy of one such app | WP4 (expected: no, ticket expires) |
+| S2 | Does `window.open` arrive for an app started by `uwsm-app -- <id>.desktop`, and how long after? | done 2026-11-21: yes, after about 0.2 s, with `initial_class` and `workspace` set | WP4 |
+| S3 | Does a single-instance app that only raises an old window send `window.open`? | done 2026-11-21: Slack started again sends no `window.open` (ticket expires, `existing = move` handles it); Omacalc opens a second window | WP4 |
 | S4 | Does our dispatch after Omarchy's open rule land the exact rect on a floating workspace? | place one test window | WP4 |
-| S5 | What does `omarchy-shell shell call` print and return for a third-party service? | call a no-op method | WP5 |
+| S5 | What does `omarchy-shell shell call` print and return for a third-party service? | done 2026-11-21: `shell call` reaches open panels only; a plugin's own `IpcHandler` target works (see 7.2) | WP5 |
 | S6 | Does a menu `action` row with a full path to our CLI run from the Omarchy menu? | add a row in a copy, then restore | WP8 |
-| S8 | On a tiled (dwindle) and a scrolling workspace, do 3 windows opened one at a time keep their left-to-right order? | open 3 test windows in order, read `at` | WP4 |
-| S9 | With Chrome running, does `--profile-directory=X --new-window` open one new window in profile X, and do restored windows of X arrive inside a 2 s quiet window? | launch one profile window | WP4 |
+| S8 | On a tiled (dwindle) and a scrolling workspace, do 3 windows opened one at a time keep their left-to-right order? | done 2026-11-21 for dwindle: **no** (dwindle splits the focused window: order came out 1, 3, 2). `hl.dsp.window.swap({ window = "address:A", target = "address:B" })` swaps two windows exactly, and one swap fixed the order. So tiled runs open in order, then fix the order with swaps. Scrolling not checked (no scrolling workspace here) | WP4 |
+| S9 | With Chrome running, does `--profile-directory=X --new-window` open one new window in profile X, and do restored windows of X arrive inside a 2 s quiet window? | done 2026-11-21: exactly one new `google-chrome` window. It opened on the workspace of Chrome's other window (1, not the current 2) and the view followed it there, so a run must move it and put the view back. Restore of closed profile windows not checked | WP4 |
 | S10 | Do `firefox -P <name> --new-window` and an IDE `--new-window <folder>` behave the same way? | one window each | WP4 |
 | S7 | Two monitors: rule to slot of the second monitor, unplug, replug | needs a real second monitor, never a virtual one | WP2 sign-off |
 
