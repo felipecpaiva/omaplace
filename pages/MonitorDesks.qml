@@ -44,7 +44,7 @@ ColumnLayout {
     Layout.fillWidth: true
     panel: mon.panel
     view: mon.view
-    model: mon.chosen || ({ key: "", slot: 0, monitorName: "", plan: false, name: "", badge: "", error: "", choice: "", layout: "", modeNote: "", rows: [], openAtLogin: false, mode: "" })
+    model: mon.chosen || ({ key: "", slot: 0, monitorName: "", plan: false, name: "", badge: "", error: "", choice: "", layout: "", modeNote: "", rows: [], openAtLogin: false, mode: "", editable: false })
     apps: mon.apps
   }
 

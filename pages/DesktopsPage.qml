@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import "../js/Desktops.js" as Desktops
 
 // Desktops (design 14.1): every desktop of every monitor as a small card with its layout badge and preview; the selected
 // one opens below its monitor's grid for editing (DesktopCard). The model is Service.desktopCards(), read again after each
@@ -24,6 +25,8 @@ Flickable {
   function refresh() {
     if (!page.visible || !page.panel.service) return
     page.desks = page.panel.service.desktopCards()
+    let kept = Desktops.pruneDrafts(page.drafts, page.desks.groups)
+    if (kept) page.drafts = kept
   }
   function setDraft(key, text) { let d = Object.assign({}, page.drafts); d[key] = text; page.drafts = d }
   function toggleRow(key) { let o = Object.assign({}, page.openRows); o[key] = !o[key]; page.openRows = o }

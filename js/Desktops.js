@@ -79,11 +79,18 @@ function appChoices(values) {
   return out.sort((a, b) => a.label.toLowerCase() < b.label.toLowerCase() ? -1 : a.label.toLowerCase() > b.label.toLowerCase() ? 1 : 0)
 }
 
-// Classes seen for an app id in captured scenes (never plans: a plan's guessed class would confirm itself).
-// shortcut: app memory (memory.lua) is not read, so an app only ever opened by hand stays "not confirmed"; read it here
-// if that note shows too often.
-function seenClasses(scenes) {
+// Classes seen for an app id: open windows first (liveClasses from `hyprctl clients -j`, each mapped to its entry with
+// AppResolve.findEntry over entries, Service.entries()), then captured scenes. Never plans: a plan's guessed class would
+// confirm itself. shortcut: app memory (memory.lua) is not read; an app opened once and closed again before the page reads
+// the windows stays a guess until it is open; read memory here if that note shows too often.
+function seenClasses(scenes, liveClasses, entries) {
   const out = {}
+  for (const cls of liveClasses || []) {
+    if (typeof cls !== "string" || cls === "") continue
+    const e = AppResolve.findEntry(cls, entries || [])
+    const id = e ? AppResolve.idOf(e) : ""
+    if (id !== "" && !out[id]) out[id] = cls
+  }
   for (const name of Object.keys(scenes || {})) {
     const s = scenes[name]
     if (s.plan === true) continue
@@ -109,7 +116,15 @@ function positions(scene) {
   const layout = scene.layout
   if (layout === "full") return [Object.assign({ pos: 1, rect: [0, 0, 1, 1] }, at(() => true))]
   if (layout === "free") {
-    const rows = wins.map((w, i) => ({ pos: i + 1, rect: Array.isArray(w.rect) ? w.rect : [0, 0, 1, 1], index: i, win: w }))
+    // windows still at the default whole-screen rect are drawn stepped (preview only), so they do not hide each other
+    let step = 0
+    const shown = (r) => {
+      const whole = !Array.isArray(r) || (r[0] === 0 && r[1] === 0 && r[2] === 1 && r[3] === 1)
+      if (!whole) return r
+      const o = Math.min(0.4, 0.08 * step++)
+      return [o, o, 0.6, 0.6]
+    }
+    const rows = wins.map((w, i) => ({ pos: i + 1, rect: shown(w.rect), index: i, win: w }))
     if (wins.length < MAX_COLUMNS) rows.push({ pos: wins.length + 1, rect: null, index: -1, win: null })
     return rows
   }
@@ -142,7 +157,7 @@ function rowsOf(name, scene, ctx) {
   for (const a of ctx.apps || []) byId[a.value] = a
   const snaps = ctx.snaps[name] || []
   return positions(scene).map((p) => {
-    const row = { pos: p.pos, rect: p.rect, index: p.index, empty: !p.win, app: "", cls: "", label: "", icon: "", notes: [], win: p.win }
+    const row = { pos: p.pos, rect: p.rect, index: p.index, empty: !p.win, app: "", cls: "", want: "", label: "", icon: "", notes: [], win: p.win }
     if (!p.win) return row
     const w = p.win, a = byId[w.app]
     row.app = w.app
@@ -150,7 +165,10 @@ function rowsOf(name, scene, ctx) {
     row.label = a ? a.label : (w.app || w.class)
     row.icon = a ? a.icon : ""
     const c = AppResolve.classFor({ id: w.app, startupWMClass: a ? a.startupWMClass : "" }, ctx.seen)
-    if (!c.confirmed || c.class !== w.class) row.notes.push("Class not confirmed: open it once (" + w.class + ").")
+    // want: the class a pick would store now; a row whose stored class differs is picked again to fix it (ZoneRow)
+    row.want = c.class
+    if (!c.confirmed) row.notes.push("Class is a guess (" + w.class + "). Open the app once, then pick it again here.")
+    else if (c.class !== w.class) row.notes.push("Class is a guess (" + w.class + "); the app's real class is " + c.class + " now: pick it again here.")
     const others = (ctx.holders[w.class + "\n" + (w.context || "")] || []).filter((n) => n !== name)
     row.notes = row.notes.concat(snapNotes(w, snaps[p.index] === false, ctx.rules, others))
     return row
@@ -162,7 +180,7 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   const card = {
     key: mon.identity + "\n" + slot, identity: mon.identity, focused: mon.focused === true, monitorName: mon.name, slot, workspace: ws,
     windows: (live.windows || {})[ws] || 0, mode, plan: !!found, name: "", layout: "", choice: "", openAtLogin: false,
-    error: "", badge: "No plan" + (mode ? ", now " + modeLabel(mode) : ""), rows: [], modeNote: ""
+    error: "", badge: "No plan" + (mode ? ", now " + modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback
   }
   if (!found) return card
   const s = found.scene
@@ -178,13 +196,17 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   return card
 }
 
-// The page model. live: { monitors: desktops().monitors, modes: { ws: mode }, windows: { ws: count } }; liveNames: monitor
-// names when Lua gave no desktops. Returns { groups: [{ identity, name, connected, cards }] }: ten cards per monitor, then
-// one group per plan monitor that is not connected (only its plans), so every plan stays reachable.
+// The page model. live: { monitors: desktops().monitors, modes: { ws: mode }, windows: { ws: count }, classes: [open window
+// classes] }; ctx: { rules, apps, entries, liveNames (monitor names when Lua gave no desktops) }. Returns { groups: [{ identity,
+// name, connected, cards }], fallback }: ten cards per monitor, then one group per plan monitor that is not connected (only its
+// plans), so every plan stays reachable. Cards built from liveNames are not editable (fallback: their names may not be the
+// identity Lua uses, and the focused one is unknown).
 function cards(live, doc, ctx) {
   const l = live || {}
   const scenes = (doc && doc.scenes) || {}
-  const c = Object.assign({ rules: {}, apps: [], seen: seenClasses(scenes) }, ctx || {})
+  const c = Object.assign({ rules: {}, apps: [], entries: [] }, ctx || {})
+  c.seen = seenClasses(scenes, l.classes, c.entries)
+  c.fallback = false
   c.snaps = {}
   c.holders = {}
   for (const p of PlansFile.entries({ scenes }).plans) {
@@ -192,7 +214,10 @@ function cards(live, doc, ctx) {
     for (const w of p.windows) (c.holders[w.class + "\n" + w.context] = c.holders[w.class + "\n" + w.context] || []).push(p.scene)
   }
   let mons = Array.isArray(l.monitors) ? l.monitors.filter((m) => m && typeof m.identity === "string") : []
-  if (mons.length === 0) mons = (c.liveNames || []).map((n) => ({ identity: n, name: n, focused: false, slots: [] }))
+  if (mons.length === 0 && (c.liveNames || []).length > 0) {
+    c.fallback = true
+    mons = c.liveNames.map((n) => ({ identity: n, name: n, focused: false, slots: [] }))
+  }
   const shown = {}
   const groups = mons.map((m) => {
     const list = []
@@ -213,7 +238,7 @@ function cards(live, doc, ctx) {
     const slot = Number.isInteger(s.home_slot) ? s.home_slot : 0
     away[id].cards.push(cardOf({ identity: id, name: id, focused: id === "" }, slot, 0, { name, scene: s }, {}, c))
   }
-  return { groups }
+  return { groups, fallback: c.fallback }
 }
 
 // The heading of a plan row on the card.
@@ -222,6 +247,19 @@ function rowTitle(layout, pos) {
   if (layout === "free") return "Window " + pos
   if (layout === "tiled" || layout === "scrolling") return "Column " + pos
   return "Zone " + pos
+}
+
+// The custom zones drafts still open: a draft the card's plan now has (the save went through) is done. Returns the kept
+// drafts, or null when nothing was dropped.
+function pruneDrafts(drafts, groups) {
+  const kept = {}
+  let dropped = false
+  for (const key of Object.keys(drafts || {})) {
+    const saved = (groups || []).some((g) => g.cards.some((c) => c.key === key && c.layout === String(drafts[key]).trim()))
+    if (saved) dropped = true
+    else kept[key] = drafts[key]
+  }
+  return dropped ? kept : null
 }
 
 // ---- edits

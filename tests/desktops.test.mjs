@@ -84,7 +84,10 @@ test("cards: no desktops from Lua falls back to the live monitor names; no data 
   const m = D.cards({}, doc({}), { liveNames: ["Panel A"] })
   assert.equal(m.groups[0].name, "Panel A")
   assert.equal(m.groups[0].cards.length, 10)
-  assert.deepEqual(D.cards(null, null, null).groups, [])
+  assert.equal(m.fallback, true)
+  assert.equal(m.groups[0].cards[0].editable, false)
+  assert.equal(D.cards(live, doc({}), { liveNames: ["Panel A"] }).groups[0].cards[0].editable, true)
+  assert.deepEqual(D.cards(null, null, null), { groups: [], fallback: false })
 })
 
 test("cards: a zone plan shows its zones with apps, notes, and the mode switch it needs", () => {
@@ -107,7 +110,8 @@ test("cards: a zone plan shows its zones with apps, notes, and the mode switch i
   assert.equal(t.badge, "Tiled")
   assert.equal(t.modeNote, "") // mode unknown for a desktop Lua gave no workspace for
   const chrome = t.rows.find((r) => r.cls === "chromium")
-  assert.ok(chrome.notes.some((n) => /Class not confirmed/.test(n)))
+  assert.ok(chrome.notes.some((n) => /^Class is a guess \(chromium\)\. Open the app once/.test(n)))
+  assert.equal(chrome.want, "chromium")
   assert.ok(chrome.notes.some((n) => /placement rule \(desktop 7\)/.test(n)))
   assert.ok(chrome.notes.some((n) => /profile or folder/.test(n)))
   assert.deepEqual(t.rows.map((r) => [r.pos, r.rect]), [[1, [0, 0, 0.5, 1]], [2, [0.5, 0, 0.5, 1]], [3, null]])
@@ -233,6 +237,65 @@ test("layoutSavedText: the floating switch (D19) and what was taken out", () => 
   assert.equal(D.layoutSavedText("columns:2", "tiled", []), "Saved. Open all switches this desktop to Floating")
   assert.equal(D.layoutSavedText("tiled", "tiled", []), "Saved")
   assert.equal(D.layoutSavedText("full", "floating", ["b"]), "Saved. Taken out (no room): b")
+})
+
+test("seenClasses: open windows confirm a class through their desktop entry; live wins over a captured scene", () => {
+  const entries = [{ id: "org.example.Notes.desktop", startupWMClass: "", exec: "notes-app" }, { id: "other", startupWMClass: "", exec: "" }]
+  const cap = { cap: { windows: [win("x", undefined, { app: "org.example.Notes", class: "OldNotes" })] } }
+  assert.deepEqual(D.seenClasses(cap, ["notes-app", "unknown.Class", "", null], entries), { "org.example.Notes": "notes-app" })
+  assert.deepEqual(D.seenClasses(cap, undefined, undefined), { "org.example.Notes": "OldNotes" })
+})
+
+test("a guessed class: noted, then confirmed once the app is open, then a re-pick stores the real class", () => {
+  const apps = [{ value: "org.example.Notes", label: "Notes", icon: "", startupWMClass: "" }]
+  const entries = [{ id: "org.example.Notes", startupWMClass: "", exec: "notes-app" }]
+  // picked while the app was never seen: the entry id is stored as a guess
+  const guess = D.classOf("org.example.Notes", apps, D.seenClasses({}, [], entries))
+  assert.deepEqual(guess, { class: "org.example.Notes", confirmed: false })
+  const d = D.edit(doc({}), desk(1), "layout", "columns:2").doc
+  const picked = D.edit(d, desk(1), "app", { pos: 1, id: "org.example.Notes", class: guess.class }).doc
+  let row = D.cards(live, picked, { apps, entries }).groups[0].cards[0].rows[0]
+  assert.equal(row.notes[0], "Class is a guess (org.example.Notes). Open the app once, then pick it again here.")
+  assert.equal(row.want, "org.example.Notes")
+  // the app is open now: the page sees its real class and the row asks for a re-pick (want differs from the stored class)
+  const open = Object.assign({}, live, { classes: ["notes-app"] })
+  row = D.cards(open, picked, { apps, entries }).groups[0].cards[0].rows[0]
+  assert.match(row.notes[0], /real class is notes-app now: pick it again/)
+  assert.equal(row.want, "notes-app")
+  const now = D.classOf("org.example.Notes", apps, D.seenClasses(picked.scenes, open.classes, entries))
+  assert.deepEqual(now, { class: "notes-app", confirmed: true })
+  const fixed = D.edit(picked, desk(1), "app", { pos: 1, id: "org.example.Notes", class: now.class }).doc
+  row = D.cards(open, fixed, { apps, entries }).groups[0].cards[0].rows[0]
+  assert.deepEqual([row.cls, row.want], ["notes-app", "notes-app"])
+  assert.ok(!row.notes.some((n) => /guess/.test(n)))
+})
+
+test("positions: free windows at the default rect are drawn stepped, others as saved", () => {
+  const fw = [win("a"), win("b", undefined, { rect: [0.5, 0, 0.5, 1] }), win("c"), win("d", undefined, { rect: undefined })].map((w) => { delete w.zone; return w })
+  assert.deepEqual(D.positions({ layout: "free", windows: fw }).map((r) => r.rect), [[0, 0, 0.6, 0.6], [0.5, 0, 0.5, 1], [0.08, 0.08, 0.6, 0.6], [0.16, 0.16, 0.6, 0.6], null])
+})
+
+test("edit on a not connected focused-monitor plan (identity empty, focused)", () => {
+  const d = doc({ f: plan("tiled", [], { home_monitor: "", home_slot: 4 }) })
+  const r = D.edit(d, { identity: "", slot: 4, focused: true }, "app", { pos: 1, id: "x", class: "x" })
+  assert.deepEqual([r.name, r.doc.scenes.f.windows.length, r.doc.scenes.f.home_monitor], ["f", 1, ""])
+  assert.deepEqual(roundTrip(r.doc).errors, [])
+})
+
+test("newSceneName: a long monitor name is cut and a taken name still gets a suffix within 40", () => {
+  const id = "A Very Long Monitor Description From Some Maker"
+  const first = D.newSceneName(id, 10, {})
+  const second = D.newSceneName(id, 10, { [first]: {} })
+  assert.equal(second, first + "-2")
+  assert.ok(second.length <= 40 && /^[a-z0-9_-]+$/.test(second), second)
+  assert.ok(first.endsWith("-10"))
+})
+
+test("pruneDrafts: a saved draft is dropped, a refused one kept, nothing dropped is null", () => {
+  const groups = [{ cards: [{ key: "m\n1", layout: "0 0 1 1" }, { key: "m\n2", layout: "tiled" }] }]
+  assert.deepEqual(D.pruneDrafts({ "m\n1": " 0 0 1 1 ", "m\n2": "0 0 2 1" }, groups), { "m\n2": "0 0 2 1" })
+  assert.equal(D.pruneDrafts({ "m\n2": "0 0 2 1" }, groups), null)
+  assert.equal(D.pruneDrafts(null, null), null)
 })
 
 test("positions: a bad layout has no rows, full without an app, tiled and free stop offering a row at 10", () => {

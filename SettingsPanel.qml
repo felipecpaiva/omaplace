@@ -287,7 +287,7 @@ Item {
           background: root.background
           foreground: root.foreground
           fontFamily: root.fontFamily
-          onCanceled: { root.confirm = null; content.forceActiveFocus() }
+          onCanceled: { root.confirm = null; root.reload(); content.forceActiveFocus() } // reload: a canceled "No plan" pick shows the real layout again
           onConfirmed: root.confirmDelete()
         }
       }

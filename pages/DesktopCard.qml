@@ -14,7 +14,7 @@ ColumnLayout {
   property var model: ({})
   property var apps: []
   property var view: null          // the DesktopsPage: customKey, drafts and openRows survive a rebuild there
-  readonly property bool writable: editor.panel.info.scenesWritable
+  readonly property bool writable: editor.panel.info.scenesWritable && editor.model.editable !== false
   readonly property bool custom: editor.model.choice === "custom" || (!!editor.view && editor.view.customKey === editor.model.key)
   readonly property string draft: editor.view ? editor.view.drafts[editor.model.key] || "" : ""
   readonly property var layoutOptions: [{ value: "", label: "No plan" }].concat(Desktops.LAYOUT_CHOICES, [{ value: "custom", label: "Custom zones" }])
@@ -42,6 +42,12 @@ ColumnLayout {
     visible: editor.model.error !== ""
     color: Color.urgent
     text: "This plan has a problem: " + editor.model.error + ". Fix it in ~/.config/omaplace/scenes.toml first; nothing is saved until then."
+  }
+  Note {
+    panel: editor.panel
+    visible: editor.model.editable === false
+    color: Color.urgent
+    text: "Reading monitors failed, try again (close and open this window). Nothing can be changed until then."
   }
 
   RowLayout {
@@ -90,7 +96,6 @@ ColumnLayout {
     Layout.preferredWidth: Math.min(editor.width, Style.space(360))
     Layout.preferredHeight: implicitHeight
     rows: editor.model.rows
-    emptyText: editor.model.rows.length === 0 ? "No apps yet" : ""
     foreground: editor.panel.foreground
     accent: editor.panel.accent
     fontFamily: editor.panel.fontFamily

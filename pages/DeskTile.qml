@@ -10,6 +10,23 @@ Item {
   property bool selected: false
   signal picked()
 
+  activeFocusOnTab: true
+  Keys.onReturnPressed: tile.picked()
+  Keys.onEnterPressed: tile.picked()
+  Keys.onSpacePressed: tile.picked()
+  Accessible.role: Accessible.Button
+  Accessible.name: "Desktop " + tile.card.slot + ", " + tile.card.badge
+  Accessible.onPressAction: tile.picked()
+
+  Rectangle { // focus ring
+    anchors.fill: parent
+    visible: tile.activeFocus
+    color: "transparent"
+    radius: Style.cornerRadius
+    border.width: 2
+    border.color: tile.panel.accent
+  }
+
   Column {
     anchors.fill: parent
     anchors.margins: Style.space(4)

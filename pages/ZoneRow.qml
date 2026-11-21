@@ -16,7 +16,7 @@ ColumnLayout {
   property var view: null          // the DesktopsPage: which rows show More survives a rebuild there
   readonly property string rowKey: row.card.key + "\n" + row.place.pos
   readonly property bool more: !!row.view && !!row.view.openRows[row.rowKey]
-  readonly property bool writable: row.panel.info.scenesWritable
+  readonly property bool writable: row.panel.info.scenesWritable && row.card.editable !== false
 
   spacing: Style.spacing.xxs
 
@@ -43,7 +43,8 @@ ColumnLayout {
       foreground: row.panel.foreground
       accent: row.panel.accent
       fontFamily: row.panel.fontFamily
-      onChanged: function (value) { if (value !== "" && value !== row.place.app) row.panel.editPlan(row.card, "app", { pos: row.place.pos, id: value }) }
+      // the same app again is sent too when its stored class is a guess the page can now confirm (row.want)
+      onChanged: function (value) { if (value !== "" && (value !== row.place.app || row.place.cls !== row.place.want)) row.panel.editPlan(row.card, "app", { pos: row.place.pos, id: value }) }
     }
     Button {
       visible: !row.place.empty

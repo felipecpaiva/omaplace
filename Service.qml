@@ -85,7 +85,11 @@ Item {
 
   // Desktops page (WP13): the live desktops, read only when the page asks (desktopsInfo), never on a timer.
   // desktopsLive: { monitors (Lua desktops()), modes: { workspace: tiled | scrolling | floating }, windows: { workspace: count },
-  // reason }. deskBusy/deskAgain: one read at a time, one more if asked meanwhile. deskModes: workspaces still to ask.
+  // classes (open window classes, to confirm a planned app's class), reason }. deskBusy/deskAgain: one read at a time, one
+  // more if asked meanwhile. deskModes: workspaces still to ask. deskGen: the read the desk* processes belong to (an answer
+  // of an older read is dropped). deskStarted: when the read began; one older than 10 s counts as stuck (no timer).
+  property int deskGen: 0
+  property real deskStarted: 0
   property var desktopsLive: ({})
   property bool deskBusy: false
   property bool deskAgain: false
@@ -827,18 +831,24 @@ Item {
 
   // ---- Desktops page (WP13): live desktops for the cards, and plan edits. Commands run one at a time through async
   // Process: desktops() through hyprctl eval (its own ids and files, not a request's), hyprctl workspaces -j for the window
-  // counts, then omarchy-hyprland-workspace-layout-current per shown workspace. revision++ when the read is done.
+  // counts, hyprctl clients -j for the open window classes, then omarchy-hyprland-workspace-layout-current per shown
+  // workspace. revision++ when the read is done.
 
   function desktopsInfo() {
-    if (root.deskBusy) { root.deskAgain = true; return }
+    // A read can wedge when a command never starts (no exit comes). Without a timer, the next ask after 10 s starts over.
+    if (root.deskBusy && Date.now() - root.deskStarted < 10000) { root.deskAgain = true; return }
     if (!root.dirsReady) { root.deskAgain = true; root.ensureDirs(); return } // mkdirProc calls this again
+    root.deskGen++
+    for (let p of [deskEval, deskCat, deskWs, deskClients, deskMode]) p.running = false
     root.deskBusy = true
+    root.deskStarted = Date.now()
     root.deskAgain = false
-    root.deskNext = { reason: "", monitors: [], windows: {}, modes: {} }
+    root.deskNext = { reason: "", monitors: [], windows: {}, modes: {}, classes: [] }
     root.deskId = "panel-" + (++root.deskCounter)
-    deskEval.command = ["hyprctl", "eval", LuaCall.wrap("desktops", [LuaLiteral.encode(root.deskId)], LuaLiteral.encode(root.deskReplyPath()))]
-    deskEval.running = true
+    root.deskRun(deskEval, ["hyprctl", "eval", LuaCall.wrap("desktops", [LuaLiteral.encode(root.deskId)], LuaLiteral.encode(root.deskReplyPath()))])
   }
+
+  function deskRun(proc, cmd) { proc.gen = root.deskGen; proc.command = cmd; proc.running = true }
 
   function deskReplyPath() { return root.runtimeDir + "/reply-" + root.deskId + "-desktops.txt" }
   function deskJsonPath() { return root.runtimeDir + "/desktops-" + root.deskId + ".json" }
@@ -851,7 +861,19 @@ Item {
     let d = c === "ok" && brace !== -1 ? Summary.parseJson(text.slice(brace)) : null
     root.deskNext.monitors = d && Array.isArray(d.monitors) ? d.monitors : []
     if (!d) root.deskNext.reason = c === "no_lua" ? "The omaplace Lua module is not loaded in Hyprland" : "No desktop list from the Lua module (" + (c || "no answer") + ")"
-    deskWs.running = true
+    root.deskRun(deskWs, ["hyprctl", "workspaces", "-j"])
+  }
+
+  // Only the classes are kept (never titles).
+  function onDeskClients(text) {
+    let list = Summary.parseJson(text)
+    let seen = {}
+    for (let w of (Array.isArray(list) ? list : [])) {
+      let cls = w ? String(w.initialClass || w.class || "") : ""
+      if (cls !== "") seen[cls] = true
+    }
+    root.deskNext.classes = Object.keys(seen)
+    root.nextDeskMode()
   }
 
   function onDeskWorkspaces(text) {
@@ -864,7 +886,7 @@ Item {
       for (let s of (m && Array.isArray(m.slots) ? m.slots : [])) if (s && Number.isInteger(s.workspace) && s.workspace > 0) wsList.push(s.workspace)
     }
     root.deskModes = wsList
-    root.nextDeskMode()
+    root.deskRun(deskClients, ["hyprctl", "clients", "-j"])
   }
 
   function nextDeskMode() {
@@ -875,8 +897,7 @@ Item {
       if (root.deskAgain) root.desktopsInfo()
       return
     }
-    deskMode.command = ["omarchy-hyprland-workspace-layout-current", String(root.deskModes[0])]
-    deskMode.running = true
+    root.deskRun(deskMode, ["omarchy-hyprland-workspace-layout-current", String(root.deskModes[0])])
   }
 
   function onDeskMode(text) {
@@ -893,7 +914,7 @@ Item {
   function desktopCards() {
     try {
       let doc = SceneStore.parse(root.readNow(scenesFile))
-      let m = Desktops.cards(root.desktopsLive, doc, { rules: root.config().rules, apps: root.appChoices(), liveNames: root.liveMonitors })
+      let m = Desktops.cards(root.desktopsLive, doc, { rules: root.config().rules, apps: root.appChoices(), entries: root.entries(), liveNames: root.liveMonitors })
       m.reason = root.desktopsLive.reason || ""
       m.loading = root.deskBusy && !root.desktopsLive.monitors
       return m
@@ -907,8 +928,11 @@ Item {
     try {
       let w = root.writableScenes()
       if (w.error) return Summary.answer(w.error)
-      // the app picker gives an entry id; its class comes from the entry or a captured scene (design 14.7)
-      if (op === "app" && arg) arg = { pos: arg.pos, id: String(arg.id || ""), class: Desktops.classOf(String(arg.id || ""), root.appChoices(), Desktops.seenClasses(w.doc.scenes)).class }
+      // the app picker gives an entry id; its class comes from the entry, an open window or a captured scene (design 14.7)
+      if (op === "app" && arg) {
+        let seen = Desktops.seenClasses(w.doc.scenes, root.desktopsLive.classes, root.entries())
+        arg = { pos: arg.pos, id: String(arg.id || ""), class: Desktops.classOf(String(arg.id || ""), root.appChoices(), seen).class }
+      }
       let e = Desktops.edit(w.doc, { identity: identity, slot: slot, focused: focused }, op, arg)
       if (e.error) return Summary.answer(root.fail("failed", e.error))
       let err = e.changed ? root.writeScenes(w.text, SceneStore.serialize(e.doc)) : ""
@@ -964,12 +988,12 @@ Item {
   Process { id: chainOut; stdout: StdioCollector { onStreamFinished: if (root.chainNext) root.chainNext(text) } }
   Process { id: chainRun; onExited: (code) => { if (root.chainNext) root.chainNext(code) } }
   // Desktops page reads (WP13), one after another.
-  // shortcut: a command that cannot start sends no exit and leaves deskBusy set until the shell restarts; hyprctl and the
-  // Omarchy command are always there on Omarchy, add an onRunningChanged guard (like pickProc) if a report says otherwise.
-  Process { id: deskEval; onExited: { deskCat.command = ["cat", "--", root.deskReplyPath(), root.deskJsonPath()]; deskCat.running = true } }
-  Process { id: deskCat; stdout: StdioCollector { onStreamFinished: root.onDeskReply(text) } }
-  Process { id: deskWs; command: ["hyprctl", "workspaces", "-j"]; stdout: StdioCollector { onStreamFinished: root.onDeskWorkspaces(text) } }
-  Process { id: deskMode; stdout: StdioCollector { onStreamFinished: root.onDeskMode(text) } }
+  // `gen`: the read each one belongs to; an answer from an older read (desktopsInfo started over) is dropped.
+  Process { id: deskEval; property int gen: 0; onExited: if (gen === root.deskGen) root.deskRun(deskCat, ["cat", "--", root.deskReplyPath(), root.deskJsonPath()]) }
+  Process { id: deskCat; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskCat.gen === root.deskGen) root.onDeskReply(text) } }
+  Process { id: deskWs; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskWs.gen === root.deskGen) root.onDeskWorkspaces(text) } }
+  Process { id: deskClients; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskClients.gen === root.deskGen) root.onDeskClients(text) } }
+  Process { id: deskMode; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskMode.gen === root.deskGen) root.onDeskMode(text) } }
   Process { id: settingsProc; command: ["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omaplace"] }
 
   Process {
