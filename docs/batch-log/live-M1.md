@@ -24,3 +24,17 @@ Plans written by hand to `$XDG_RUNTIME_DIR/omaplace/plan-<run>.lua` and opened w
 | First run: 3 terminals on tiled workspace 8 | **fail**: every window opened but none was claimed. Cause: Hyprland passes windows to Lua as userdata, and the `window.open` handler returned early on `type(w) ~= "table"`. The fake hl uses tables, so all unit tests passed. Fixed, and `tests/hl_userdata.test.sh` now fails on that pattern |
 | After the fix: 3 terminals, tiled workspace 8, `existing = new` | pass: run `done`, 3 placed, all tagged `omaplace-slot=...`, left-to-right order 1, 2, 3 |
 | 2 terminals on floating workspace 1 with rects left half and bottom-right quarter | pass: 800x974 at 0,25 and 799x487 at 800,512 on a 1600x975 usable area (within 1 px) |
+
+# Live check WP5 round trip (service + CLI + engine), 2026-11-21
+
+Plugin installed by cloning the repo into `~/.config/omarchy/plugins/io.github.felipecpaiva.omaplace` and enabling it
+(`omarchy-shell shell setPluginEnabled ... true`). Test apps: foot (tiled) and Omacalc (floats itself).
+
+| Check | Result |
+|---|---|
+| `omaplace status` through the plugin's own IPC target | pass |
+| `omaplace save livetest` on workspace 8 | pass: 2 windows, no titles in scenes.toml, terminal folder captured |
+| First `omaplace open livetest` on workspace 9 | **fail**, two bugs: (1) the terminal was relaunched with `xdg-terminal-exec`, which starts the default terminal with another class, so the slot expired; (2) the service missed the final status (Lua replaces status.json by rename, the file watch lost it) and reported a timeout after 53 s. Fixed: terminals relaunch as themselves with their own folder flag; the service also reads status every 250 ms while a request waits. Also: a tiled window's rect was saved as 1.0006, now clamped |
+| Service code reload | a rescan or a disable and enable keeps the old JavaScript; `omarchy restart shell` loads it (then close the theme picker with `omarchy-shell image-selector cancel <path>`) |
+| `omaplace open livetest` on workspace 9 after the fixes | pass in 2.6 s: foot and Omacalc started and placed, view on 9 |
+| `omaplace open livetest` on workspace 7 with the windows still open (`existing = move`) | pass: both moved to 7, nothing started twice |
