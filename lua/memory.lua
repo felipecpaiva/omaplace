@@ -9,14 +9,14 @@ local M = {}
 M.CAP = 200
 M.MAX_TEXT = 1048576
 
--- Which events each `app_memory` mode records. "auto" is last_place for now (WP10 adds the scene moves).
+-- Which events each `app_memory` mode records. "auto" also reports scene moves (the glue does that, not this module).
 local RECORDS = {
   scene = { placed = true },
   last_place = { placed = true, closed = true, moved = true },
   auto = { placed = true, closed = true, moved = true },
 }
 
-function M.new() return { schema = 1, seq = 0, apps = {} } end
+function M.new() return { schema = 1, seq = 0, apps = {}, bound = {} } end
 
 -- No context is the empty context; a context entry never answers for an untagged window (D18 rule 5).
 function M.key(class, context)
@@ -87,6 +87,49 @@ function M.lookup(mem, class, context)
   return mem.apps[M.key(class, context)]
 end
 
+-- ---------------------------------------------------------------- bound scenes (auto mode)
+-- bound[tostring(workspace id)] = { scene = name, apps = { key(class, context), ... } }: a scene open on that workspace
+-- and the apps it holds. String keys, so encode() writes it as a table with named keys.
+M.MAX_BOUND = 100
+M.MAX_APPS = 100
+local SCENE_RE = "^[%w_%-]+$"
+
+local function clean_apps(list)
+  local out = {}
+  if type(list) ~= "table" then return out end
+  for _, k in ipairs(list) do
+    if type(k) == "string" and k ~= "" and #out < M.MAX_APPS then out[#out + 1] = k end
+  end
+  return out
+end
+
+-- Bind `scene` to workspace `ws`. Returns false for a bad id, name, or when the table is full.
+function M.bind(mem, ws, scene, apps)
+  local id = math.tointeger(ws)
+  if type(mem) ~= "table" or not id or id < 1 or type(scene) ~= "string" or #scene > 40 or not scene:match(SCENE_RE) then
+    return false
+  end
+  mem.bound = type(mem.bound) == "table" and mem.bound or {}
+  local n = 0
+  for _ in pairs(mem.bound) do n = n + 1 end
+  if n >= M.MAX_BOUND and not mem.bound[tostring(id)] then return false end
+  mem.bound[tostring(id)] = { scene = scene, apps = clean_apps(apps) }
+  return true
+end
+
+function M.unbind(mem, ws)
+  local id = math.tointeger(ws)
+  if type(mem) ~= "table" or type(mem.bound) ~= "table" or not id or mem.bound[tostring(id)] == nil then return false end
+  mem.bound[tostring(id)] = nil
+  return true
+end
+
+function M.bound(mem, ws)
+  local id = math.tointeger(ws)
+  if type(mem) ~= "table" or type(mem.bound) ~= "table" or not id then return nil end
+  return mem.bound[tostring(id)]
+end
+
 -- ---------------------------------------------------------------- text
 
 -- Same escaping as js/LuaLiteral.js: backslash, quote, newline and every control byte, so no text ends the string.
@@ -126,7 +169,7 @@ end
 
 -- The memory as `return { ... }` text, or nil and an error.
 function M.encode(mem)
-  local ok, text = pcall(enc, { schema = 1, seq = math.tointeger(mem.seq) or 0, apps = mem.apps or {} })
+  local ok, text = pcall(enc, { schema = 1, seq = math.tointeger(mem.seq) or 0, apps = mem.apps or {}, bound = mem.bound or {} })
   if not ok then return nil, tostring(text) end
   return "return " .. text .. "\n"
 end
@@ -151,6 +194,12 @@ function M.decode(text)
     end
   end
   while drop_oldest(mem) do end
+  if type(t.bound) == "table" then
+    for k, e in pairs(t.bound) do
+      local id = type(k) == "string" and k:match("^%d+$") and math.tointeger(tonumber(k))
+      if id and type(e) == "table" then M.bind(mem, id, e.scene, e.apps) end
+    end
+  end
   return mem
 end
 

@@ -1,0 +1,4 @@
+# files the glue tests write while they run
+*
+!.gitignore
+!.gitkeep

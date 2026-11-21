@@ -1,0 +1,3 @@
+# made-up config for the auto app memory glue test
+session = "off"
+app_memory = "auto"
