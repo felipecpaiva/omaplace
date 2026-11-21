@@ -82,7 +82,7 @@ Done when:
 
 Work packages: WP11, WP12 (12a Lua, 12b service), WP13. D22 decided (option 1; upstream PR omacom/omarchy#19671, fallback toggle until it ships).
 
-Status 2026-11-21: WP11 to WP13 built, reviewed and merged; 46 suites pass. Live 2026-11-21 (`batch-log/live-M5.md`): checks 1, 2, 3 pass; 4 sends the notification but the update was `not_possible` in both tried cases; 5 partial (full plan not maximized by Open all); 6 not tried. S11 pass, S12 fallback pass, S13 click not done. Retest after the D24 fixes: 4 and 5 pass (swap, new plan, full maximized). Open: 6 (needs a real login), S13 real click, second monitor.
+Status 2026-11-21: WP11 to WP13 built, reviewed and merged; 46 suites pass. Live 2026-11-21 (`batch-log/live-M5.md`): checks 1, 2, 3 pass; 4 sends the notification but the update was `not_possible` in both tried cases; 5 partial (full plan not maximized by Open all); 6 not tried. S11 pass, S12 fallback pass, S13 click not done. Retest after the D24 fixes: 4 and 5 pass (swap, new plan, full maximized). Open: 6 (needs a real login), S13 real click, second monitor. Turned on for daily use on the laptop 2026-11-21.
 
 ## Not goals (for now)
 
