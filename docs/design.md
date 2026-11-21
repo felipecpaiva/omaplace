@@ -823,6 +823,36 @@ promised never to write Omarchy's state (section 3). Options:
 - **Order:** WP11, then WP12, then WP13 (WP12 and WP13 both edit `Service.qml`). Zone golden vectors come from a tool
   script against a local omagnet checkout, as for geometry.
 
+### 14.8 WP12 contract (Lua side WP12a, service side WP12b, built in parallel)
+
+| Seam | Writer | Reader | Shape |
+|---|---|---|---|
+| `~/.local/state/omaplace/plans.lua` | service (`PlansFile.build`), on start and after every `scenes.toml` write or file change, atomic | Lua at load, on `reload_config` and on `omaplace.reload_plans()` | `return { plans = { { scene, home_monitor, home_slot, layout, mode, open_at_login, windows = { { class, context, rect, floating, snap, fullscreen? } } } } }`; window `i` is `scene.windows[i]` (1-based) |
+| `_G.omaplace.reload_plans()` | service through `LuaCall` after writing `plans.lua` | Lua | returns `true` or `nil, reason` |
+| `_G.omaplace.desktops()` | Lua | service (reply file, `LuaCall`) | `{ monitors = { { identity, name, focused, slots = { { slot, workspace } } } } }` for slots 1..10 via `slots.lua`; the service and the Desktops page use it to find a plan's workspace id |
+| `$XDG_RUNTIME_DIR/omaplace/plan-moves.json` | Lua, atomic, last 20 | service (FileView, read on change) | `{ "seq": n, "moves": [ { "id": n, "scene", "window": i, "class", "context", "kind": "desktop" or "zone", "to": { "identity", "slot", "rect": [x,y,w,h] or null, "floating" } } ] }` |
+| `$XDG_RUNTIME_DIR/omaplace/login.json` | Lua, once per `HYPRLAND_INSTANCE_SIGNATURE`, only if some plan has `open_at_login` | service | `{ "instance": sig, "plans": [ scene names ] }`; the service keeps `login-done-<sig>` in the runtime folder so a shell restart never opens them twice |
+| CLI `omaplace plan-update <move id>` | the "Update plan" notification action | service IPC `planUpdate(id)` | writes the move's `to` into the scene: `kind = desktop` sets `home_monitor`/`home_slot` of a single-window plan or, for many windows, moves the window to the plan of the target desktop when one exists, else reports `not_possible`; `kind = zone` sets the window's `zone` to the zone whose rect contains the window's centre, else switches the plan to `free` only if the user confirms (not in WP12: report `not_possible`) |
+
+Lua rules (WP12a): new window order = run ticket > user rule (D9) > plan > app memory. A plan snaps only the first
+window of its class, only `snap = true` entries, only when the plan's monitor resolves (monitors.lua) and the slot maps
+to a workspace. Floating plan: move to the workspace, set floating, place the rect with `place.lua` (resize, move,
+verify). Tiled or scrolling plan: move to the workspace only. `fullscreen = 1`: after placing, set fullscreen state 1
+(maximize, keeps the bar) with the Hyprland Lua dispatcher found in `/usr/share/hypr/stubs/hl.meta.lua`. Own moves are
+marked (like `memory_own`) and never reported. Reports: `window.move_to_workspace` of a snapped planned window to
+another desktop gives `kind = desktop`; D23 `window.active` check of the window that lost focus gives `kind = zone`,
+once per window until it is back or closed. All handlers inside `pcall`, no timers beyond existing debounce patterns,
+no synchronous `hyprctl`.
+
+Service rules (WP12b): open a plan ("Open all", login, IPC `openPlan(name)`, CLI `omaplace open <name>` already works
+for any scene) = 1) find the workspace with `desktops()`, 2) if the plan's `mode` is not empty and differs from
+`omarchy-hyprland-workspace-layout-current <ws>`, run `omarchy-hyprland-workspace-layout-set <ws> <mode>` when that
+command exists, else, only when the run was started by the user, focus that workspace and run
+`omarchy-hyprland-workspace-layout-toggle` at most 2 times, checking `current` after each; at login without the set
+command, skip the switch and say so in the summary, 3) open the scene with the existing flow (the plan's home desktop is
+the target). All commands through async `Process`. Notifications: one per move, `omarchy-notification-send` with
+`--action "Update plan" omaplace plan-update <id>`; never for own moves (Lua does not report them).
+
 ### 14.5 Spikes
 
 | # | Question | For |
