@@ -988,7 +988,7 @@ function M.session_save()
   return write_in(d, "sessions.json", Json.encode(list) .. "\n")
 end
 
--- ONE debounce timer for the whole session: made on first use, then re-armed with set_timeout and set_enabled.
+-- One live debounce timer for the whole session: each arm replaces it (see arm_session).
 -- at = nil only disarms. session_at is the time the write is owed, so an early wake-up just re-arms.
 local arm_session
 local function on_session_timer()
@@ -1013,12 +1013,10 @@ function arm_session(at, now)
   end
   M.session_at = at
   local ms = math.max(1, math.floor(at - now))
-  if M.session_timer then
-    pcall(M.session_timer.set_timeout, M.session_timer, ms)
-    pcall(M.session_timer.set_enabled, M.session_timer, true)
-  else
-    M.session_timer = hl.timer(on_session_timer, { type = "oneshot", timeout = ms })
-  end
+  -- A fired one-shot HL.Timer cannot be re-armed (set_timeout and set_enabled(true) do nothing; checked live
+  -- 2026-11-21), so every arm makes a fresh timer and switches the old one off. session_at guards stale fires.
+  if M.session_timer then pcall(M.session_timer.set_enabled, M.session_timer, false) end
+  M.session_timer = hl.timer(on_session_timer, { type = "oneshot", timeout = ms })
 end
 
 function M.on_session_event(kind)

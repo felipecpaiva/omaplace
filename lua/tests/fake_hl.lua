@@ -71,8 +71,10 @@ function M.new()
     -- Hyprland's HL.Timer has set_enabled and is_enabled (method calls); cancel() is kept for older tests.
     return {
       cancel = function() t.live = false end,
-      -- like Hyprland's: enabling starts the countdown again, from now, with the last timeout
+      -- like Hyprland's: enabling starts the countdown again, from now, with the last timeout; but a one-shot that
+      -- has fired is dead and cannot be re-armed (checked live 2026-11-21), so enabling it does nothing
       set_enabled = function(_, on)
+        if t.fired then return end
         t.live = on == true
         if t.live then t.due = fake.now + t.ms end
       end,
@@ -125,7 +127,7 @@ function M.new()
         if t.live and t.due <= target and (not pick or t.due < pick.due or (t.due == pick.due and t.id < pick.id)) then pick = t end
       end
       if not pick then break end
-      pick.live = false
+      pick.live, pick.fired = false, true
       fake.now = math.max(fake.now, pick.due)
       pick.fn()
     end

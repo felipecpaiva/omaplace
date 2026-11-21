@@ -132,7 +132,7 @@ fake.emit("window.active")
 eq(read("session-inst1.json"), nil, "not yet at 20 s")
 fake.advance(10000)
 eq(read("session-inst1.json") ~= nil, true, "written at 30 s although events never paused 15 s")
-eq(#fake.timers, timers_made, "the one timer was re-armed, none created")
+eq(fake.pending_timers() <= 1, true, "never more than one session timer pending")
 fake.advance(15000)
 _G.omaplace.session_save_now() -- leaves instance 1's file for the prune checks below
 
