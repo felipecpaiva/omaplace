@@ -13,12 +13,16 @@ import "js/MenuExt.js" as MenuExt
 import "js/MovesFeed.js" as MovesFeed
 import "js/AutoMove.js" as AutoMove
 import "js/LuaCall.js" as LuaCall
+import "js/PlansFile.js" as PlansFile
+import "js/PlanMoves.js" as PlanMoves
+import "js/ModeSwitch.js" as ModeSwitch
 
 // omaplace service (design 4.3, 6.2, 6.3, 7.2): the CLI's IPC target and the only file that runs processes.
 // All data work goes through the js/ modules. One slow request (save, open, rule add) runs at a time; every other
 // request answers busy meanwhile, so two writers never race on scenes.toml or config.toml.
-// Idle cost: no timer armed, no process running. One file watched only while app_memory is "auto" (moves.json). While a
-// request runs: two one-shot timers (the 2 s Lua check and request_timeout_s) and a watch on status.json during an open.
+// Idle cost: no timer armed, no process running. Files watched: moves.json only while app_memory is "auto"; always
+// scenes.toml (to rebuild plans.lua) and login.json (desktop plans, WP12b; Lua sends the plan move notifications itself). While a request runs: two
+// one-shot timers (the 2 s Lua check and request_timeout_s) and a watch on status.json during an open.
 Item {
   id: root
 
@@ -64,8 +68,23 @@ Item {
   // The result file of the request before this one: deleted when the next one ends (the CLI read it long before).
   property string lastResultPath: ""
 
+  // Desktop plans (WP12b, design 14.8). plansText: what plans.lua holds now (a rewrite with the same text is skipped).
+  // plansBusy/plansAgain: one reload_plans call at a time, one more if a write came meanwhile.
+  // notices: notification argv lists waiting for noticeProc (open summaries), so none is dropped. loginQueue: plans
+  // still to open at login, one request after another. chainNext: the callback of the running mode switch command.
+  property string plansText: ""
+  property bool plansBusy: false
+  property bool plansAgain: false
+  property var notices: []
+  property bool noticeBusy: false
+  property var loginQueue: []
+  property var chainNext: null
+  property int chainToken: 0
+  readonly property string instance: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
+
   // DesktopEntries is lazy: the first read is empty, so it is touched at load (no process, no timer).
-  Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher(); root.markMoves(); root.refreshAuto() }
+  // The folders come first: plans.lua and the login marker are written once mkdirProc is done.
+  Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher(); root.markMoves(); root.refreshAuto(); mkdirProc.running = true }
   // find deletes the file only when grep finds the marker line in it: argv only, no shell.
   Component.onDestruction: {
     if (root.launcherInstalled)
@@ -77,6 +96,8 @@ Item {
 
     function save(name: string): string { return root.startSave(name) }
     function open(name: string): string { return root.startOpen(name) }
+    function openPlan(name: string): string { return root.startOpen(name) }
+    function planUpdate(id: string): string { return root.planUpdate(id) }
     function restore(gen: string): string { return root.startRestore(gen) }
     function list(): string { return root.listScenes() }
     function rename(fromName: string, toName: string): string { return root.renameScene(fromName, toName) }
@@ -95,6 +116,7 @@ Item {
     root.writeError = ""
     if (oldText !== "") bakScenes.setText(oldText)
     if (root.writeError === "") scenesFile.setText(text)
+    if (root.writeError === "") root.writePlans(text)
     return root.writeError
   }
 
@@ -209,7 +231,9 @@ Item {
     if (root.req) return Summary.answer(root.fail("busy"))
     let scene = SceneStore.parse(root.readNow(scenesFile)).scenes[name]
     if (!scene) return Summary.answer(root.fail("not_found"))
-    return root.begin("open", { name: name, scene: scene })
+    if (scene.planError) return Summary.answer(root.fail("failed", "plan " + name + ": " + scene.planError))
+    // A plan opens on its own desktop after the mode switch (design 14.8); `user`: started by a person, not by login.
+    return root.begin("open", { name: name, scene: scene, plan: scene.plan === true, user: true })
   }
 
   // Restore (design 6.5): one session plan; Lua sends each window to its own monitor and desktop. The rest of the flow is open's.
@@ -239,6 +263,7 @@ Item {
     if (!r) return
     if (r.kind === "rule") activeProc.running = true
     else if (r.kind === "save") root.evalCapture()
+    else if (r.plan) root.planDesktops()
     else root.writePlan()
   }
 
@@ -392,22 +417,33 @@ Item {
     luaCheck.stop()
     root.watching = false
     root.req = null
+    // A mode switch command still running belongs to this request: stop it, and its late answer finds no callback.
+    root.chainToken++
+    root.chainNext = null
+    chainRun.running = false
+    chainOut.running = false
+    chainCat.running = false
     // Spent files of this request (plans hold launch arguments) and the previous result. Paths come from our own ids.
     let spent = []
     if (r.planPath) spent.push(r.planPath)
     if (r.kind !== "open") spent.push(root.runtimeDir + "/capture-" + r.id + ".json")
+    if (r.plan) spent.push(root.runtimeDir + "/desktops-" + r.id + ".json", root.runtimeDir + "/reply-" + r.id + "-desktops.txt")
     spent.push(root.runtimeDir + "/reply-" + r.id + ".txt")
     if (root.lastResultPath !== "") spent.push(root.lastResultPath)
     if (spent.length > 0) Quickshell.execDetached(["rm", "-f", "--"].concat(spent))
+    if (r.modeNote) res.note = r.modeNote
     resultFile.path = root.runtimeDir + "/result-" + r.id + ".json"
     root.lastResultPath = resultFile.path
     resultFile.setText(Summary.answer(res) + "\n")
-    if (r.kind === "open" && !notifyProc.running) {
-      let text = res.state ? Summary.notifyText(res) : "could not open (" + res.code + ")"
-      notifyProc.command = ["omarchy-notification-send", "omaplace: " + r.name, text]
-      notifyProc.running = true
+    if (r.kind === "open") {
+      let text = (res.state ? Summary.notifyText(res) : "could not open (" + res.code + ")") + (r.modeNote ? "; " + r.modeNote : "")
+      root.notices.push(["omarchy-notification-send", "omaplace: " + r.name, text])
+      root.nextNotice()
     }
     root.refreshAuto()
+    // The login.json watch can miss a file replaced by rename, so every request end reads it again.
+    root.checkLogin()
+    root.nextLogin()
   }
 
   // ---- auto app memory (WP10): moves Lua reported between scene desktops go into scenes.toml
@@ -440,6 +476,163 @@ Item {
       }
       root.lastMovesAt = p.maxAt
     } catch (e) { console.warn("omaplace: auto moves not applied: " + String(e.message || e)) }
+  }
+
+  // ---- desktop plans (WP12b, design 14.7, 14.8)
+
+  // shortcut: a watch is re-armed after each change because a file replaced by rename drops it (live-M1); if a live check
+  // shows changes still lost, login.json is also read after every reload_plans and request end (polling is not allowed).
+  function rearm(view) { view.watchChanges = false; view.watchChanges = true }
+
+  // plans.lua, derived from the plan = true scenes; Lua reloads it through reload_plans. text: scenes.toml, read when absent.
+  // Returns true when it wrote (and so started a reload).
+  function writePlans(text) {
+    if (!root.dirsReady) return false // mkdirProc calls this again once the state folder exists
+    try {
+      let b = PlansFile.build(SceneStore.parse(text === undefined ? root.readNow(scenesFile) : text))
+      if (b.error) { console.warn("omaplace: " + b.error); return false }
+      if (b.text === root.plansText) return false
+      for (let s of b.skipped) console.warn("omaplace: plan " + s.scene + " not snapped: " + s.reason)
+      root.plansText = b.text
+      plansFile.setText(b.text)
+      return root.plansText !== "" // onSaveFailed clears it
+    } catch (e) { console.warn("omaplace: plans.lua not written: " + String(e.message || e)) }
+    return false
+  }
+
+  function reloadPlans() {
+    if (root.plansBusy) { root.plansAgain = true; return }
+    root.plansBusy = true
+    root.plansAgain = false
+    plansEval.command = ["hyprctl", "eval", LuaCall.wrap("reload_plans", [], LuaLiteral.encode(root.runtimeDir + "/reply-plans.txt"))]
+    plansEval.running = true
+  }
+
+  function afterReloadPlans(text) {
+    root.plansBusy = false
+    let c = LuaCall.code(text)
+    if (c !== "ok") console.warn("omaplace: reload_plans: " + (c || "no answer"))
+    if (root.plansAgain) root.reloadPlans()
+    else Quickshell.execDetached(["rm", "-f", "--", root.runtimeDir + "/reply-plans.txt"]) // the next call writes a new one
+    root.checkLogin() // reload_plans is also Lua's retry of its login.json write
+  }
+
+  function nextNotice() {
+    if (root.noticeBusy || root.notices.length === 0) return
+    root.noticeBusy = true
+    noticeProc.command = root.notices.shift()
+    noticeProc.running = true
+  }
+
+  // "Update plan": write the move's new place into its plan (PlanMoves.edit), with the same guards as every scenes write.
+  function planUpdate(id) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    if (!/^[0-9]{1,9}$/.test(String(id))) return Summary.answer(root.fail("not_found"))
+    try {
+      let m = PlanMoves.find(PlanMoves.parse(root.readNow(planMovesFile)), Number(id))
+      if (!m) return Summary.answer(root.fail("not_found", "that move is no longer in the list"))
+      let w = root.writableScenes()
+      if (w.error) return Summary.answer(w.error)
+      let e = PlanMoves.edit(w.doc, m)
+      if (e.code) return Summary.answer(root.fail(e.code, e.reason))
+      let err = e.changed ? root.writeScenes(w.text, SceneStore.serialize(e.doc)) : ""
+      return Summary.answer(err === "" ? { ok: true, scene: m.scene, changed: e.changed } : root.fail("failed", err))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  // Open at login (design 14.8): Lua lists the ticked plans once per Hyprland instance; the marker in the runtime folder
+  // keeps a shell restart from opening them again. The marker is written before the first open.
+  function checkLogin() {
+    if (!root.dirsReady || !/^[A-Za-z0-9_]{1,128}$/.test(root.instance)) return
+    let login = Summary.parseJson(root.readNow(loginFile))
+    if (!login || login.instance !== root.instance || !Array.isArray(login.plans)) return
+    if (root.readNow(markerFile) !== "") return
+    root.writeError = ""
+    markerFile.setText("done\n")
+    if (root.writeError !== "") { console.warn("omaplace: login plans not opened: " + root.writeError); return }
+    root.loginQueue = login.plans.filter(function (n) { return typeof n === "string" && Summary.validName(n) })
+    root.nextLogin()
+  }
+
+  // The next login plan, when no request runs (finish() calls this again). Each is checked again against scenes.toml.
+  function nextLogin() {
+    while (!root.req && root.loginQueue.length > 0) {
+      let name = root.loginQueue.shift()
+      let scene = SceneStore.parse(root.readNow(scenesFile)).scenes[name]
+      if (!scene || scene.plan !== true || scene.open_at_login !== true || scene.planError) { console.log("omaplace: login plan skipped: " + name); continue }
+      root.begin("open", { name: name, scene: scene, plan: true, user: false })
+      return
+    }
+  }
+
+  // ---- opening a plan: desktops(), then the mode switch (ModeSwitch.decide), then writePlan(). One command at a time;
+  // a callback whose request already ended does nothing.
+
+  function chain(proc, cmd, next) {
+    let token = ++root.chainToken
+    root.chainNext = function (v) { if (root.chainToken === token && root.req) next(v) }
+    proc.command = cmd
+    proc.running = true
+  }
+
+  function desktopsPath() { return root.runtimeDir + "/desktops-" + root.req.id + ".json" }
+  function desktopsReply() { return root.runtimeDir + "/reply-" + root.req.id + "-desktops.txt" }
+
+  function planDesktops() {
+    let r = root.req
+    r.tries = 0
+    r.want = Plan.planMode(r.scene.layout)
+    if (r.want === "") { root.writePlan(); return } // full leaves the mode as it is
+    // desktops(req_id) writes desktops-<req_id>.json (like capture); one cat reads the reply code and that file together.
+    root.chain(chainRun, ["hyprctl", "eval", LuaCall.wrap("desktops", [LuaLiteral.encode(r.id)], LuaLiteral.encode(root.desktopsReply()))], function () {
+      root.chain(chainCat, ["cat", "--", root.desktopsReply(), root.desktopsPath()], root.onDesktops)
+    })
+  }
+
+  function onDesktops(text) {
+    let r = root.req
+    let c = LuaCall.code(text)
+    if (c === "no_lua") { root.finish(root.fail("no_lua")); return }
+    let brace = text.indexOf("{")
+    r.ws = ModeSwitch.workspaceOf(c === "ok" && brace !== -1 ? Summary.parseJson(text.slice(brace)) : null, r.scene.home_monitor || "", r.scene.home_slot)
+    if (r.ws === 0) {
+      r.modeNote = "mode not switched: " + (c === "ok" ? "the plan's desktop is not there" : "no desktop list from the Lua module (" + (c || "no answer") + ")")
+      root.writePlan()
+      return
+    }
+    root.readMode()
+  }
+
+  function readMode() { root.chain(chainOut, ["omarchy-hyprland-workspace-layout-current", String(root.req.ws)], root.onMode) }
+
+  function onMode(text) {
+    let r = root.req
+    let d = ModeSwitch.decide({ want: r.want, current: text, hasSet: r.hasSet, userStarted: r.user, tries: r.tries })
+    if (d.step === "set") {
+      // env exits 127 when the command is not installed: then the toggle fallback decides. Caveat: a set command that is
+      // installed but itself exits 127 (a program it runs is missing) also reads as not installed; the fallback still verifies
+      root.chain(chainRun, ["env", "omarchy-hyprland-workspace-layout-set", String(r.ws), ModeSwitch.toOmarchy(r.want)], function (code) {
+        if (code === 127) r.hasSet = false
+        else r.tries++
+        root.readMode()
+      })
+    } else if (d.step === "toggle") {
+      r.direction = d.direction
+      // the toggle cycles the focused desktop only: focus it, and press only when the focus really moved there
+      root.chain(chainRun, ["hyprctl", "eval", "hl.dispatch(hl.dsp.focus({ workspace = \"" + r.ws + "\" }))"], function () {
+        root.chain(chainOut, ["hyprctl", "activeworkspace", "-j"], root.onFocused)
+      })
+    } else {
+      if (d.reason) r.modeNote = "mode not switched: " + d.reason
+      root.writePlan()
+    }
+  }
+
+  function onFocused(text) {
+    let r = root.req
+    let w = Summary.parseJson(text)
+    if (!w || w.id !== r.ws) { r.modeNote = "mode not switched: desktop " + r.ws + " did not take the focus"; root.writePlan(); return }
+    root.chain(chainRun, ["omarchy-hyprland-workspace-layout-toggle", r.direction], function () { r.tries++; root.readMode() })
   }
 
   // ---- Omarchy menu rows (WP8). Only the settings window's button calls these.
@@ -624,11 +817,15 @@ Item {
 
   Process {
     id: mkdirProc
-    command: ["mkdir", "-p", "-m", "700", root.runtimeDir, root.configDir]
+    command: ["mkdir", "-p", "-m", "700", root.runtimeDir, root.configDir, root.stateDir]
     onExited: (code) => {
       root.dirsReady = code === 0
-      if (code === 0) root.step()
-      else root.finish(root.fail("failed", "cannot create " + root.runtimeDir))
+      if (code !== 0) { root.finish(root.fail("failed", "cannot create " + root.runtimeDir)); return }
+      root.step()
+      // reload_plans at every start, even with plans.lua unchanged (Lua's retry of its login.json write): the first write
+      // of a start always happens (plansText is empty) and reloads; only a build that failed needs the call here
+      if (!root.writePlans()) root.reloadPlans()
+      root.checkLogin()
     }
   }
 
@@ -653,7 +850,14 @@ Item {
   Process { id: catProc; stdout: StdioCollector { onStreamFinished: root.onCaptureText(text) } }
   Process { id: procProc; stdout: StdioCollector { onStreamFinished: root.onProcinfo(text) } }
   Process { id: reloadProc; command: ["hyprctl", "eval", "_G.omaplace.reload_config()"] }
-  Process { id: notifyProc }
+  Process { id: noticeProc; onExited: { root.noticeBusy = false; root.nextNotice() } }
+  Process { id: plansEval; onExited: { plansReply.command = ["cat", "--", root.runtimeDir + "/reply-plans.txt"]; plansReply.running = true } }
+  Process { id: plansReply; stdout: StdioCollector { onStreamFinished: root.afterReloadPlans(text) } }
+  // The mode switch chain (opening a plan): chainOut and chainCat answer with their output, chainRun with its exit code.
+  // chainCat is separate because onDesktops starts chainOut from inside the cat's own answer.
+  Process { id: chainCat; stdout: StdioCollector { onStreamFinished: if (root.chainNext) root.chainNext(text) } }
+  Process { id: chainOut; stdout: StdioCollector { onStreamFinished: if (root.chainNext) root.chainNext(text) } }
+  Process { id: chainRun; onExited: (code) => { if (root.chainNext) root.chainNext(code) } }
   Process { id: settingsProc; command: ["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omaplace"] }
 
   Process {
@@ -681,7 +885,18 @@ Item {
 
   // ---- files (writes are atomic: temp file, then rename)
 
-  FileView { id: scenesFile; path: root.configDir + "/scenes.toml"; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write scenes.toml" }
+  // Watched so a hand edit of scenes.toml rebuilds plans.lua; our own writes call writePlans() themselves.
+  FileView {
+    id: scenesFile
+    path: root.configDir + "/scenes.toml"
+    blockLoading: true
+    blockWrites: true
+    atomicWrites: true
+    printErrors: false
+    watchChanges: true
+    onSaveFailed: root.writeError = "cannot write scenes.toml"
+    onFileChanged: { root.writePlans(); Qt.callLater(root.rearm, scenesFile) }
+  }
   FileView { id: bakScenes; path: root.configDir + "/scenes.toml.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write scenes.toml.bak" }
   FileView { id: configFile; path: root.configDir + "/config.toml"; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write config.toml" }
   FileView { id: bakConfig; path: root.configDir + "/config.toml.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write config.toml.bak" }
@@ -720,5 +935,19 @@ Item {
   FileView { id: menuBak; path: root.menuPath + ".omaplace.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the menu backup" }
   // moves.json is only ever replaced by a rename, which a watch can miss; finish() reads it too.
   FileView { id: movesFile; path: root.runtimeDir + "/moves.json"; blockLoading: true; printErrors: false; watchChanges: root.autoMemory; onFileChanged: root.applyMoves() }
+  // Desktop plans (WP12b). plan-moves.json and login.json are Lua's; plans.lua and the login marker are ours.
+  FileView {
+    id: plansFile
+    path: root.stateDir + "/plans.lua"
+    blockWrites: true
+    atomicWrites: true
+    printErrors: false
+    onSaved: root.reloadPlans()
+    onSaveFailed: { root.plansText = ""; console.warn("omaplace: cannot write plans.lua") }
+  }
+  // Read only by planUpdate(): Lua sends the move notifications itself.
+  FileView { id: planMovesFile; path: root.runtimeDir + "/plan-moves.json"; blockLoading: true; printErrors: false }
+  FileView { id: loginFile; path: root.runtimeDir + "/login.json"; blockLoading: true; printErrors: false; watchChanges: true; onFileChanged: { root.checkLogin(); Qt.callLater(root.rearm, loginFile) } }
+  FileView { id: markerFile; path: root.runtimeDir + "/login-done-" + root.instance; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the login marker" }
   FileView { id: launcherFile; path: root.launcherDest; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false }
 }
