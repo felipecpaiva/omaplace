@@ -299,6 +299,7 @@ Item {
         ? Plan.fromSession(r.snapshot, root.launchesFor(r.snapshot.windows, cfg), { run: r.run, expiry_s: cfg.settings.expiry_seconds })
         : Plan.fromScene(r.scene, r.replace ? r.scene.windows.map(function () { return { mode: "place_only" } }) : root.launchesFor(r.scene.windows, cfg),
           Object.assign(Summary.planTarget(r.scene, r.run, r.replace ? 1 : cfg.settings.expiry_seconds), { scene: r.name }), cfg.rules)
+      if (r.replace) plan.only_tracked = true // only the windows Lua tracks for this plan, never another of the same app
       r.planPath = root.runtimeDir + "/plan-" + r.run + ".lua"
       planFile.path = r.planPath
       planFile.setText("return " + LuaLiteral.encode(plan) + "\n")
@@ -454,8 +455,8 @@ Item {
     resultFile.path = root.runtimeDir + "/result-" + r.id + ".json"
     root.lastResultPath = resultFile.path
     resultFile.setText(Summary.answer(res) + "\n")
-    // a re-place after "Update plan" is not news: the CLI already said "plan updated", and closed apps make it partial
-    if (r.kind === "open" && !r.replace) {
+    // a re-place after "Update plan" that ran is not news (the CLI already said "plan updated"); one that failed is
+    if (r.kind === "open" && (!r.replace || !res.state)) {
       let text =(res.state ? Summary.notifyText(res) : "could not open (" + res.code + ")") + (r.modeNote ? "; " + r.modeNote : "")
       root.notices.push(["omarchy-notification-send", "omaplace: " + r.name, text])
       root.nextNotice()
@@ -567,8 +568,13 @@ Item {
       let err = e.changed ? root.writeScenes(w.text, SceneStore.serialize(e.doc)) : ""
       if (err !== "") return Summary.answer(root.fail("failed", err))
       // a swap (D24): the plan's open windows go to their new zones; place_only never starts a closed one
-      if (e.replace) root.begin("open", { name: m.scene, scene: Object.assign({}, e.doc.scenes[m.scene], { existing: "move" }), replace: true })
-      return Summary.answer({ ok: true, scene: m.scene, changed: e.changed })
+      let res = { ok: true, scene: e.scene || m.scene, changed: e.changed }
+      if (e.removed) res.removed = e.removed
+      if (e.replace) {
+        let b = Summary.parseJson(root.begin("open", { name: m.scene, scene: Object.assign({}, e.doc.scenes[m.scene], { existing: "move" }), replace: true }))
+        if (!b || b.ok !== true) res.note = "windows not moved: " + ((b && b.code) || "failed")
+      }
+      return Summary.answer(res)
     } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
   }
 

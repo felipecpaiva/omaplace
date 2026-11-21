@@ -662,10 +662,13 @@ local function start_run(plan)
     local wins = {}
     for _, w in ipairs(hl.get_windows()) do wins[#wins + 1] = w end
     table.sort(wins, function(a, b) return (a.stable_id or 0) < (b.stable_id or 0) end)
+    -- a re-place after "Update plan" (D24) moves only the windows tracked for this plan
+    local only = plan.only_tracked == true and plan.scene
     for _, w in ipairs(wins) do
       local ws = w.workspace or {}
       local special = (ws.id or 0) < 0 and not Capture.home_of(w)
-      if not special and (w.initial_class or "") ~= "" then
+      local e = M.snapped[w.address]
+      if not special and (w.initial_class or "") ~= "" and (not only or (e and e.scene == only)) then
         local s = Tickets.claim(book, { class = w.initial_class, context = Capture.context_of(w), existing = true }, now)
         if s then run.info[s.n].address = w.address end
       end

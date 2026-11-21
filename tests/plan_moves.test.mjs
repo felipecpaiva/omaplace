@@ -192,6 +192,7 @@ test("desktop move of a single-window plan onto a desktop with a plan joins it, 
   const t = P.edit(doc(), mv(1, { ...mail, ...toDesk(5) }))
   assert.equal(t.changed, true)
   assert.equal(t.removed, "desk-3")
+  assert.equal(t.scene, "desk-5")
   assert.equal(t.doc.scenes["desk-3"], undefined)
   assert.deepEqual(t.doc.scenes["desk-5"].windows.map((w) => [w.class, w.zone]),
     [["org.example.Term", 1], ["org.example.Files", 2], ["org.example.Mail", 3]])
@@ -258,7 +259,8 @@ test("desktop move from a many-window plan onto a desktop with no plan: a new fr
   // another monitor: its own plan; a tiled window without a rect gets the whole desktop
   const o = P.edit(doc(), mv(1, toDesk(2, null, { to: { identity: "Other Monitor", slot: 2, rect: null, floating: false } })))
   assert.equal(o.created, "desk-other-monitor-2")
-  assert.deepEqual(o.doc.scenes[o.created].windows[0].rect, [0, 0, 1, 1])
+  assert.equal(o.scene, o.created)
+  assert.deepEqual([o.doc.scenes[o.created].windows[0].rect, o.doc.scenes[o.created].windows[0].floating], [[0, 0, 1, 1], false]) // stays tiled
 
   // a taken name gets a number
   const d = doc()

@@ -270,6 +270,12 @@ run plan-update 7
 check "plan-update maps to planUpdate with the id" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace planUpdate 7")"
 check "plan-update exits 0" "$(is "$code" 0)"
 check "plan-update says which plan" "$(is "$out" "plan desk-2 updated")"
+export FAKE_ANSWER='{"ok":true,"scene":"desk-5","changed":true,"removed":"desk-3"}'
+run plan-update 7
+check "plan-update names a removed plan" "$(is "$out" "plan desk-5 updated, plan desk-3 removed")"
+export FAKE_ANSWER='{"ok":true,"scene":"desk-2","changed":true,"note":"windows not moved: busy"}'
+run plan-update 7
+check "plan-update says when the windows were not moved" "$(is "$out:$code" "plan desk-2 updated; windows not moved: busy:0")"
 export FAKE_ANSWER='{"ok":true,"scene":"desk-2","changed":false}'
 run plan-update 7
 check "plan-update with nothing to change says so" "$(is "$out:$code" "the plan already says so:0")"

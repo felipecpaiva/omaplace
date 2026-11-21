@@ -58,3 +58,14 @@ Tests: `tests/plan_moves.test.mjs` (swap, free conversion, free-plan rect, new p
 `lua/tests/test_glue_plans.lua` (full run on a floating and a tiled desktop, place_only re-place launches nothing).
 `bash tests/run-all.sh`: 46 run, 0 failed, 3 skipped (luacheck, stylua, shellcheck not installed). Scrub ok.
 Still to check live: a swap re-place, and the full Open all reaching fullscreen state 1.
+
+Review follow-ups (same day):
+- The swap re-place sets `only_tracked = true` in the plan literal; Lua's move pass then takes only windows tracked for
+  that plan (`M.snapped[address].scene`), never the same app on another desktop.
+- A re-place that failed still sends its notification (only a run with a state is quiet). If the re-place cannot start,
+  the answer says so: "plan X updated; windows not moved: busy".
+- The answer names the plan that now holds the window (join target or new plan) and `removed` when a plan was emptied;
+  the CLI prints "plan X updated, plan Y removed".
+- A tiled window moved to a desktop with no plan stays tiled in its new free plan (`floating = to.floating`).
+- Lua: a zone run never maximizes; a full run on an already maximized window unsets, places, then sets again
+  (fake_hl expresses it, so no live checklist entry was needed).

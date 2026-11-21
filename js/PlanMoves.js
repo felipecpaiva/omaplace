@@ -84,7 +84,8 @@ function toFree(scene, moved, rect) {
 
 // The scene edit for "Update plan" (design 14.8, D24). doc is a SceneStore doc and is never changed.
 // Returns { doc, changed (false: the plan already says so), replace? (true: place the plan's open windows again),
-// created? (the name of a new plan), removed? (the name of a plan left empty) } or { code: "not_found" | "not_possible", reason }.
+// created? (the name of a new plan), scene? (the plan that now holds the window, when another),
+// removed? (the name of a plan left empty) } or { code: "not_found" | "not_possible", reason }.
 function edit(scenesDoc, m) {
   if (!valid(m)) return no("not_possible", "the move is not readable")
   const doc = JSON.parse(JSON.stringify(scenesDoc))
@@ -125,6 +126,7 @@ function edit(scenesDoc, m) {
     if (name) {
       const why = joinPlan(doc.scenes[name], win, m.to)
       if (why) return no("not_possible", why)
+      out.scene = name
       // a plan left empty is removed
       if (scene.windows.length === 0) { delete doc.scenes[m.scene]; out.removed = m.scene }
     } else if (scene.windows.length === 0) {
@@ -138,11 +140,11 @@ function edit(scenesDoc, m) {
       if (created === "") return no("not_possible", "no free scene name for desktop " + m.to.slot)
       delete win.zone
       win.rect = rectOk(m.to.rect) ? m.to.rect.slice() : [0, 0, 1, 1]
-      win.floating = true
+      win.floating = m.to.floating !== false // a tiled window stays tiled
       win.order = 1
       doc.scenes[created] = Desktops.newPlan(identity, m.to.slot, "free")
       doc.scenes[created].windows.push(win)
-      out.created = created
+      out.created = out.scene = created
     }
   }
   // Any plan the edit makes invalid (a used zone, two plans on one desktop, full with two windows) refuses the edit.

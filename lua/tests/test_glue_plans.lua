@@ -528,19 +528,47 @@ close(tvid)
 -- a run that is not full never maximizes
 eq(count("window.fullscreen"), 1, "only the full window was maximized")
 
--- re-place after an "Update plan" swap (D24): every window place_only, so open windows move and nothing starts
+-- re-place after an "Update plan" swap (D24): every window place_only and only_tracked, so only the plan's own open
+-- windows move and nothing starts
 reset()
 fake.exec_log = {}
+local other_ed = new_window("org.example.Editor", 13, { floating = true, monitor = ext }) -- same app, not this plan's
 local sed = new_window("org.example.Editor", 12, { floating = true, tags = { FLOAT }, monitor = ext })
+local stray_chat = new_window("org.example.Chat", 5)
+_G.omaplace._m.snapped[sed.address] = { scene = "desk-2", window = 1, class = "org.example.Editor", context = "",
+  ws = 12, rect = { 0, 0, 0.5, 1 }, floating = true, placed = true }
 _G.omaplace.open({ run = "p6", scene = "desk-2", target = { fp = { identity = "Example Corp EX27" }, slot = 2 },
-  existing = "move", layout = "floating", expiry_s = 1, windows = {
+  existing = "move", layout = "floating", expiry_s = 1, only_tracked = true, windows = {
     { class = "org.example.Chat", order = 1, rect = { 0, 0, 0.5, 1 }, mode = "place_only" },
     { class = "org.example.Editor", order = 2, rect = { 0.5, 0, 0.5, 1 }, mode = "place_only" } } })
 fake.advance(3000)
 eq(#fake.exec_log, 0, "place_only: nothing launched")
-eq(sed.at.x, 3000, "place_only: the open Editor moved to the right half")
-eq(_G.omaplace.status().state, "partial", "the closed Chat is reported, not started")
+eq(sed.at.x, 3000, "place_only: the tracked Editor moved to the right half")
+eq(other_ed.workspace.id, 13, "only_tracked: the same app on another desktop is not moved")
+eq(other_ed.at.x, 10, "only_tracked: and not placed")
+eq(stray_chat.workspace.id, 5, "only_tracked: an untracked Chat is not taken either")
+eq(_G.omaplace.status().state, "partial", "the Chat slot is reported, not started")
+eq(count("window.fullscreen"), 0, "a zone run never maximizes")
 close(sed)
+close(other_ed)
+close(stray_chat)
+
+-- a full run on a window that is already maximized: unset, placed, set again
+reset()
+local mvid = new_window("org.example.Video", 4, { fullscreen = 1, floating = true, tags = { FLOAT } })
+_G.omaplace.open({ run = "p7", scene = "desk-4", target = { fp = { identity = "Example Panel" }, slot = 4 },
+  existing = "move", layout = "floating", windows = {
+    { class = "org.example.Video", order = 1, rect = { 0, 0, 1, 1 }, floating = false, fullscreen = 1,
+      mode = "launch", launch = { "video" } } } })
+fake.advance(3000)
+local acts = {}
+for _, c in ipairs(fake.dispatched) do
+  if c.name == "window.fullscreen" then acts[#acts + 1] = c.args.action end
+end
+eq(table.concat(acts, ","), "unset,set", "already maximized: unset before the put, set after")
+eq(count("window.resize") > 0, true, "already maximized: placed")
+eq(mvid.fullscreen, 1, "already maximized: maximized again")
+close(mvid)
 
 -- a file reload (same Lua state) with a bad plans.lua: the plans kept still have their subscriptions
 write(state .. "/plans.lua", "return { plans = ")

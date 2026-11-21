@@ -139,7 +139,11 @@ if [ "$json" = 0 ]; then
     restore) echo "restored the last session: $(n placed) placed ($(n started) started), $(n skipped) skipped, $(n not_reopened) not reopened, $(n failed) failed" ;;
     list) grep -oE '"name":"[^"]*","windows":[0-9]+' <<< "$answer" | sed -E 's/"name":"([^"]*)","windows":([0-9]+)/\1  \2 windows/' || true ;;
     status) echo "run: $(field "$answer" run) ${state:-idle}" ;;
-    plan-update) [ "$(field "$answer" changed)" = true ] && echo "plan $(field "$answer" scene) updated" || echo "the plan already says so" ;;
+    plan-update)
+      if [ "$(field "$answer" changed)" = true ]; then
+        removed=$(field "$answer" removed) note=$(field "$answer" note)
+        echo "plan $(field "$answer" scene) updated${removed:+, plan $removed removed}${note:+; $note}"
+      else echo "the plan already says so"; fi ;;
     rule) [ "${args[0]}" = ruleAddFocused ] && echo "rule added: $(field "$answer" rule)" || echo "rule removed" ;;
     *) echo "ok" ;;
   esac
