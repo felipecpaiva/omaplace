@@ -34,8 +34,10 @@ function defaultStrategies() {
     command: { match: "", use: "command", launch_context: "", context: "none" }
   }
   // the code family: one entry each because each forks its own program name
+  // window classes differ from program names: VS Code's window class is com.microsoft.VSCode (seen live, S10)
+  const classes = { code: "code|com.microsoft.vscode|code-url-handler", "code-insiders": "code-insiders|com.microsoft.vscodeinsiders" }
   for (const bin of ["code", "code-oss", "code-insiders", "codium", "cursor", "windsurf"]) {
-    t["ide_" + bin] = { match: bin, use: "context", launch_context: bin + " --new-window {folder}", context: "folder" }
+    t["ide_" + bin] = { match: classes[bin] || bin, use: "context", launch_context: bin + " --new-window {folder}", context: "folder" }
   }
   return t
 }

@@ -115,3 +115,9 @@ test("argv never holds the shell string form: every launch starts with uwsm-app 
     assert.deepEqual(x.argv.slice(0, 2), ["uwsm-app", "--"], cls)
   }
 })
+
+test("VS Code's real window class resolves to the code IDE strategy (live S10)", () => {
+  const r = A.resolve("com.microsoft.VSCode", [], A.defaultStrategies(), { context: "~/code/demo", home: "/srv/example" })
+  assert.equal(r.contextKind, "folder")
+  assert.deepEqual(r.argv.slice(0, 3), ["uwsm-app", "--", "code"])
+})
