@@ -7,7 +7,7 @@ Private for now. App placement rules, scenes and session restore for Omarchy, wi
 - Keep named scenes for the desktops you use often. Open one again in one step.
 - Restore the whole session after a reboot.
 
-Status: **build**, all work packages in, live checks pending (2026-11-21). Goals and today's plan: [docs/goals.md](docs/goals.md). How it is built: [docs/design.md](docs/design.md); research in [docs/research/](docs/research/00-summary.md).
+Status: **built** (2026-11-21): work packages WP0 to WP10 done; M1 to M3 pass live, open items in [docs/goals.md](docs/goals.md). How it is built: [docs/design.md](docs/design.md); live results: [docs/batch-log/live-M1.md](docs/batch-log/live-M1.md).
 
 ## Install
 

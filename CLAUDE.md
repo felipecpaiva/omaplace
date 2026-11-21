@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Private repo. Build phase (design approved 2026-11-21): `docs/design.md` is the source of truth, `docs/goals.md` the expectations.
+Private repo. Built (2026-11-21): `docs/design.md` is the source of truth, `docs/goals.md` the expectations and open items, `docs/batch-log/live-M1.md` the live results.
 
 - Read `docs/design.md` and `docs/engineering-standards.md` before any work. Work packages own only their listed files.
 - Window titles, browser tabs and app arguments can hold private text. Never commit or log real ones. Use made-up fixtures.
