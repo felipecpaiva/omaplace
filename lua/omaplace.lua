@@ -127,11 +127,21 @@ function M.now_ms()
   return math.floor(s * 1000)
 end
 
-local function runtime_dir() return (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/omaplace" end
+-- nil when XDG_RUNTIME_DIR is unset: a shared /tmp would let other users plant plan files, so nothing runs (logged once).
+local warned_runtime = false
+local function runtime_dir()
+  local base = os.getenv("XDG_RUNTIME_DIR")
+  if not base or base == "" then
+    if not warned_runtime then warned_runtime = true; log("XDG_RUNTIME_DIR is not set: scenes are off") end
+    return nil
+  end
+  return base .. "/omaplace"
+end
 
 -- Lua cannot make a folder, so ask Hyprland to (async). Called at load and again if a write finds it missing.
 local function ensure_dir()
   local d = runtime_dir()
+  if not d then return end
   local f = io.open(d, "r")
   if f then f:close(); return end
   pcall(hl.exec_cmd, "mkdir -p -m 700 " .. Shellquote.join({ d }))
@@ -139,7 +149,9 @@ end
 
 -- Write a whole file through a temp file and a rename, so a reader never sees half of it.
 local function write_atomic(name, text)
-  local path = runtime_dir() .. "/" .. name
+  local dir_ = runtime_dir()
+  if not dir_ then return nil, "no_runtime" end
+  local path = dir_ .. "/" .. name
   local tmp = path .. ".tmp"
   local f = io.open(tmp, "w")
   if not f then ensure_dir(); log("cannot write " .. name); return nil, "write_failed" end
@@ -168,6 +180,7 @@ end
 -- capture(req_id, scope): write capture-<req_id>.json (design 5.5). scope "focused" (default) or "all".
 function M.capture(req_id, scope)
   if type(req_id) ~= "string" or #req_id > 64 or not req_id:match("^[%w_%-]+$") then return nil, "bad_req" end
+  if not runtime_dir() then return nil, "no_runtime" end
   local live, wins = hl.get_monitors(), hl.get_windows()
   local floating = {}
   for _, w in ipairs(wins) do
@@ -219,7 +232,9 @@ local function reorder(run)
   for _, s in ipairs(run.book.slots) do
     local info = run.info[s.n]
     local w = s.state == "claimed" and info.address and Place.find(info.address)
-    if w and not w.floating and w.workspace and w.workspace.id == info.target.ws then
+    -- only dwindle was checked live; any other layout (or an unknown one) is left alone
+    if w and not w.floating and w.workspace and w.workspace.id == info.target.ws
+      and w.workspace.tiled_layout == "dwindle" then
       local x, y = 0, 0
       if type(w.at) == "table" then x, y = tonumber(w.at.x or w.at[1]) or 0, tonumber(w.at.y or w.at[2]) or 0 end
       local list = by_ws[info.target.ws] or {}
@@ -234,10 +249,11 @@ local function reorder(run)
   end
 end
 
-local function finish(run)
+local function conclude(run)
   if not run.live then return end
   run.live = false
   stop_timer(run)
+  if run.deadline then pcall(run.deadline.set_enabled, run.deadline, false) end
   if run.layout ~= "floating" then
     local ok, err = pcall(reorder, run)
     if not ok then log("reorder failed: " .. tostring(err)) end
@@ -249,10 +265,26 @@ local function finish(run)
   for _, s in ipairs(run.book.slots) do
     if s.state == "claimed" then placed = placed + 1 else missed[#missed + 1] = s.class .. " " .. s.state end
   end
-  run.state = #missed == 0 and "done" or "partial"
+  run.state = (#missed == 0 and not run.forced) and "done" or "partial"
   write_status(run)
   log(string.format("run %s %s: %d placed%s", run.id, run.state, placed,
     #missed > 0 and (", not placed: " .. table.concat(missed, ", ")) or ""))
+end
+
+-- Omarchy re-arranges tiled windows about 1 s after the last one opens, so a tiled run waits settle_ms before it
+-- reads positions to reorder (and before it ends).
+local function finish(run)
+  if not run.live or run.finishing then return end
+  local claimed = 0
+  for _, sl in ipairs(run.book.slots) do
+    if sl.state == "claimed" then claimed = claimed + 1 end
+  end
+  if run.layout ~= "floating" and claimed > 1 then -- fewer than two windows: nothing to put in order
+    run.finishing = true
+    stop_timer(run)
+    if pcall(later, M.settings.settle_ms, function() conclude(run) end) then return end
+  end
+  conclude(run)
 end
 
 local step
@@ -279,9 +311,9 @@ local function apply(run, s, w, fresh)
   local moved = Place.to_workspace(w, info.target.ws, not info.target.follow)
   if info.target.follow then run.focus_ws = info.target.ws end
   if not info.rect then return end
-  run.pending = run.pending + 1
   local address = w.address
   local function put_inner()
+    if not run.live then return settled(run) end
     local now_w = Place.find(address)
     if not now_w then return settled(run, s.n, false, "gone") end
     -- not floating there (a tiled desktop): no rect, and that is not an error (D13)
@@ -295,7 +327,14 @@ local function apply(run, s, w, fresh)
     if not ok then log("place failed: " .. tostring(err)); settled(run, s.n, false, "error") end
   end
   -- Omarchy re-arranges a moved window about 1 s later, and a new app may still resize itself: wait (settle_ms).
-  if moved or fresh then later(M.settings.settle_ms, put_now) else put_now() end
+  -- pending is raised only once the timer exists: a raise from `later` must not leave the run waiting forever
+  if moved or fresh then
+    later(M.settings.settle_ms, put_now)
+    run.pending = run.pending + 1
+  else
+    run.pending = run.pending + 1
+    put_now()
+  end
 end
 
 local function start_slot(run, s)
@@ -350,7 +389,7 @@ step = function(run)
     if s.state == "waiting" or s.state == "launched" then Tickets.fail(run.book, s.n, "error") end
   end
   run.pending = 0
-  pcall(finish, run)
+  pcall(conclude, run)
   run.live = false
 end
 
@@ -419,8 +458,9 @@ local function start_run(plan)
     end
     layout = seen or layout
   end
+  local expiry_s = math.max(1, math.min(600, math.tointeger(plan.expiry_s) or M.settings.expiry_seconds))
   local book = Tickets.new(plan.windows, now, {
-    expiry_ms = (math.tointeger(plan.expiry_s) or M.settings.expiry_seconds) * 1000,
+    expiry_ms = expiry_s * 1000,
     tick_ms = M.settings.launch_tick_ms, quiet_ms = M.settings.context_quiet_ms,
     sequential = layout ~= "floating" and M.settings.tiled_order,
   })
@@ -433,6 +473,18 @@ local function start_run(plan)
     if not t and book.slots[i].state ~= "skipped" then Tickets.fail(book, i, "no_monitor") end
   end
   M.run = run
+  -- One overall limit per run: whatever is still pending then is given up and the run ends partial.
+  run.deadline = later(expiry_s * 1000 + M.settings.settle_ms + 2000, function()
+    if not run.live then return end
+    run.forced = true
+    for _, s in ipairs(book.slots) do
+      if s.state == "waiting" or s.state == "launched" or s.state == "claimed" and run.pending > 0 then
+        Tickets.fail(book, s.n, "timeout")
+      end
+    end
+    run.pending = 0
+    conclude(run)
+  end)
   -- Move pass (D10): open windows take their slots by class and context, in plan order.
   if (plan.existing or M.settings.existing_default) == "move" then
     local wins = {}
@@ -453,11 +505,16 @@ end
 
 -- open(plan): start a run (design 5.4). Returns the run id, or nil and busy | bad_plan | no_monitor | failed.
 function M.open(plan)
+  if not runtime_dir() then return nil, "no_runtime" end
   if M.run and M.run.live then return nil, "busy" end
   local ok, id, err = pcall(start_run, plan)
   if not ok then
     log("open failed: " .. tostring(id))
-    if M.run and M.run.live then M.run.live = false; stop_timer(M.run) end
+    if M.run and M.run.live then
+      M.run.live = false
+      stop_timer(M.run)
+      if M.run.deadline then pcall(M.run.deadline.set_enabled, M.run.deadline, false) end
+    end
     return nil, "failed"
   end
   return id, err
@@ -467,13 +524,16 @@ end
 -- $XDG_RUNTIME_DIR/omaplace/plan-<run>.lua (`return { ... }`), because one hyprctl argument is capped at 128 kB.
 -- The file is loaded as text only, in an empty environment: it can build a table and nothing else.
 function M.open_file(path)
-  local prefix = runtime_dir() .. "/plan-"
+  local base = runtime_dir()
+  if not base then return nil, "no_runtime" end
+  local prefix = base .. "/plan-"
   if type(path) ~= "string" or path:sub(1, #prefix) ~= prefix or path:find("/", #prefix + 1, true)
     or not path:match("%.lua$") then
     return nil, "bad_path"
   end
   local text = read_file(path)
   if not text then return nil, "no_file" end
+  if #text > 1048576 then log("plan file is over 1 MB"); return nil, "bad_plan" end
   local chunk = load(text, "plan", "t", {})
   -- the message can quote plan text (folders, arguments), so it is never logged
   if not chunk then log("plan file does not parse"); return nil, "bad_plan" end
@@ -510,10 +570,12 @@ local function interrupt_stale(prev)
     prev.run.live = false
     prev.run.gen = prev.run.gen + 1
     if prev.run.timer then pcall(prev.run.timer.set_enabled, prev.run.timer, false) end
+    if prev.run.deadline then pcall(prev.run.deadline.set_enabled, prev.run.deadline, false) end
     prev.run.state = "interrupted"
     M.run = prev.run
   end
-  local text = read_file(runtime_dir() .. "/status.json")
+  local base = runtime_dir()
+  local text = base and read_file(base .. "/status.json")
   if text and text:find('"state":"running"', 1, true) then
     write_atomic("status.json", (text:gsub('"state":"running"', '"state":"interrupted"')))
     log("a scene run was interrupted by a reload")

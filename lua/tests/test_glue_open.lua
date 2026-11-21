@@ -12,7 +12,7 @@ end
 -- The runtime folder is a fixture in the repo (its .gitignore keeps what the test writes out of git).
 local runtime = dir .. "/fixtures/runtime"
 local written = { "capture-q1.json", "capture-q2.json", "status.json", "status.json.tmp", "plan-r11.lua", "plan-bad.lua",
-  "plan-evil.lua", "plan-num.lua", "plan-bin.lua" }
+  "plan-evil.lua", "plan-num.lua", "plan-bin.lua", "plan-big.lua" }
 local function clean()
   for _, name in ipairs(written) do os.remove(runtime .. "/omaplace/" .. name) end
 end
@@ -49,7 +49,7 @@ local next_id = 0
 local function new_window(cls, ws, extra)
   next_id = next_id + 1
   local w = { initial_class = cls, class = cls, title = "Made up title", address = "0x" .. next_id, stable_id = next_id,
-    workspace = { id = ws }, monitor = panel, at = { x = 10, y = 10 }, size = { x = 300, y = 200 }, floating = true,
+    workspace = { id = ws, tiled_layout = "dwindle" }, monitor = panel, at = { x = 10, y = 10 }, size = { x = 300, y = 200 }, floating = true,
     fullscreen = 0, tags = {}, pid = 100 + next_id }
   for k, v in pairs(extra or {}) do w[k] = v end
   fake.windows[#fake.windows + 1] = w
@@ -72,7 +72,8 @@ fake.hl.dispatch = function(call)
     return
   end
   if call.name == "window.move" and a.workspace then
-    w.workspace = { id = tonumber(a.workspace) }
+    w.workspace = { id = tonumber(a.workspace), tiled_layout = "dwindle" }
+    w.at = { x = 4000 + tonumber(a.workspace), y = 0 } -- a moved window gets a new place
     moves[#moves + 1] = { ws = a.workspace, follow = a.follow }
   elseif call.name == "window.move" then
     w.at = { x = a.x, y = a.y }
@@ -225,6 +226,7 @@ fake.emit("window.open", new_window("a.A", 1, { floating = false }))
 eq(#fake.exec_log, 2, "first claimed, second launched")
 fake.emit("window.open", new_window("b.B", 1, { floating = false }))
 fake.advance(2000)
+fake.advance(1100) -- the tiled end waits one more settle_ms
 eq(count("window.resize"), 0, "no rects on a tiled desktop")
 eq(_G.omaplace.status().state, "done", "tiled run done")
 
@@ -261,16 +263,35 @@ _G.omaplace.open({ run = "r6b", target = { fp = {}, slot = 0 }, layout = "tiled"
   { class = "t.Two", order = 2, mode = "launch", launch = { "two" } },
   { class = "t.Three", order = 3, mode = "launch", launch = { "three" } },
 } })
+-- right after the last open every window still shows a stale place; Omarchy re-arranges about 1 s later
 local one = new_window("t.One", 1, { floating = false, at = { x = 0, y = 0 } })
 fake.emit("window.open", one)
-local two = new_window("t.Two", 1, { floating = false, at = { x = 1000, y = 0 } })
+local two = new_window("t.Two", 1, { floating = false, at = { x = 0, y = 0 } })
 fake.emit("window.open", two)
-local three = new_window("t.Three", 1, { floating = false, at = { x = 500, y = 0 } })
+local three = new_window("t.Three", 1, { floating = false, at = { x = 0, y = 0 } })
 fake.emit("window.open", three)
+eq(count("window.swap"), 0, "no reorder before the settle time")
+eq(_G.omaplace.status().state, "running", "still running while it settles")
+one.at, two.at, three.at = { x = 0, y = 0 }, { x = 1000, y = 0 }, { x = 500, y = 0 }
+fake.advance(1100)
 eq(count("window.swap"), 1, "one swap")
 eq(two.at.x < three.at.x, true, "two now left of three")
 eq(focus[#focus], "1", "view back on the target at the end")
 eq(_G.omaplace.status().state, "done", "reordered run done")
+
+-- a scrolling layout was never checked live: no reorder there
+fake.windows, fake.exec_log, fake.dispatched, focus = {}, {}, {}, {}
+_G.omaplace.open({ run = "r6s", target = { fp = {}, slot = 0 }, layout = "tiled", existing = "new", windows = {
+  { class = "s.One", order = 1, mode = "launch", launch = { "one" } },
+  { class = "s.Two", order = 2, mode = "launch", launch = { "two" } },
+} })
+local sc1 = new_window("s.One", 1, { floating = false, at = { x = 900, y = 0 }, workspace = { id = 1, tiled_layout = "scrolling" } })
+fake.emit("window.open", sc1)
+local sc2 = new_window("s.Two", 1, { floating = false, at = { x = 0, y = 0 }, workspace = { id = 1, tiled_layout = "scrolling" } })
+fake.emit("window.open", sc2)
+fake.advance(1100)
+eq(count("window.swap"), 0, "scrolling layout left alone")
+eq(_G.omaplace.status().state, "done", "scrolling run done")
 
 -- the target shows tiled windows: the run is sequential even if the plan says floating
 fake.windows, fake.exec_log = {}, {}
@@ -298,6 +319,7 @@ fake.windows = { blocker }
 fake.emit("window.open", new_window("t.Launch", 1, { floating = false }))
 eq(_G.omaplace.status().items[2].state, "failed", "gone window failed")
 eq(_G.omaplace.status().items[2].reason, "gone", "reason gone")
+fake.advance(1100)
 eq(_G.omaplace.status().state, "partial", "partial")
 eq(soon_gone.workspace.id, 3, "never moved")
 
@@ -343,6 +365,70 @@ _G.omaplace = nil
 load()
 eq(read("status.json"), '{"items":[],"run":"r9","state":"interrupted"}\n', "stale run marked interrupted on load")
 
+
+-- expiry_s is clamped to 1..600
+fake.windows, fake.exec_log = {}, {}
+_G.omaplace.open({ run = "c0", target = { fp = {}, slot = 0 }, layout = "floating", expiry_s = 0,
+  windows = { { class = "c.A", mode = "launch", launch = { "a" } } } })
+fake.advance(999)
+eq(_G.omaplace.status().state, "running", "expiry_s 0 is raised to 1 s")
+fake.advance(1)
+eq(_G.omaplace.status().state, "partial", "expired after 1 s")
+_G.omaplace.open({ run = "c1", target = { fp = {}, slot = 0 }, layout = "floating", expiry_s = 99999,
+  windows = { { class = "c.B", mode = "launch", launch = { "b" } } } })
+fake.advance(599999)
+eq(_G.omaplace.status().state, "running", "a huge expiry_s is cut to 600 s")
+fake.advance(1)
+eq(_G.omaplace.status().state, "partial", "expired after 600 s")
+
+-- a timer that raises while arming the settle wait does not leave the run busy
+fake.windows, fake.exec_log = {}, {}
+_G.omaplace.open({ run = "c2", target = { fp = {}, slot = 0 }, layout = "floating", existing = "new",
+  windows = { { class = "c.C", rect = { 0, 0, 1, 1 }, mode = "launch", launch = { "c" } } } })
+local real_timer = fake.hl.timer
+fake.hl.timer = function() fake.hl.timer = real_timer; error("no timer") end
+fake.emit("window.open", new_window("c.C", 1, { tags = { "omarchy-floating-workspace" } }))
+eq(_G.omaplace.status().state, "partial", "run ended after the timer raise")
+eq(_G.omaplace.status().items[1].state, "failed", "slot failed")
+eq(select(2, _G.omaplace.open({ run = "c3", windows = {} })), nil, "not busy")
+
+-- one overall deadline: a put whose verify timer never fires still ends the run, as partial
+fake.windows, fake.exec_log = {}, {}
+local drop_verify = true
+fake.hl.timer = function(fn, opts)
+  if drop_verify and type(opts) == "table" and opts.timeout == 40 then return { set_enabled = function() end } end
+  return real_timer(fn, opts)
+end
+_G.omaplace.open({ run = "c4", target = { fp = {}, slot = 0 }, layout = "floating", existing = "new", expiry_s = 5,
+  windows = { { class = "c.D", rect = { 0, 0, 1, 1 }, mode = "launch", launch = { "d" } } } })
+fake.emit("window.open", new_window("c.D", 1, { tags = { "omarchy-floating-workspace" } }))
+fake.advance(5000 + 1100 + 1999)
+eq(_G.omaplace.status().state, "running", "stuck put keeps the run live until the deadline")
+fake.advance(1)
+eq(_G.omaplace.status().state, "partial", "deadline ends it as partial")
+eq(fake.pending_timers(), 0, "nothing left armed")
+fake.hl.timer = real_timer
+
+-- a timer after the run ended moves nothing
+fake.windows, fake.dispatched = {}, {}
+_G.omaplace.open({ run = "c5", target = { fp = {}, slot = 0 }, layout = "floating", existing = "new",
+  windows = { { class = "c.E", rect = { 0, 0, 1, 1 }, mode = "launch", launch = { "e" } } } })
+fake.emit("window.open", new_window("c.E", 1, { tags = { "omarchy-floating-workspace" } }))
+_G.omaplace._m.run.live = false -- the run ended (a reload) while the put timer is armed
+fake.advance(1100)
+eq(count("window.resize"), 0, "no resize for a run that ended")
+_G.omaplace._m.run.pending = 0
+_G.omaplace._m.run.state = "interrupted"
+
+-- an empty or missing launch list fails the slot as bad_launch
+fake.windows, fake.exec_log = {}, {}
+_G.omaplace.open({ run = "c6", target = { fp = {}, slot = 0 }, layout = "floating", windows = {
+  { class = "c.F", mode = "launch", launch = {} }, { class = "c.G", mode = "launch" } } })
+fake.advance(500)
+eq(_G.omaplace.status().items[1].reason, "bad_launch", "empty launch")
+eq(_G.omaplace.status().items[2].reason, "bad_launch", "no launch")
+eq(#fake.exec_log, 0, "nothing run")
+
 -- bad plans
 eq(select(2, _G.omaplace.open(nil)), "bad_plan", "nil plan")
 eq(select(2, _G.omaplace.open({ run = "a b", windows = {} })), "bad_plan", "bad run id")
@@ -370,6 +456,30 @@ local binary = plan_file("plan-bin.lua", string.dump(function() return {} end))
 eq(select(2, _G.omaplace.open_file(binary)), "bad_plan", "binary chunk refused")
 eq(select(2, _G.omaplace.open_file("/etc/hostname")), "bad_path", "only plan files in the runtime folder")
 eq(select(2, _G.omaplace.open_file(runtime .. "/omaplace/../omaplace/plan-r11.lua")), "bad_path", "no dot dot")
+
+-- a plan file over 1 MB is refused
+local big = plan_file("plan-big.lua", "return { run = 'big', windows = {} } -- " .. string.rep("x", 1048577))
+eq(select(2, _G.omaplace.open_file(big)), "bad_plan", "plan over 1 MB")
+
+-- no XDG_RUNTIME_DIR: nothing runs, nothing is written to /tmp
+local before = #printed
+os.getenv = function(k)
+  if k == "XDG_RUNTIME_DIR" then return nil end
+  return real_getenv(k) and (k == "HOME" and dir .. "/fixtures/home-none" or real_getenv(k))
+end
+eq(select(2, _G.omaplace.open({ run = "n1", windows = {} })), "no_runtime", "open without runtime dir")
+eq(select(2, _G.omaplace.capture("n2", "all")), "no_runtime", "capture without runtime dir")
+eq(select(2, _G.omaplace.open_file("/tmp/omaplace/plan-n3.lua")), "no_runtime", "open_file without runtime dir")
+local warnings = 0
+for i = before + 1, #printed do
+  if printed[i]:find("XDG_RUNTIME_DIR", 1, true) then warnings = warnings + 1 end
+end
+eq(warnings, 1, "logged once")
+os.getenv = function(k)
+  if k == "HOME" then return dir .. "/fixtures/home-none" end
+  if k == "XDG_RUNTIME_DIR" then return runtime end
+  return real_getenv(k)
+end
 
 clean()
 print = real_print

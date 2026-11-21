@@ -169,4 +169,12 @@ do
   eq(#T.swaps(nil), 0, "nil input")
 end
 
+-- A window that arrives after the slot's expiry time does not take the slot (claim expires first).
+do
+  local b = T.new({ { class = "a", mode = "launch" } }, 0, opts)
+  T.next_launches(b, 0)
+  eq(T.claim(b, { class = "a" }, 20000), nil, "late window refused")
+  eq(b.slots[1].state, "expired", "slot expired by claim")
+end
+
 print(string.format("test_tickets: %d checks ok", checks))

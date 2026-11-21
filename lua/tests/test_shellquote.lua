@@ -10,7 +10,11 @@ local function eq(argv, want, name)
   assert(got == want, string.format("%s: got %s (%s), want %s", name, tostring(got), tostring(err), want))
 end
 
-eq({}, "", "empty list")
+do
+  local g, e = Q.join({})
+  assert(g == nil and e == "empty", "an empty list is refused")
+  checks = checks + 1
+end
 eq({ "ls" }, "'ls'", "one word")
 eq({ "echo", "a b" }, "'echo' 'a b'", "space")
 eq({ "it's" }, "'it'\\''s'", "single quote")

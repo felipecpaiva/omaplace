@@ -45,6 +45,7 @@ local function done(s) return FINAL[s.state] and (not s.existing or s.started) e
 -- Give a window a slot. window = { class, context (from its tag, or nil), existing (true in the move pass) }.
 -- Returns the slot, or nil (the window is not ours).
 function T.claim(book, window, now)
+  T.expire(book, now)
   local cls = window.class
   local function first(pred)
     for _, s in ipairs(book.slots) do

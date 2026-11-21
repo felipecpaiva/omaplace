@@ -8,6 +8,7 @@ function M.join(argv)
   local n = 0
   for _ in pairs(argv) do n = n + 1 end
   if n ~= #argv then return nil, "argv has holes or extra keys" end
+  if n == 0 then return nil, "empty" end
   local out = {}
   for i = 1, #argv do
     local s = argv[i]
