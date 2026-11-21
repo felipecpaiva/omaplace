@@ -21,6 +21,7 @@ local Shellquote = dofile(dir .. "/shellquote.lua")
 local Geometry = dofile(dir .. "/geometry.lua")
 local Policy = dofile(dir .. "/sessionpolicy.lua")
 local Memory = dofile(dir .. "/memory.lua")
+local Plans = dofile(dir .. "/plans.lua")
 
 M.debounce_ms = 500
 M.applied = {} -- spec names declared so far, so a vanished rule can be switched off
@@ -37,6 +38,7 @@ if old_m then
   for _, sub in ipairs(old_m.subs or {}) do pcall(sub.remove, sub) end
   for _, sub in ipairs(old_m.session_subs or {}) do pcall(sub.remove, sub) end
   for _, sub in ipairs(old_m.memory_subs or {}) do pcall(sub.remove, sub) end
+  for _, sub in ipairs(old_m.plan_subs or {}) do pcall(sub.remove, sub) end
   if old_m.timer then pcall(old_m.timer.set_enabled, old_m.timer, false) end
   if old_m.session_timer then pcall(old_m.session_timer.set_enabled, old_m.session_timer, false) end
   if old_m.memory_timer then pcall(old_m.memory_timer.set_enabled, old_m.memory_timer, false) end
@@ -56,6 +58,15 @@ M.MAX_MOVES = 50
 -- a freeze survives a reload of this file (a close-all can come with one)
 M.session_state = old_m and type(old_m.session_state) == "table" and old_m.session_state or Policy.new()
 M.session_state.first_at = nil -- the old timer is switched off by a reload: no write is owed
+-- desktop plans (design 14.7, 14.8): snapped windows, their pending reports and the login check survive a reload
+M.plan_subs = {}
+M.plan_own = {} -- addresses a plan snap just moved: their one move event is not a user's move
+M.plans = old_m and old_m.plans or nil
+M.snapped = old_m and type(old_m.snapped) == "table" and old_m.snapped or {} -- address -> the plan window it snapped to
+M.plan_moves = old_m and type(old_m.plan_moves) == "table" and old_m.plan_moves or { seq = 0, list = {} }
+M.MAX_PLAN_MOVES = 20
+M.last_active = old_m and old_m.last_active or nil
+M.login_checked = old_m and old_m.login_checked or false
 
 local function log(text) print("omaplace: " .. tostring(text)) end
 
@@ -117,7 +128,7 @@ local function sync_session_safe()
 end
 
 function M.reload_config()
-  local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()) end)
+  local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()); M.reload_plans() end)
   if not ok then log("reload failed: " .. tostring(err)); return nil, tostring(err) end
   return true
 end
@@ -665,9 +676,23 @@ function M.open(plan)
   return id, err
 end
 
+-- Load a `return { ... }` file as text only, in an empty environment, under the instruction budget: it can build a
+-- table and nothing else. nil and a reason that never quotes the text (it can hold folders and arguments).
+local MAX_LITERAL = 1048576
+local function load_literal(path, name)
+  local text = read_file(path, MAX_LITERAL)
+  if not text then return nil, "no_file" end
+  if #text > MAX_LITERAL then return nil, "is over 1 MB" end
+  local chunk = load(text, name, "t", {})
+  if not chunk then return nil, "does not parse" end
+  local ok, t = Memory.run_limited(chunk)
+  if not ok then return nil, "failed to run" end
+  if type(t) ~= "table" then return nil, "is not a table" end
+  return t
+end
+
 -- open_file(path): the same as open(plan) for a plan the service wrote to
 -- $XDG_RUNTIME_DIR/omaplace/plan-<run>.lua (`return { ... }`), because one hyprctl argument is capped at 128 kB.
--- The file is loaded as text only, in an empty environment: it can build a table and nothing else.
 function M.open_file(path)
   local base = runtime_dir()
   if not base then return nil, "no_runtime" end
@@ -676,15 +701,9 @@ function M.open_file(path)
     or not path:match("%.lua$") then
     return nil, "bad_path"
   end
-  local text = read_file(path, 1048576)
-  if not text then return nil, "no_file" end
-  if #text > 1048576 then log("plan file is over 1 MB"); return nil, "bad_plan" end
-  local chunk = load(text, "plan", "t", {})
-  -- the message can quote plan text (folders, arguments), so it is never logged
-  if not chunk then log("plan file does not parse"); return nil, "bad_plan" end
-  local ok, plan = Memory.run_limited(chunk)
-  if not ok then log("plan file failed to run"); return nil, "bad_plan" end
-  if type(plan) ~= "table" then return nil, "bad_plan" end
+  local plan, why = load_literal(path, "plan")
+  if why == "no_file" then return nil, why end
+  if not plan then log("plan file " .. why); return nil, "bad_plan" end
   return M.open(plan)
 end
 
@@ -900,7 +919,10 @@ function M.on_window_open(w)
   if tw ~= "table" and tw ~= "userdata" then return end
   if M.settings.app_memory == "auto" and w.address and w.workspace then M.last_ws[w.address] = w.workspace.id end
   track(w)
-  if not (run and run.live) then return place_from_memory(w) end
+  if not (run and run.live) then
+    if M.place_from_plan(w) then return end -- a planned app is the plan's, never memory's (D20)
+    return place_from_memory(w)
+  end
   local mine = M.SLOT_PREFIX .. run.id .. "/"
   for _, t in ipairs(Capture.tags_of(w)) do
     if t:sub(1, #mine) == mine then return end -- already claimed by this run
@@ -1063,9 +1085,184 @@ function M.sync_session()
   end
 end
 
+-- ---------------------------------------------------------------- desktop plans (design 14.7, 14.8, D20, D21, D23)
+-- ~/.local/state/omaplace/plans.lua is written by the service only; Lua reads it and writes plan-moves.json and
+-- login.json in the runtime folder. A new window: run ticket > user rule (D9) > plan > app memory.
+
+-- Report a hand move of a snapped window (kind "desktop" or "zone"). The last MAX_PLAN_MOVES stay in the file. A
+-- tiled window has no `rect` key (the encoder writes no null). Never writes a title.
+local function report_plan_move(e, kind, w)
+  local p = place_of(w)
+  if not p then return end
+  local mv = M.plan_moves
+  mv.seq = mv.seq + 1
+  mv.list[#mv.list + 1] = { id = mv.seq, scene = e.scene, window = e.window, class = e.class, context = e.context,
+    kind = kind, to = { identity = p.fp.identity, slot = p.slot, rect = p.floating and p.rect or nil, floating = p.floating } }
+  while #mv.list > M.MAX_PLAN_MOVES do table.remove(mv.list, 1) end
+  local text, err = Json.encode({ seq = mv.seq, moves = mv.list })
+  if not text then log("plan moves encode failed: " .. tostring(err)); return end
+  write_atomic("plan-moves.json", text .. "\n")
+end
+
+-- A window opened while no run is live. Returns true when a plan holds its class and context (snapped or not), so app
+-- memory stays out. Snaps only the first window of the class, snap = true entries, no user rule, a desktop that resolves.
+function M.place_from_plan(w)
+  local cls = w.initial_class or ""
+  if not M.plans or cls == "" then return false end
+  local ctx = Capture.context_of(w)
+  if not Plans.held(M.plans, cls, ctx) then return false end
+  local plan, index, pw = Plans.lookup(M.plans, cls, ctx)
+  if not plan or has_rule(cls) then return true end
+  local ws = w.workspace
+  if not ws or (ws.id or 0) < 0 or (ws.name or ""):sub(1, 8) == "special:" or others_of(cls, w.address) > 0 then
+    return true
+  end
+  local live = hl.get_monitors()
+  local mon = plan.home_monitor == "" and focused_of(live) or Monitors.resolve({ identity = plan.home_monitor }, live, "skip")
+  local target = mon and Slots.with(rawget(_G, "o")).workspace_id(mon, plan.home_slot)
+  if not target then log("plan " .. plan.scene .. ": desktop not found, " .. cls .. " not snapped"); return true end
+  local address = w.address
+  local e = { scene = plan.scene, window = index, class = cls, context = pw.context, ws = target, rect = pw.rect,
+    floating = pw.floating }
+  M.snapped[address] = e
+  if ws.id ~= target then
+    -- marked before the dispatch: its event can come during it
+    M.plan_own[address] = true
+    if #M.memory_subs > 0 then M.memory_own[address] = true end
+    Place.to_workspace(w, target, true)
+  end
+  if pw.floating then hl.dispatch(hl.dsp.window.float({ action = "on", window = Place.sel(w) })) end
+  local function maximize(x)
+    -- fullscreen state 1 keeps the bar (S11 still to check live)
+    if pw.fullscreen == 1 then
+      hl.dispatch(hl.dsp.window.fullscreen({ mode = "maximized", action = "set", window = Place.sel(x) }))
+    end
+  end
+  -- Omarchy re-arranges a moved window about 1 s later, and a new app may still resize itself: wait (settle_ms).
+  later(M.settings.settle_ms, function()
+    local now_w = Place.find(address)
+    if not now_w or M.snapped[address] ~= e then return end
+    if not (pw.floating and now_w.floating) then return maximize(now_w) end
+    Place.put(now_w, Geometry.place_frac(Geometry.usable(mon), pw.rect), function(ok, reason)
+      if ok then e.placed = true else log("plan place of " .. cls .. " failed: " .. tostring(reason)) end
+      local again = Place.find(address)
+      if again then maximize(again) end
+    end)
+  end)
+  return true
+end
+
+function M.on_plan_event(event, w)
+  if event == "window.active" then
+    local prev = M.last_active
+    M.last_active = w and w.address or nil
+    local e = prev and prev ~= M.last_active and M.snapped[prev]
+    -- D23: only a placed floating window, still on its plan's desktop, and not while a run moves windows
+    if not (e and e.placed and e.floating) or (M.run and M.run.live) then return end
+    local now_w = Place.find(prev)
+    if not (now_w and now_w.floating and now_w.workspace and now_w.workspace.id == e.ws) then return end
+    local p = place_of(now_w)
+    if not (p and p.rect) then return end
+    if not Plans.drifted(p.rect, e.rect) then e.zone_reported = false; return end
+    if e.zone_reported then return end
+    e.zone_reported = true
+    return report_plan_move(e, "zone", now_w)
+  end
+  local a = w and w.address
+  if not a then return end
+  if event == "window.close" then
+    M.snapped[a], M.plan_own[a] = nil, nil
+    if M.last_active == a then M.last_active = nil end
+    return
+  end
+  local e = M.snapped[a] -- window.move_to_workspace
+  if not e then return end
+  if M.plan_own[a] then M.plan_own[a] = nil; return end
+  if M.run and M.run.live then return end -- "Open all" moves its own windows
+  if w.workspace and w.workspace.id == e.ws then e.desk_reported = false; return end
+  if e.desk_reported then return end
+  e.desk_reported = true
+  report_plan_move(e, "desktop", w)
+end
+
+-- Subscribe while some plan is loaded.
+local function sync_plans()
+  local on = M.plans ~= nil and #M.plans.plans > 0
+  if on == (#M.plan_subs > 0) then return end
+  for _, sub in ipairs(M.plan_subs) do pcall(sub.remove, sub) end
+  M.plan_subs = {}
+  if not on then return end
+  for _, event in ipairs({ "window.close", "window.move_to_workspace", "window.active" }) do
+    local sub = hl.on(event, function(w)
+      local handled, e = pcall(function() _G.omaplace._m.on_plan_event(event, w) end)
+      if not handled then log(event .. " plan handler failed: " .. tostring(e)) end
+    end)
+    if sub then M.plan_subs[#M.plan_subs + 1] = sub end
+  end
+end
+
+-- Ask the service to open the ticked plans, once per Hyprland instance (14.7): never again when login.json already
+-- names this instance (a reload). Done once per Lua state; a failed write is tried again on the next plans load.
+local function login_check()
+  if M.login_checked or not M.plans then return end
+  local names = Plans.login_plans(M.plans)
+  if #names == 0 then M.login_checked = true; return end
+  local inst, base = instance(), runtime_dir()
+  if not inst or not base then return end
+  if (read_file(base .. "/login.json", 65536) or ""):find('"instance":"' .. inst .. '"', 1, true) then
+    M.login_checked = true
+    return
+  end
+  local text = Json.encode({ instance = inst, plans = names })
+  if text and write_atomic("login.json", text .. "\n") then
+    M.login_checked = true
+    log("login: " .. #names .. " plan(s) to open")
+  end
+end
+
+-- reload_plans(): read plans.lua again. true, or nil and no_file | bad_plans | failed. A bad file is ignored (the
+-- plans loaded before stay); a missing one means no plans.
+function M.reload_plans()
+  local ok, res, why = pcall(function()
+    local d = state_dir()
+    local t, err
+    if d then t, err = load_literal(d .. "/plans.lua", "plans") end
+    if not d or err == "no_file" then M.plans = nil; sync_plans(); return nil, "no_file" end
+    local set
+    if t then set, err = Plans.validate(t) end
+    if not set then log("plans.lua " .. tostring(err) .. ", ignored"); return nil, "bad_plans" end
+    for _, skip in ipairs(set.skipped) do log("plans.lua: " .. skip .. ", skipped") end
+    M.plans = set
+    sync_plans()
+    login_check()
+    return true
+  end)
+  if not ok then log("plans load failed: " .. tostring(res)); return nil, "failed" end
+  return res, why
+end
+
+-- desktops(req_id): every monitor's slots 1..10 and their workspace ids (14.8). With req_id the answer is also written
+-- to $XDG_RUNTIME_DIR/omaplace/desktops-<req_id>.json, because `hyprctl eval` cannot hand a table back (LuaCall).
+function M.desktops(req_id)
+  local ok, d = pcall(function()
+    local slots = Slots.with(rawget(_G, "o"))
+    return Plans.desktops(hl.get_monitors(), slots.workspace_id,
+      function(m, all) return Monitors.fingerprint(m, all).identity end)
+  end)
+  if not ok then log("desktops failed: " .. tostring(d)); return nil, "failed" end
+  if req_id == nil then return d end
+  if type(req_id) ~= "string" or #req_id > 64 or not req_id:match("^[%w_%-]+$") then return nil, "bad_req" end
+  local text = Json.encode(d)
+  if not text then return nil, "failed" end
+  local written, err = write_atomic("desktops-" .. req_id .. ".json", text .. "\n")
+  if not written then return nil, err end
+  return d
+end
+
 -- _m is internal: the next load of this file reads them (see above).
 _G.omaplace = { version = M.version, reload_config = M.reload_config, status = M.status, open = M.open,
   open_file = M.open_file, capture = M.capture, session_save_now = M.session_save_now, sessions = M.sessions,
+  reload_plans = function() return M.reload_plans() end, desktops = function(req_id) return M.desktops(req_id) end,
   _m = M, _rebuild_soon = rebuild_soon }
 
 ensure_dir()
@@ -1081,6 +1278,7 @@ end
 
 local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()) end)
 if not ok then log("load failed: " .. tostring(err)) end
+M.reload_plans()
 
 -- Only rules with an empty monitor follow focus, so a focus change rebuilds only when such a rule exists.
 local function follows_focus()

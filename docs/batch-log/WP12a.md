@@ -1,0 +1,43 @@
+# WP12a batch log: desktop plans, Lua side (design 14.7, 14.8)
+
+## What changed
+
+- `lua/plans.lua` (new, pure): `validate` (checks the table plans.lua returns; a bad plan is skipped with a reason, a bad
+  window keeps its index but never snaps; at most 100 plans, 64 windows each), `held` and `lookup` (class plus context;
+  the same key in two plans or `snap = false` never snaps, the first window of a key in a plan wins), `login_plans`,
+  `drifted` (D23, 2 percent per edge and size, as fractions of the usable area), `desktops` (slots 1..10 per monitor,
+  mirrors left out, sorted by connector).
+- `lua/omaplace.lua` (glue):
+  - `load_literal`: the capped, text-only, empty-environment, instruction-budget loader, now shared by `open_file` and
+    plans (same log lines for plan files as before).
+  - Plans load at file load, on `reload_config` and on `_G.omaplace.reload_plans()`. Missing file: no plans, silent. A
+    bad or oversize file: one log line, ignored, the plans loaded before stay; `reload_plans` answers `bad_plans`.
+  - `window.open` with no run live: plan before app memory. A class and context any plan holds never goes through app
+    memory, even when it is not snapped (snap false, rule, second window, missing monitor). Snap: first window of the
+    class, no enabled user rule, not on a special workspace, the plan's monitor resolves (policy `skip`; an empty
+    `home_monitor` is the focused monitor, as for rules). Silent move to the workspace, float on for a floating plan,
+    rect with `place.lua` after `settle_ms`. Tiled plans move only. `fullscreen = 1`:
+    `hl.dsp.window.fullscreen({ mode = "maximized", action = "set" })` after the settle (form from the Hyprland
+    binary's own error strings: modes fullscreen/maximized, actions toggle/set/unset; behaviour is spike S11).
+  - Own moves marked in `plan_own` (and `memory_own` while memory records moves), consumed by the first move event.
+  - Subscriptions to `window.close`, `window.move_to_workspace`, `window.active` only while a plan is loaded, removed
+    on reload. All in `pcall`. No new timer beyond the one-shot settle per snap.
+  - `plan-moves.json` (last 20, `seq` and the list kept over a reload): `desktop` when a snapped window is moved by hand
+    to another desktop (once, until it is back or closed); `zone` when focus leaves a placed floating snapped window on
+    its desktop that is more than 2 percent off (once, until back within 2 percent or closed). Not while a run is live.
+  - `login.json` `{ instance, plans }` once per Lua state when a plan has `open_at_login`, skipped when the file already
+    names this instance; a failed write is tried again on the next plans load.
+  - `_G.omaplace.desktops(req_id)`: returns the table, and with a request id also writes
+    `$XDG_RUNTIME_DIR/omaplace/desktops-<req_id>.json` (LuaCall cannot return a table through `hyprctl eval`).
+- Tests: `lua/tests/test_plans.lua` (37 checks), `lua/tests/test_glue_plans.lua` (103 checks, fixture
+  `lua/tests/fixtures/home-plans`). Live checks: `docs/checklist/WP12a.md`.
+
+## Verified
+
+`bash tests/run-all.sh`: 43 run, 0 failed, 3 skipped (luacheck, stylua, shellcheck not installed). `bash tests/scrub.sh`
+ok. Nothing was run against the live desktop.
+
+## Not verified live
+
+`window.active` passing the window to Lua; fullscreen state 1 keeping the bar (S11); the float dispatch on a window that
+Omarchy already floats.
