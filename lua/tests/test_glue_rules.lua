@@ -10,7 +10,12 @@ end
 
 local real_getenv = os.getenv
 local home = dir .. "/fixtures/home-rules"
-os.getenv = function(k) if k == "HOME" then return home end return real_getenv(k) end
+-- XDG_RUNTIME_DIR points at a folder that does not exist, so nothing is read from or written to the real one.
+os.getenv = function(k)
+  if k == "HOME" then return home end
+  if k == "XDG_RUNTIME_DIR" then return dir .. "/fixtures/no-such-runtime" end
+  return real_getenv(k)
+end
 local printed = {}
 local real_print = print
 print = function(...) printed[#printed + 1] = table.concat({ ... }, " ") end

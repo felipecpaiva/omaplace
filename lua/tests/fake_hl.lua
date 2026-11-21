@@ -58,7 +58,7 @@ function M.new()
   function hl.dispatch(call) fake.dispatched[#fake.dispatched + 1] = call end
   hl.dsp = dsp_proxy(fake.dsp_calls, "")
 
-  -- One-shot timer: fires once, when advance() passes `ms`. Returns a handle with cancel().
+  -- One-shot timer: fires once, when advance() passes `ms`. Returns a handle with set_enabled and cancel.
   -- Both call forms work: hl.timer(ms, fn) and Hyprland's own hl.timer(fn, { type = "oneshot", timeout = ms }).
   function hl.timer(ms, fn)
     if type(ms) == "function" then
@@ -68,7 +68,12 @@ function M.new()
     fake.next_timer = fake.next_timer + 1
     local t = { id = fake.next_timer, due = fake.now + ms, fn = fn, live = true }
     fake.timers[#fake.timers + 1] = t
-    return { cancel = function() t.live = false end }
+    -- Hyprland's HL.Timer has set_enabled and is_enabled (method calls); cancel() is kept for older tests.
+    return {
+      cancel = function() t.live = false end,
+      set_enabled = function(_, on) t.live = on == true and t.live end,
+      is_enabled = function() return t.live end,
+    }
   end
 
   -- Omarchy's workspace module: block per monitor (by index in the monitor list) * 10 + slot.
