@@ -1,3 +1,4 @@
+session = "off"
 # made-up rules for the glue test
 [rule.editor]
 app = "org.example.Editor"

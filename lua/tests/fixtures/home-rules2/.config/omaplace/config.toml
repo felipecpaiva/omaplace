@@ -1,3 +1,4 @@
+session = "off"
 [rule.editor]
 app = "org.example.Editor"
 monitor = "Example Corp EX27"

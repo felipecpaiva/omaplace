@@ -19,7 +19,7 @@ end
 clean() -- a failed earlier run may have left files
 local real_getenv = os.getenv
 os.getenv = function(k)
-  if k == "HOME" then return dir .. "/fixtures/home-none" end
+  if k == "HOME" then return dir .. "/fixtures/home-session-off" end
   if k == "XDG_RUNTIME_DIR" then return runtime end
   return real_getenv(k)
 end
@@ -465,7 +465,7 @@ eq(select(2, _G.omaplace.open_file(big)), "bad_plan", "plan over 1 MB")
 local before = #printed
 os.getenv = function(k)
   if k == "XDG_RUNTIME_DIR" then return nil end
-  return real_getenv(k) and (k == "HOME" and dir .. "/fixtures/home-none" or real_getenv(k))
+  return real_getenv(k) and (k == "HOME" and dir .. "/fixtures/home-session-off" or real_getenv(k))
 end
 eq(select(2, _G.omaplace.open({ run = "n1", windows = {} })), "no_runtime", "open without runtime dir")
 eq(select(2, _G.omaplace.capture("n2", "all")), "no_runtime", "capture without runtime dir")
@@ -476,7 +476,7 @@ for i = before + 1, #printed do
 end
 eq(warnings, 1, "logged once")
 os.getenv = function(k)
-  if k == "HOME" then return dir .. "/fixtures/home-none" end
+  if k == "HOME" then return dir .. "/fixtures/home-session-off" end
   if k == "XDG_RUNTIME_DIR" then return runtime end
   return real_getenv(k)
 end
