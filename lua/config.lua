@@ -17,7 +17,7 @@ C.settings_spec = {
   session_keep = { default = 5, kind = "int", min = 1, max = 50 },
   request_timeout_s = { default = 60, kind = "int", min = 1, max = 600 },
   restore_at_login = { default = "off", kind = "enum", values = { "off", "ask", "auto" } },
-  app_memory = { default = "scene", kind = "enum", values = { "scene", "last_place", "auto" } },
+  app_memory = { default = "scene", kind = "enum", values = { "scene", "last_place", "auto", "off" } },
   context_quiet_ms = { default = 2000, kind = "int", min = 0, max = 30000 },
   tiled_order = { default = true, kind = "bool" },
   ignore = { default = "", kind = "string" },

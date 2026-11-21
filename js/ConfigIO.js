@@ -20,7 +20,7 @@ const SETTING_SPECS = {
   session_keep: { type: "int", min: 1, max: 50, def: 5 },
   request_timeout_s: { type: "int", min: 1, max: 600, def: 60 },
   restore_at_login: { type: "enum", values: ["off", "ask", "auto"], def: "off" },
-  app_memory: { type: "enum", values: ["scene", "last_place", "auto"], def: "scene" },
+  app_memory: { type: "enum", values: ["scene", "last_place", "auto", "off"], def: "scene" },
   context_quiet_ms: { type: "int", min: 0, max: 30000, def: 2000 },
   tiled_order: { type: "bool", def: true },
   ignore: { type: "string", def: "" }

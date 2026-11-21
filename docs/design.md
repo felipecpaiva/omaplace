@@ -616,7 +616,7 @@ Placed windows get `omaplace-slot=<run>/<n>`. It stops a window being claimed tw
 | `session_keep` | 5 (Hyprland instances, not writes) | |
 | `request_timeout_s` | 60 | |
 | `restore_at_login` | `off` | later: `ask`, `auto` |
-| `app_memory` | `scene` | |
+| `app_memory` | `scene` | `scene`, `last_place`, `auto`, `off` |
 | `context_quiet_ms` | 2000 | D18 |
 | `tiled_order` | `true` (on tiled and scrolling workspaces, open or move windows one at a time in saved order) | |
 | `ignore` | `""` | |
