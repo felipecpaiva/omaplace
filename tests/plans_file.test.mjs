@@ -33,7 +33,7 @@ test("each plan scene becomes an entry with its desktop, layout, mode and window
 test("the same class and context in two plans is not snapped; another context or one plan twice is", () => {
   const e = F.entries(doc({
     a: plan("tiled", [win("org.example.Editor", 1), win("chromium", 2, { context: "Default" }), win("org.example.Term", 3), win("org.example.Term", 4)]),
-    b: plan("columns:3", [win("org.example.Editor", 1), win("chromium", 2, { context: "Profile 1" })])
+    b: plan("columns:3", [win("org.example.Editor", 1), win("chromium", 2, { context: "Profile 1" })], { home_slot: 3 })
   }))
   const snap = (p) => e.plans.find((x) => x.scene === p).windows.map((w) => [w.class, w.context, w.snap])
   assert.deepEqual(snap("a"), [["org.example.Editor", "", false], ["chromium", "Default", true], ["org.example.Term", "", true], ["org.example.Term", "", true]])
@@ -43,13 +43,15 @@ test("the same class and context in two plans is not snapped; another context or
 test("a bad plan is skipped with its reason and does not count for the ambiguity rule", () => {
   const e = F.entries(doc({
     good: plan("tiled", [win("org.example.Editor", 1)]),
-    bad: plan("columns:2", [win("org.example.Editor", 9)]),
-    read: plan("tiled", [], { planError: "layout: missing" })
+    bad: plan("columns:2", [win("org.example.Editor", 9)], { home_slot: 3 }),
+    unbound: plan("tiled", [win("org.example.Editor", 1)], { home_slot: 0 }),
+    same: plan("tiled", [win("org.example.Editor", 1)])
   }))
   assert.deepEqual(e.plans.map((p) => [p.scene, p.windows[0].snap]), [["good", true]])
-  assert.deepEqual(e.skipped.map((s) => s.scene), ["bad", "read"])
+  assert.deepEqual(e.skipped.map((s) => s.scene), ["bad", "unbound", "same"])
   assert.match(e.skipped[0].reason, /zone 9/)
-  assert.match(e.skipped[1].reason, /layout: missing/)
+  assert.match(e.skipped[1].reason, /home_slot/)
+  assert.match(e.skipped[2].reason, /already has plan good/)
 })
 
 test("build writes return { plans = ... } that Lua loads in an empty environment", () => {
@@ -67,7 +69,7 @@ test("build writes return { plans = ... } that Lua loads in an empty environment
 test("no plans is an empty list, and a file over 1 MB is refused, never cut", () => {
   assert.equal(F.build(doc({})).text, "return {plans = {}}\n")
   const many = {}
-  for (let i = 0; i < 400; i++) many["p" + i] = plan("tiled", Array.from({ length: 60 }, (_, j) => win("org.example.App" + j + "x".repeat(20), j + 1)))
+  for (let i = 0; i < 400; i++) many["p" + i] = plan("tiled", Array.from({ length: 60 }, (_, j) => win("org.example.App" + j + "x".repeat(20), j + 1)), { home_monitor: "Example " + i })
   const r = F.build(doc(many))
   assert.equal(r.text, undefined)
   assert.match(r.error, /over 1 MB/)

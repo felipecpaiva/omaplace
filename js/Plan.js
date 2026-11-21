@@ -58,7 +58,7 @@ function ranks(keys) {
 // Where each window of a plan scene goes, in scene.windows order: { rect, order, floating, fullscreen? }. Throws when the
 // plan is not valid (SceneStore.planProblem), so a bad plan never opens.
 function planWindows(scene) {
-  const why = scene.planError || SceneStore.planProblem(scene)
+  const why = SceneStore.planProblem(scene)
   if (why) throw new Error("Plan: bad plan: " + why)
   const wins = scene.windows || []
   const layout = scene.layout

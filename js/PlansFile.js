@@ -1,5 +1,6 @@
 .pragma library
 .import "Plan.js" as Plan
+.import "SceneStore.js" as SceneStore
 .import "LuaLiteral.js" as LuaLiteral
 // The derived file ~/.local/state/omaplace/plans.lua (design 14.7): one Lua table literal of every plan = true scene, so Lua
 // can snap a planned app to its desktop and zone without reading scenes.toml or doing zone math. Pure: the caller writes it.
@@ -29,13 +30,15 @@ function byteLength(s) {
 function entries(doc) {
   const plans = [], skipped = []
   const scenes = (doc && doc.scenes) || {}
+  const problems = SceneStore.planProblems(scenes) // also refuses a second plan on one desktop
   for (const name of Object.keys(scenes)) {
     const scene = scenes[name]
     if (scene.plan !== true) continue
+    if (problems[name]) { skipped.push({ scene: name, reason: problems[name] }); continue }
     let placed
     try { placed = Plan.planWindows(scene) } catch (e) { skipped.push({ scene: name, reason: String(e.message || e) }); continue }
     plans.push({
-      scene: name, home_monitor: scene.home_monitor || "", home_slot: scene.home_slot || 0, layout: scene.layout,
+      scene: name, home_monitor: scene.home_monitor || "", home_slot: scene.home_slot, layout: scene.layout,
       mode: Plan.planMode(scene.layout), open_at_login: scene.open_at_login === true,
       windows: (scene.windows || []).map((w, i) => {
         const out = { class: w.class, context: w.context || "", rect: placed[i].rect, floating: placed[i].floating, snap: true }

@@ -118,7 +118,7 @@ Item {
     let text = root.readNow(scenesFile)
     let doc = SceneStore.parse(text)
     if (doc.readOnly) return { error: root.fail("failed", "scenes.toml has a newer schema") }
-    if (doc.errors.length > 0) return { error: root.fail("failed", "scenes.toml has a scene with a bad name, fix it first") }
+    if (doc.errors.length > 0) return { error: root.fail("failed", doc.errors[0].code === "bad_plan" ? "scenes.toml: plan " + doc.errors[0].name + ": " + doc.errors[0].reason + ", fix it first" : "scenes.toml has a scene with a bad name, fix it first") }
     return { doc: doc, text: text }
   }
 

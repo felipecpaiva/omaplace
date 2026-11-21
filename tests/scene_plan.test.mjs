@@ -74,7 +74,7 @@ test("every layout kind is accepted: tiled, scrolling, full, free, names, zones 
     assert.deepEqual(S.parse(planText(`layout = "${layout}"`, [["org.example.Editor", 2]])).errors, [], layout)
   }
   assert.deepEqual(S.parse(planText(`layout = "full"`, [["org.example.Editor", 1]])).errors, [])
-  assert.deepEqual(S.parse(planText(`layout = "free"`, [["org.example.Editor"]])).errors, [], "free needs no zone")
+  assert.deepEqual(S.parse(planText(`layout = "free"`, [["org.example.Editor"]])).errors, [], "free has no zones")
   assert.deepEqual(S.parse(planText(`layout = "tiled"`, [["org.example.Editor", 64]])).errors, [])
   assert.equal(S.parse(planText(`layout = "tiled"`, [])).scenes["desk-2"].open_at_login, undefined, "missing means off (D20)")
 })
@@ -100,9 +100,14 @@ test("bad plan values are errors with a reason, never a default, and the scene k
     [planText(`layout = "tiled"`, []).replace("plan = true", 'plan = "yes"'), /plan: expected true or false/],
     [planText(`layout = "tiled"`, []).replace("plan = true", "plan = false"), /layout: only a plan scene/],
     [planText(`open_at_login = true`, []).replace("plan = true\n", ""), /open_at_login: only a plan scene/],
-    [CAPTURED.replace('class = "org.example.Mail"', 'class = "org.example.Mail"\nzone = 1'), /zone: only a plan scene/]
+    [CAPTURED.replace('class = "org.example.Mail"', 'class = "org.example.Mail"\nzone = 1'), /zone: only a plan scene/],
+    [planText(`layout = "tiled"`, ed(1)).replace("home_slot = 2", "home_slot = 0"), /home_slot: a plan is bound to a desktop, expected 1..10/],
+    [planText(`layout = "tiled"`, ed(1)).replace("home_slot = 2\n", ""), /home_slot: a plan is bound to a desktop/],
+    [planText(`layout = "tiled"`, ed(1)).replace("home_slot = 2", "home_slot = 11"), /home_slot: a plan is bound to a desktop/],
+    [planText(`layout = "free"`, ed(1)), /zone: free places by rect, no zones/],
+    [planText(`layout = "tiled"`, [["org.example.Editor", 1], ["", 2]]), /window.2.class: empty, a plan window needs a class/, "parse report only"]
   ]
-  for (const [text, why] of cases) {
+  for (const [text, why, reportOnly] of cases) {
     const d = S.parse(text)
     const name = Object.keys(d.scenes)[0]
     assert.equal(d.errors.length, 1, String(why))
@@ -110,9 +115,49 @@ test("bad plan values are errors with a reason, never a default, and the scene k
     assert.equal(d.errors[0].name, name)
     assert.match(d.errors[0].reason, why)
     assert.equal(d.scenes[name].planError, d.errors[0].reason)
-    assert.throws(() => S.serialize(d), /bad_plan: scene/)
+    // a parse report alone blocks the write through doc.errors (Service.qml), not through serialize()
+    if (reportOnly) assert.doesNotThrow(() => S.serialize(d))
+    else assert.throws(() => S.serialize(d), /bad_plan: scene/)
   }
   assert.equal(S.parse(planText(`layout = "tiles"`, ed(1))).scenes["desk-2"].layout, "tiles", "kept as read")
+})
+
+test("an empty class in a captured scene stays a warning, in a plan it is an error", () => {
+  const cap = S.parse(CAPTURED.replace('class = "org.example.Mail"', 'class = ""'))
+  assert.deepEqual(cap.errors, [])
+  assert.match(cap.warnings.join("\n"), /class: empty, window skipped/)
+  const plan = S.parse(planText(`layout = "tiled"`, [["", 1]]))
+  assert.deepEqual(plan.warnings, [])
+  assert.equal(plan.errors[0].code, "bad_plan")
+})
+
+test("a second plan on the same desktop is refused and names the first; another slot or monitor is fine", () => {
+  const second = (slot, monitor) => `
+[scene.desk-b]
+plan = true
+layout = "tiled"
+home_monitor = "${monitor}"
+home_slot = ${slot}
+
+[scene.desk-b.window.1]
+class = "org.example.Mail"
+zone = 1
+`
+  const d = S.parse(PLAN + second(2, "Example Corp EX27"))
+  assert.deepEqual(d.errors, [{ code: "bad_plan", name: "desk-b", reason: 'desktop 2 of "Example Corp EX27" already has plan desk-2' }])
+  assert.throws(() => S.serialize(d), /bad_plan: scene desk-b: desktop 2/)
+  assert.deepEqual(S.parse(PLAN + second(3, "Example Corp EX27")).errors, [])
+  assert.deepEqual(S.parse(PLAN + second(2, "Example Corp EX32")).errors, [])
+  const fixed = S.parse(PLAN + second(3, "Example Corp EX27"))
+  fixed.scenes["desk-b"].home_slot = 2
+  assert.throws(() => S.serialize(fixed), /already has plan desk-2/, "built in code is checked too")
+})
+
+test("serialize decides by planProblem only: a scene fixed in code writes even with its parse report", () => {
+  const d = S.parse(PLAN.replace("zone = 2", "zone = 9"))
+  assert.match(d.scenes["desk-2"].planError, /zone 9/)
+  d.scenes["desk-2"].windows[1].zone = 2
+  assert.equal(S.serialize(d), PLAN)
 })
 
 test("plan = false is a captured scene and keeps its line", () => {

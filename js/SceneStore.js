@@ -9,7 +9,8 @@
 // `edited` is a space separated list of the window fields the user changed in settings; mergeCapture keeps those.
 // Plan scenes (design 14.2) also have plan = true, layout, open_at_login, and a `zone` per window. These keys are never
 // defaulted: a bad or misplaced one is a doc error {code: "bad_plan", name, reason}, the scene keeps what was read and gets
-// `planError`, and serialize() refuses it (Service.qml writes nothing while doc.errors is not empty). A scene without
+// `planError` (the parse report only), and serialize() refuses any scene planProblem() or a desktop clash rejects
+// (Service.qml writes nothing while doc.errors is not empty). A scene without
 // `plan` never gets these keys written, so captured scenes round trip unchanged.
 
 const SCENE_NAME_RE = /^[a-z0-9_-]{1,40}$/
@@ -168,13 +169,21 @@ function parse(text) {
     else { sec.target[k.key] = copyDefault(spec); warn(sec.label + k.key + ": " + r.why + ", using " + JSON.stringify(spec.def)) }
   }
   for (const name of Object.keys(doc.scenes)) {
+    const scene = doc.scenes[name]
     numbered[name].sort((a, b) => a.n - b.n)
     for (const item of numbered[name]) {
-      if (item.win.class === "") { warn("scene." + name + ".window." + item.n + ".class: empty, window skipped"); continue }
-      doc.scenes[name].windows.push(item.win)
+      if (item.win.class === "") {
+        const what = "scene." + name + ".window." + item.n + ".class: empty"
+        if (scene.plan === true) { if (!scene.planError) scene.planError = what + ", a plan window needs a class" } else warn(what + ", window skipped")
+        continue
+      }
+      scene.windows.push(item.win)
     }
+  }
+  const problems = planProblems(doc.scenes)
+  for (const name of Object.keys(doc.scenes)) {
     const scene = doc.scenes[name]
-    const why = scene.planError || planProblem(scene)
+    const why = scene.planError || problems[name]
     if (why) { scene.planError = why; doc.errors.push({ code: "bad_plan", name, reason: why }) }
   }
   if (!schemaSeen && Object.keys(doc.scenes).length > 0) warn("schema: missing, read as 1")
@@ -208,6 +217,7 @@ function planProblem(scene) {
     return null
   }
   if (scene.open_at_login !== undefined && typeof scene.open_at_login !== "boolean") return "open_at_login: expected true or false"
+  if (!Number.isInteger(scene.home_slot) || scene.home_slot < 1 || scene.home_slot > 10) return "home_slot: a plan is bound to a desktop, expected 1..10"
   if (typeof scene.layout !== "string") return "layout: missing; expected " + PLAN_LAYOUTS.join(", ") + ", a zone layout name or zones text"
   let count = Zones.MAX_ZONES
   if (scene.layout === "full") count = 1
@@ -218,14 +228,30 @@ function planProblem(scene) {
   }
   if (scene.layout === "full" && wins.length > 1) return "layout full holds one window, this plan has " + wins.length
   const seen = {}
+  if (scene.layout === "free") return wins.some((w) => w.zone !== undefined) ? "zone: free places by rect, no zones" : null
   for (const w of wins) {
-    if (w.zone === undefined && scene.layout === "free") continue // free places by the saved rects
     if (!Number.isInteger(w.zone) || w.zone < 1) return "zone of " + w.class + ": expected a whole number from 1"
     if (w.zone > count) return "zone " + w.zone + " of " + w.class + ": layout " + scene.layout + " has " + count + (count === 1 ? " zone" : " zones")
     if (seen[w.zone]) return "zone " + w.zone + " is used twice"
     seen[w.zone] = true
   }
   return null
+}
+
+// Why each scene of a doc is refused ({ name: reason }): planProblem(), then two plans on one desktop (same home_monitor
+// and home_slot), where the later one in the file is refused and the reason names the earlier.
+function planProblems(scenes) {
+  const out = {}, desk = {}
+  for (const name of Object.keys(scenes || {})) {
+    const scene = scenes[name]
+    const why = planProblem(scene)
+    if (why) { out[name] = why; continue }
+    if (scene.plan !== true) continue
+    const key = (scene.home_monitor || "") + "\n" + scene.home_slot
+    if (desk[key] !== undefined) out[name] = "desktop " + scene.home_slot + " of " + JSON.stringify(scene.home_monitor || "") + " already has plan " + desk[key]
+    else desk[key] = name
+  }
+  return out
 }
 
 // ---- serialize
@@ -256,10 +282,11 @@ function emit(out, obj, specs, before, after) {
 function serialize(doc) {
   if (doc.readOnly) throw new Error("read_only: scenes.toml has a newer schema")
   const out = ["schema = " + format(doc.schema === undefined ? SUPPORTED_SCHEMA : doc.schema)]
+  const problems = planProblems(doc.scenes)
   for (const name of Object.keys(doc.scenes || {})) {
     if (!SCENE_NAME_RE.test(name)) throw new Error("bad_name: " + name)
     const scene = doc.scenes[name]
-    const why = scene.planError || planProblem(scene)
+    const why = problems[name]
     if (why) throw new Error("bad_plan: scene " + name + ": " + why)
     out.push("", "[scene." + name + "]")
     emit(out, scene, SCENE_SPECS, PLAN_SCENE_KEYS, [])

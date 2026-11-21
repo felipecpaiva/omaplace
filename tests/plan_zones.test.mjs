@@ -70,7 +70,13 @@ test("free uses the saved rects and order, like a captured scene", () => {
 test("a bad plan never opens", () => {
   assert.throws(() => open(plan("columns:2", [win("org.example.A", 3)])), /Plan: bad plan: zone 3/)
   assert.throws(() => open(plan("nope", [win("org.example.A", 1)])), /Plan: bad plan: layout/)
-  assert.throws(() => open({ ...plan("tiled", []), planError: "read error" }), /Plan: bad plan: read error/)
+  assert.throws(() => open({ ...plan("tiled", [win("org.example.A", 1)]), home_slot: 0 }), /Plan: bad plan: home_slot/)
+  assert.throws(() => open(plan("free", [win("org.example.A", 1)])), /free places by rect, no zones/)
+})
+
+test("only planProblem decides: a parse report left on a fixed scene does not stop it opening", () => {
+  const p = open({ ...plan("tiled", [win("org.example.A", 1)]), planError: "an old parse report" })
+  assert.deepEqual(p.windows.map((w) => w.class), ["org.example.A"])
 })
 
 test("planMode maps every layout kind to the desktop mode", () => {
