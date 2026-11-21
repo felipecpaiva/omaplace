@@ -1,0 +1,14 @@
+[strategy.notes]
+match = "org.example.Notes|example-notes"
+use = "place_only"
+
+[strategy.myide]
+match = "myide*"
+use = "context"
+launch_context = "myide --new-window {folder}"
+context = "folder"
+
+[strategy.wrong]
+match = "x"
+use = "teleport"
+context = "everything"

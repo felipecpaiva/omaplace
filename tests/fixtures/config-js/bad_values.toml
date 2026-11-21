@@ -1,0 +1,14 @@
+schema = 1
+expiry_seconds = 0
+settle_ms = "slow"
+session = "maybe"
+tiled_order = 1
+ignore = "say "hi""
+app_memory = auto
+this line is not valid
+[rule.broken]
+app = "org.example.Editor"
+slot = 11
+follow = "yes"
+[rule.bad name!]
+app = "org.example.Other"
