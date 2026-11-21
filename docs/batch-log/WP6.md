@@ -11,8 +11,8 @@
   and the button rows of a choice).
 - `Service.qml`: only additions. New functions `ensureDirs`, `refreshMonitors`, `panelData`, `contextInfo`,
   `sessionRows`, `setSetting`, `setRuleField`, `setSceneWindow`, `pickFolder`, `onPicked`, `resultOf`,
-  `installLauncher`; two Processes (`hyprctl monitors -j`, `omarchy file select --directory`), five read-only FileViews
-  and the launcher FileView. `Component.onCompleted` now also installs the launcher; new `Component.onDestruction`
+  `installLauncher`; two Processes (`hyprctl monitors -j`, `omarchy file select --directory`), four read-only FileViews
+  (Local State, session counts, results, the bundled launcher) and the launcher's own FileView. `Component.onCompleted` now also installs the launcher; new `Component.onDestruction`
   removes it. Every existing function and flow is unchanged.
 - `js/Settings.js` (new, pure) and `tests/settings.test.mjs` (19 tests).
 - `omaplace.desktop` (launcher) and `manifest.json` (description only: the shell has no launcher field, same as omagnet).
@@ -56,6 +56,10 @@
 - The slot spinner and the timing fields write on every step (each a write with .bak and a Lua reload).
 - Twins: Omarchy keeps a twin's identity while plugged in, so a recomputed ` #2` can differ from Omarchy's after a
   replug (same limit as `lua/monitors.lua`).
+- Every change replaces the window's data, so every list delegate is rebuilt: focus leaves an edited field and a long
+  list may jump to the top. Fine for a few scenes and rules; keep the delegate state outside if it annoys.
+- Launcher removal at unload is an async `find`, install at load a sync read: a disable then enable inside one shell
+  process may leave the launcher deleted until the next load.
 - Nothing of the window has run in the shell (no reload, no install). `docs/checklist/WP6.md` lists the hand checks.
 
 ## Verified
@@ -63,6 +67,8 @@
 - `tests/qml_lint.test.sh` resolves `qs.Ui` and `qs.Commons` (a bogus property on a `qs.Ui` Button in a page was
   reported as `missing-property` and failed the test). Left out as noise: `not found on type "QObject"` (Style and Color
   tokens), `[unqualified]`, and `PanelWindow is not creatable` (omagnet's shipped panel gets the same).
+- The lint drops every `[unqualified]` warning (ids of outer items used inside delegates); the delegates were read by
+  hand and every such name resolves, but the lint itself does not prove it.
 - The run-all `qmllint` step (root files, no shell imports) prints import warnings for SettingsPanel.qml and passes, as
   qmllint exits 0 on warnings; the real check is the test above.
 

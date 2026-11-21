@@ -4,6 +4,7 @@ Shell plugin JS and QML are cached: nothing here is live until `omarchy restart 
 test app, no synthetic input, never a virtual monitor. Made-up scene names.
 
 ## Opening
+0. First: the window shows its pages, not "The omaplace service is not running" (the shell must fill `service`).
 1. `omarchy-shell shell toggle io.github.felipecpaiva.omaplace` opens the window; again closes it; Escape and a click
    outside close it. `omaplace settings` does the same.
 2. The launcher (SUPER+SPACE) finds "omaplace"; `~/.local/share/applications/omaplace.desktop` holds
@@ -26,6 +27,9 @@ test app, no synthetic input, never a virtual monitor. Made-up scene names.
 11. The note about plain text in scenes.toml and dotfiles is shown.
 
 ## Rules
+11a. Profile and monitor drop-downs open and pick inside the overlay.
+11b. Open and Restore with the window still up: does a rule's focus-follow still land, with the overlay holding the
+     keyboard? If not, close the window on Open and Restore.
 12. "Add a rule for the focused window": with the settings overlay open, does `hyprctl activewindow` still give the app
     underneath? The rule appears for that app, its monitor and desktop.
 13. Monitor picker: live monitors by their Omarchy name, plus "Focused monitor"; a rule for an unplugged monitor shows

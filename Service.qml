@@ -560,7 +560,8 @@ Item {
     id: pickProc
     command: ["omarchy", "file", "select", "--title", "Project folder for this window", "--directory"]
     stdout: StdioCollector { onStreamFinished: root.onPicked(text) }
-    onExited: if (root.picking) root.onPicked("")
+    // A pick exits 0 and arrives through stdout, in either order; only a cancel or a failure clears the pick here.
+    onExited: (code) => { if (code !== 0 && root.picking) root.onPicked("") }
   }
 
   // ---- one-shot timers, armed only while a request runs
