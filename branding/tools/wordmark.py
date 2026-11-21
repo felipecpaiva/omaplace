@@ -2,7 +2,7 @@
 """Shared omaplace vector geometry, palette, contrast and outlined JetBrains Mono Bold lettering.
 Copied from omadials/branding/tools/wordmark.py (2026-11-21) and adapted for omaplace: new marks and accents."""
 from pathlib import Path
-import subprocess, sys
+import os, subprocess, sys
 sys.dont_write_bytecode = True
 from fontTools.ttLib import TTFont
 from fontTools.pens.svgPathPen import SVGPathPen
@@ -62,3 +62,25 @@ DIRECTIONS=[
   idea='Three desktop slots side by side. The middle app has dropped into its slot, sitting lower than its neighbours, with a small chevron above that shows the motion. Orchid accent.',
   differs='Three upright columns with one lowered, not horizontal pills (OmaBar), a square ring (omagnet), two square tiles (omahop) or arcs (omadials).',
   small='Columns are 4 units wide with 1 unit gaps. The lowered middle column changes the silhouette, so the idea survives in one colour. The chevron is a 1.4 unit stroke.')]
+
+# ---- final kit (chosen v1-plan, picked 2026-11-21). Shared by logo.py, kit.py, social.py, sheet.py and terminal.py.
+# Palette and the shot() helper follow OmaBarConfigurator/branding/tools/wordmark.py; do not change the mark here
+# without a new decision.
+import shutil, tempfile
+LOGO=ROOT/'logo'
+ACCENT,DEEP='#5aa9ff','#1f5fae'   # azure on dark grounds; deep azure on light grounds (azure is 2.21:1 on paper)
+MUTE,MUTE_LIGHT,PANEL,CHIP_LIGHT='#9a9eb0','#5b5f6e','#23262e','#e4e2dd'
+TAG='Every app in its zone.'
+SUB='Placement rules, desktop plans, named scenes and session restore for Omarchy.'
+URL='github.com/felipecpaiva/omaplace'
+def plan(main,accent): return mark('plan',main,accent)
+def shot(html,out,w,h):
+    """Screenshot an HTML string with headless Chromium at exactly w by h, using a throwaway profile."""
+    tmp=tempfile.mkdtemp(prefix='omaplace-kit-')
+    try:
+        page=os.path.join(tmp,'page.html'); open(page,'w').write(html)
+        subprocess.run(['chromium','--headless','--disable-gpu','--no-sandbox','--disable-crash-reporter','--hide-scrollbars',
+                        '--force-device-scale-factor=1',f'--user-data-dir={tmp}/profile',f'--window-size={w},{h}',
+                        f'--screenshot={out}','file://'+page],check=True,capture_output=True,timeout=90)
+    finally:
+        shutil.rmtree(tmp,ignore_errors=True)
