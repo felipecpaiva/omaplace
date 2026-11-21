@@ -45,9 +45,11 @@ so the toggle fallback was used.
      (`Desktops.newSceneName`, `open_at_login` false, home monitor "" when the old plan had "") holds it at the move's
      rect, or `[0, 0, 1, 1]` for a tiled window. A plan with home monitor "" on the target slot now counts as that
      desktop's plan (the window joins it).
-   - still `not_possible`: twins (class and context twice), `full` receiving a second window, and, as D24 says "as
-     before", a join into a zone plan where the zone is taken or missing, a single-window plan onto a desktop that has a
-     plan, a zone move without a rect, a zone move in a tiled or scrolling plan (Lua never reports those).
+   - desktop move of a single-window plan onto a desktop that has a plan: the window joins that plan like any other
+     (zone by centre, tiled and scrolling last, free at its rect) and the empty old plan is removed (Felipe, follow-up).
+   - still `not_possible`: twins (class and context twice), `full` receiving a second window, a join into a zone plan
+     where the zone is taken or missing, a zone move without a rect, a zone move in a tiled or scrolling plan (Lua never
+     reports those). Design 14.8's `plan-update` row now says the same.
 3. **Open all of a `full` plan not maximized** (finding 3). The run now carries `fullscreen` per window into its slot
    info and, after placing (or on a tiled desktop, instead of placing), dispatches
    `hl.dsp.window.fullscreen({ mode = "maximized", action = "set" })` like the snap path.

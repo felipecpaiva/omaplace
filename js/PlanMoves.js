@@ -84,7 +84,7 @@ function toFree(scene, moved, rect) {
 
 // The scene edit for "Update plan" (design 14.8, D24). doc is a SceneStore doc and is never changed.
 // Returns { doc, changed (false: the plan already says so), replace? (true: place the plan's open windows again),
-// created? (the name of a new plan) } or { code: "not_found" | "not_possible", reason }.
+// created? (the name of a new plan), removed? (the name of a plan left empty) } or { code: "not_found" | "not_possible", reason }.
 function edit(scenesDoc, m) {
   if (!valid(m)) return no("not_possible", "the move is not readable")
   const doc = JSON.parse(JSON.stringify(scenesDoc))
@@ -119,29 +119,30 @@ function edit(scenesDoc, m) {
     if ((anyMonitor || scene.home_monitor === m.to.identity) && scene.home_slot === m.to.slot) return { doc, changed: false }
     const twin = scene.windows.filter((w) => w.class === m.class && (w.context || "") === (m.context || "")).length > 1
     if (twin) return no("not_possible", "plan " + m.scene + " holds more than one " + m.class + " window, so the moved one is not known")
-    if (scene.windows.length === 1) {
+    // the plan of the target desktop; a plan on the focused monitor ("") is that desktop's plan too
+    const name = Object.keys(doc.scenes).find((n) => n !== m.scene && doc.scenes[n].plan === true && ["", m.to.identity].indexOf(doc.scenes[n].home_monitor || "") !== -1 && doc.scenes[n].home_slot === m.to.slot)
+    scene.windows.splice(m.window - 1, 1)
+    if (name) {
+      const why = joinPlan(doc.scenes[name], win, m.to)
+      if (why) return no("not_possible", why)
+      // a plan left empty is removed
+      if (scene.windows.length === 0) { delete doc.scenes[m.scene]; out.removed = m.scene }
+    } else if (scene.windows.length === 0) {
+      scene.windows.push(win) // the only window: the plan follows it to the new desktop
       if (!anyMonitor) scene.home_monitor = m.to.identity
       scene.home_slot = m.to.slot
     } else {
-      // a plan on the focused monitor ("") is that desktop's plan too
-      const name = Object.keys(doc.scenes).find((n) => doc.scenes[n].plan === true && ["", m.to.identity].indexOf(doc.scenes[n].home_monitor || "") !== -1 && doc.scenes[n].home_slot === m.to.slot)
-      scene.windows.splice(m.window - 1, 1)
-      if (name) {
-        const why = joinPlan(doc.scenes[name], win, m.to)
-        if (why) return no("not_possible", why)
-      } else {
-        // no plan there (D24): a new free plan holds the window where it is now
-        const identity = anyMonitor ? "" : m.to.identity
-        const created = Desktops.newSceneName(identity, m.to.slot, doc.scenes)
-        if (created === "") return no("not_possible", "no free scene name for desktop " + m.to.slot)
-        delete win.zone
-        win.rect = rectOk(m.to.rect) ? m.to.rect.slice() : [0, 0, 1, 1]
-        win.floating = true
-        win.order = 1
-        doc.scenes[created] = Desktops.newPlan(identity, m.to.slot, "free")
-        doc.scenes[created].windows.push(win)
-        out.created = created
-      }
+      // no plan there (D24): a new free plan holds the window where it is now
+      const identity = anyMonitor ? "" : m.to.identity
+      const created = Desktops.newSceneName(identity, m.to.slot, doc.scenes)
+      if (created === "") return no("not_possible", "no free scene name for desktop " + m.to.slot)
+      delete win.zone
+      win.rect = rectOk(m.to.rect) ? m.to.rect.slice() : [0, 0, 1, 1]
+      win.floating = true
+      win.order = 1
+      doc.scenes[created] = Desktops.newPlan(identity, m.to.slot, "free")
+      doc.scenes[created].windows.push(win)
+      out.created = created
     }
   }
   // Any plan the edit makes invalid (a used zone, two plans on one desktop, full with two windows) refuses the edit.

@@ -186,10 +186,31 @@ test("desktop move of a single-window plan rebinds its desktop; the same desktop
   assert.equal(P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", ...toDesk(3) })).changed, false)
 })
 
-test("desktop move of a single-window plan onto a desktop with a plan is not possible (one plan per desktop)", () => {
-  const r = P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", ...toDesk(2) }))
-  assert.equal(r.code, "not_possible")
-  assert.match(r.reason, /already has plan/)
+test("desktop move of a single-window plan onto a desktop with a plan joins it, and the empty plan is removed", () => {
+  const mail = { scene: "desk-3", class: "org.example.Mail" }
+  // tiled: added last
+  const t = P.edit(doc(), mv(1, { ...mail, ...toDesk(5) }))
+  assert.equal(t.changed, true)
+  assert.equal(t.removed, "desk-3")
+  assert.equal(t.doc.scenes["desk-3"], undefined)
+  assert.deepEqual(t.doc.scenes["desk-5"].windows.map((w) => [w.class, w.zone]),
+    [["org.example.Term", 1], ["org.example.Files", 2], ["org.example.Mail", 3]])
+  assert.deepEqual(S.planProblems(t.doc.scenes), {})
+  assert.doesNotThrow(() => S.serialize(t.doc))
+  // free: at its rect
+  const f = P.edit(doc(), mv(1, { ...mail, ...toDesk(6, [0.5, 0.5, 0.4, 0.4]) }))
+  assert.deepEqual(f.doc.scenes["desk-6"].windows[1].rect, [0.5, 0.5, 0.4, 0.4])
+  assert.equal(f.doc.scenes["desk-3"], undefined)
+  // zone plan: the zone by its centre (desk-2 is full, so empty its zone 2 first)
+  const d = doc()
+  d.scenes["desk-2"].windows.pop()
+  const z = P.edit(d, mv(1, { ...mail, ...toDesk(2, [0.6, 0.1, 0.3, 0.3]) }))
+  assert.deepEqual(z.doc.scenes["desk-2"].windows.map((w) => [w.class, w.zone]), [["org.example.Editor", 1], ["org.example.Mail", 2]])
+  assert.equal(z.removed, "desk-3")
+  // taken zone, outside every zone, a full plan: not possible, nothing removed
+  assert.match(P.edit(doc(), mv(1, { ...mail, ...toDesk(2, [0.6, 0.1, 0.3, 0.3]) })).reason, /used twice/)
+  assert.match(P.edit(doc(), mv(1, { ...mail, ...toDesk(2) })).reason, /outside every zone/)
+  assert.match(P.edit(doc(), mv(1, { ...mail, ...toDesk(4) })).reason, /full holds one window/)
 })
 
 test("desktop move from a many-window plan joins the target plan by its layout", () => {
