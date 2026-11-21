@@ -47,7 +47,7 @@ Done when:
 
 Work packages: WP3, WP4, WP5, WP6, WP9.
 
-Status 2026-11-21: checks 1 to 7 pass live ([batch-log/live-M1.md](batch-log/live-M1.md)); 8 (settings window) waits for WP6.
+Status 2026-11-21: checks 1 to 7 pass live; 8 the window renders and lists scenes, its other pages are hand checks in [checklist/WP6.md](checklist/WP6.md) ([batch-log/live-M1.md](batch-log/live-M1.md)).
 
 ### M3: Session restore (F3)
 
@@ -62,9 +62,13 @@ Done when:
 
 Work package: WP7.
 
+Status 2026-11-21: checks 1, 2 and 4 pass live; 3 passes with a hand-made previous session. A restore after a real new login is still to do.
+
 ### M4: Polish and later options
 
 Menu entry with consent (WP8), `app_memory = auto` (WP10), restore at login (`ask`, `auto`), release work if it goes public.
+
+Status 2026-11-21: WP8 and WP10 built; auto mode passes live; the menu block round-trips on a copy of the real file. Open: clicking a real menu row (S6), restore at login, release work.
 
 ## Not goals (for now)
 

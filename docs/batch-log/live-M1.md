@@ -76,3 +76,15 @@ Note: `omaplace restore` prints only `ok`; a counts line like `open` would be ni
 | Session cap with one reused timer (fix3) | **fail**: no write during 48 s of focus changes. Probe: a fired one-shot `HL.Timer` cannot be re-armed (`set_timeout` plus `set_enabled(true)`, or off then on, never fire again; `is_enabled` returns nil). The reused timer was dead after its first fire, so sessions would have stopped after one write. Fixed: a fresh timer per arm; the fake timer now refuses to re-arm a fired one-shot, and the session test fails on the old code |
 | Session cap after the fix | pass: written 34 s after the first of nonstop focus changes (cap 30 s plus the 4 s check step) |
 | One quiet cycle after that | pass: written 15 s after the last event |
+
+# Final live checks, 2026-11-21
+
+| Check | Result |
+|---|---|
+| `hyprctl eval` output | prints only `ok`, never the chunk's return value, so WP8's error mapping could not work; fixed: the Lua chunk writes its answer to `reply-<req>.txt`, the service reads it after hyprctl exits |
+| Open through the reply file, and a second open during a run | pass: open works; the second answers `busy` in 0.06 s |
+| Spent request files | pass: plan, capture, reply and the previous result are removed when a request ends |
+| `app_memory = "auto"`: Omacalc moved from the desktop showing `livetest` (8) to the one showing `chromea` (9) | pass: one event in `moves.json`, and scenes.toml moved the slot from livetest to chromea |
+| Menu block on a copy of the real `omarchy-menu.jsonc` | pass: added, still parses, removed back to byte-identical; rows call the CLI by full path. Clicking a real menu row (S6) not done (needs a click) |
+| Settings window | renders (screenshot `docs/media/settings-scenes.png`); other pages need clicks, see `docs/checklist/WP6.md` |
+| Cleanup | hyprland.lua restored byte-identical to its backup, `_G.omaplace` gone, plugin disabled (still installed), test config and state moved to trash, runtime folder removed |
