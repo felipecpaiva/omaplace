@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.felipecpaiva.omaplace",
+  "name": "omaplace",
+  "version": "0.0.1",
+  "author": "Felipe Paiva",
+  "description": "App placement rules, scenes and session restore for Omarchy, with monitors it recognizes again. Settings window for omaplace.",
+  "license": "MIT",
+  "kinds": ["service", "panel"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "panel": "SettingsPanel.qml"
+  }
+}
