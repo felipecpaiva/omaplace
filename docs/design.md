@@ -87,6 +87,7 @@ So the split follows the platform, not taste.
 | `$XDG_RUNTIME_DIR/omaplace/status.json` | JSON | Lua glue | `Service.qml` | Progress of the current run |
 | `~/.local/state/omaplace/memory.lua` | Lua table literal (Lua reads its own file with `loadfile` in an empty environment) | Lua glue | Lua glue, `Service.qml` (display) | App memory per class |
 | `$XDG_RUNTIME_DIR/omaplace/moves.json` | JSON | Lua glue | `Service.qml` | Moves between scene desktops (`auto` mode only) |
+| `$XDG_RUNTIME_DIR/omaplace/plan-<run>.lua` | one Lua table literal (`return { ... }`) | `Service.qml` | Lua glue (`load` with an empty environment, text mode only) | The plan of one run (S1: `hyprctl eval` arguments are capped at 128 kB by Linux, so plans go through a file) |
 | `$XDG_RUNTIME_DIR/omaplace/result-<req>.json` | JSON | `Service.qml` | `bin/omaplace` | Final answer of a slow request (save, open, restore) |
 
 Scenes are TOML (decision D2) because users keep them in dotfiles and edit them; only JS reads them, and JS hands Lua a
@@ -370,7 +371,7 @@ Rules:
 6. The strategy table (5.7) gets `context = "profile" | "folder" | "none"` and a `launch_context` template per entry, so new
    multi-profile apps are added as data.
 
-### 5.4 Plan (JS to Lua, as one Lua table literal)
+### 5.4 Plan (JS to Lua, as one Lua table literal in a file)
 
 ```lua
 { run = "r-20261121-1", target = { fp = {...}, slot = 0 }, existing = "move", expiry_s = 20,
@@ -553,6 +554,7 @@ through `monitors.resolve` with policy `focused`. Restore at login is a later se
 | Call | Returns | Notes |
 |---|---|---|
 | `open(plan)` | run id string, or `nil, err` | Starts a run; one run at a time, a second call answers `busy` |
+| `open_file(path)` | same as `open` | Reads `plan-<run>.lua` with `load(text, "plan", "t", {})` (no globals, no bytecode), then `open`. The service always uses this form |
 | `capture(req_id, scope)` | `true` | `scope`: `focused` or `all`; writes `capture-<req_id>.json` |
 | `reload_config()` | `true` or `nil, err` | Re-reads config.toml, rebuilds rules |
 | `session_save_now()` | `true` | Ignores the debounce, not the freeze |
@@ -652,7 +654,7 @@ Any work package that adds per-event work records a measurement in `docs/batch-l
 
 | # | Question | How to check | Gates |
 |---|---|---|---|
-| S1 | Is `hyprctl eval` happy with a 10 kB Lua literal argument? | eval a large table that only returns its length | WP5 |
+| S1 | Is `hyprctl eval` happy with a 10 kB Lua literal argument? | done 2026-11-21: 12 kB passes intact (quotes and backslashes), 148 kB is refused by Linux (one argument max 128 kB), so plans go through a file (`open_file`) | WP5 |
 | S2 | Does `window.open` arrive for an app started by `uwsm-app -- <id>.desktop`, and how long after? | launch one small app, log class and delay only | WP4 |
 | S3 | Does a single-instance app that only raises an old window send `window.open`? | open a second copy of one such app | WP4 (expected: no, ticket expires) |
 | S4 | Does our dispatch after Omarchy's open rule land the exact rect on a floating workspace? | place one test window | WP4 |
