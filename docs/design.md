@@ -305,7 +305,7 @@ All examples are made up.
 ```toml
 [rule.editor]
 app = "org.example.Editor"      # matched against initialClass
-monitor = "Example Corp EX27"    # identity; empty = any monitor, keep the slot
+monitor = "Example Corp EX27"    # identity; empty = the focused monitor (the rule follows focus)
 slot = 3                        # 1..10 inside that monitor's block
 follow = false                  # true: switch to the workspace when it opens
 enabled = true

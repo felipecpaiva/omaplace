@@ -1,8 +1,8 @@
 -- omaplace: placement rules for Omarchy (design 6.1). The only file that calls hl or reads files.
 -- Load:  pcall(dofile, <plugin folder>/lua/omaplace.lua)   Settings: ~/.config/omaplace/config.toml
 -- Idle cost: no timer is armed until a monitor event arrives, and then only one one-shot (500 ms debounce).
--- shortcut: Hyprland's timer handle may have no cancel, so a re-armed debounce is a generation number: the old
--- timer still fires once and does nothing. Upgrade if hl.timer gets a documented stop.
+-- A re-armed debounce switches the old timer off (HL.Timer:set_enabled) and also bumps a generation number, so a
+-- timer that fires anyway does nothing.
 local M = { version = "0.1.0" }
 
 local dir = (debug.getinfo(1, "S").source:match("^@(.*)/") or ".")
@@ -19,8 +19,14 @@ M.rules = {}
 
 -- The previous load of this file (a config reload runs it again in the same Lua state) hands over what it declared.
 local old = rawget(_G, "omaplace")
-local bound = type(old) == "table" and old._bound == true
-if type(old) == "table" and type(old._m) == "table" and type(old._m.applied) == "table" then M.applied = old._m.applied end
+local old_m = type(old) == "table" and type(old._m) == "table" and old._m or nil
+if old_m and type(old_m.applied) == "table" then M.applied = old_m.applied end
+-- If the Lua state survived the reload, drop the old event subscriptions and timer before adding fresh ones.
+if old_m then
+  for _, sub in ipairs(old_m.subs or {}) do pcall(sub.remove, sub) end
+  if old_m.timer then pcall(old_m.timer.set_enabled, old_m.timer, false) end
+end
+M.subs = {}
 
 local function log(text) print("omaplace: " .. tostring(text)) end
 
@@ -56,11 +62,13 @@ function M.rebuild()
   M.enabled = {}
   M.applied = {}
   for _, spec in ipairs(specs) do
-    hl.window_rule(spec)
-    M.enabled[spec.name] = spec.enabled
+    -- record the name first: if Hyprland rejects one spec, the rest are still declared and the name can be switched off
     M.applied[#M.applied + 1] = spec.name
+    local ok_rule, err = pcall(hl.window_rule, spec)
+    M.enabled[spec.name] = ok_rule and spec.enabled
+    if not ok_rule then log("rule " .. spec.name .. " rejected: " .. tostring(err)) end
   end
-  for _, name in ipairs(vanished) do hl.window_rule({ name = name, enabled = false }) end
+  for _, name in ipairs(vanished) do pcall(hl.window_rule, { name = name, enabled = false }) end
   return true
 end
 
@@ -81,7 +89,7 @@ M.debounce_gen = 0
 local function rebuild_soon()
   M.debounce_gen = M.debounce_gen + 1
   local gen = M.debounce_gen
-  if M.timer and M.timer.cancel then pcall(M.timer.cancel) end
+  if M.timer then pcall(M.timer.set_enabled, M.timer, false) end
   M.timer = hl.timer(function()
     M.timer = nil
     if gen ~= M.debounce_gen then return end
@@ -92,20 +100,31 @@ end
 M.rebuild_soon = rebuild_soon
 
 -- _m and _bound are internal: the next load of this file reads them (see above).
-_G.omaplace = { version = M.version, reload_config = M.reload_config, status = M.status, _m = M, _bound = true,
+_G.omaplace = { version = M.version, reload_config = M.reload_config, status = M.status, _m = M,
   _rebuild_soon = rebuild_soon }
 
 local ok, err = pcall(function() load_config(); assert(M.rebuild()) end)
 if not ok then log("load failed: " .. tostring(err)) end
 
--- Handlers go on once per Lua state; they call through _G.omaplace so a reloaded copy of this file is the one that runs.
-if not bound then
-  for _, event in ipairs({ "monitor.added", "monitor.removed", "monitor.layout_changed", "monitor.focused" }) do
-    hl.on(event, function()
-      local handled, e = pcall(function() _G.omaplace._rebuild_soon() end)
-      if not handled then log(event .. " handler failed: " .. tostring(e)) end
-    end)
+-- Only rules with an empty monitor follow focus, so a focus change rebuilds only when such a rule exists.
+local function follows_focus()
+  for _, rule in pairs(M.rules) do
+    if rule.enabled and (rule.monitor or "") == "" then return true end
   end
+  return false
 end
+
+-- Fresh subscriptions on every load (old ones were removed above); they call through _G.omaplace.
+for _, event in ipairs({ "monitor.added", "monitor.removed", "monitor.layout_changed", "monitor.focused" }) do
+  local sub = hl.on(event, function()
+    local handled, e = pcall(function()
+      if event == "monitor.focused" and not _G.omaplace._m.follows_focus() then return end
+      _G.omaplace._rebuild_soon()
+    end)
+    if not handled then log(event .. " handler failed: " .. tostring(e)) end
+  end)
+  if sub then M.subs[#M.subs + 1] = sub end
+end
+M.follows_focus = follows_focus
 
 return M

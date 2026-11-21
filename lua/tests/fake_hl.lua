@@ -27,10 +27,22 @@ function M.new()
   local hl = {}
   fake.hl = hl
 
+  -- Returns a subscription like Hyprland's HL.EventSubscription (remove, is_active).
   function hl.on(event, fn)
     local list = fake.handlers[event] or {}
     fake.handlers[event] = list
     list[#list + 1] = fn
+    local active = true
+    return {
+      is_active = function() return active end,
+      remove = function()
+        if not active then return end
+        active = false
+        for i, f in ipairs(list) do
+          if f == fn then table.remove(list, i); return end
+        end
+      end,
+    }
   end
 
   function hl.window_rule(spec)

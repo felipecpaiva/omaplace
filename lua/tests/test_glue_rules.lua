@@ -107,6 +107,37 @@ fake.emit("monitor.added", ext)
 fake.advance(500)
 eq(#printed >= 1 and printed[1]:sub(1, 10), "omaplace: ", "error logged with prefix")
 
+-- one rejected spec does not stop the others, and its name is still known so it can be switched off later
+local declared = {}
+fake.hl.window_rule = function(spec)
+  if spec.name == "omaplace-rule-editor" then error("rejected") end
+  declared[#declared + 1] = spec.name
+end
+_G.omaplace.reload_config()
+eq(declared[1], "omaplace-rule-notes", "the rule after a rejected one is still declared")
+local names = {}
+for _, r in ipairs(_G.omaplace.status().rules) do names[r.name] = r.enabled end
+eq(names["omaplace-rule-editor"], false, "rejected rule is known and shown off")
+
+-- a focus change rebuilds only when some rule follows focus (empty monitor); the fixture's notes rule does
+local rebuilds = 0
+fake.hl.window_rule = function() rebuilds = rebuilds + 1 end
+fake.emit("monitor.focused", ext)
+fake.advance(500)
+eq(rebuilds > 0, true, "focus change rebuilds when a rule follows focus")
+home = dir .. "/fixtures/home-rules2"
+_G.omaplace.reload_config()
+local follows = _G.omaplace._m.follows_focus()
+rebuilds = 0
+fake.emit("monitor.focused", panel)
+fake.advance(500)
+eq(rebuilds > 0, follows, "focus change rebuilds only if a rule follows focus")
+
+-- a reload leaves exactly one live subscription per event
+dofile(dir .. "/../omaplace.lua")
+dofile(dir .. "/../omaplace.lua")
+eq(count("monitor.removed"), 1, "two reloads: still one handler")
+
 print = real_print
 os.getenv = real_getenv
 print(string.format("test_glue_rules: %d checks ok", checks))

@@ -3,6 +3,9 @@
 Needs one harmless test app. Do not use a second monitor yet (M1 checks 2 and 3 wait for one).
 
 1. [ ] Add the load line to `hyprland.lua` (README, "Load the Lua module"). Reload Hyprland. No error on screen.
+   Check the log for omaplace lines (a silent load failure shows here):
+   `grep omaplace "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/hyprland.log" | tail`
+   and `hyprctl eval 'return _G.omaplace and _G.omaplace.version'` should print the version.
 2. [ ] Create `~/.config/omaplace/config.toml` with one rule for the test app. Find its class with `hyprctl clients`
    while it is open. Example:
    ```toml
