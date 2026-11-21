@@ -28,8 +28,8 @@ Flickable {
       panel: page.panel
       title: "App memory"
       current: page.settings.app_memory || "scene"
-      options: [{ value: "scene", label: "Scene place" }, { value: "last_place", label: "Last place" }, { value: "auto", label: "Automatic", later: true }]
-      note: "Where an app you open by hand goes. Scene place: where the last scene put it. Last place: where you last closed it. Automatic is coming later."
+      options: [{ value: "scene", label: "Scene place" }, { value: "last_place", label: "Last place" }, { value: "auto", label: "Automatic" }, { value: "off", label: "Off" }]
+      note: "Where an app you open by hand goes. Scene place: where the last scene put it. Last place: where you last closed it. Automatic: like Last place, and moving an app between two desktops that show a scene moves it from one scene to the other. Off: apps open where Hyprland puts them."
       onPicked: function (value) { page.panel.setSetting("app_memory", value) }
     }
     ChoiceRow {
