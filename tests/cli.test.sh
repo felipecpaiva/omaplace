@@ -10,7 +10,7 @@ bash_bin=$(command -v bash)
 tmp=$(mktemp -d)
 export HOME="$tmp/home" XDG_RUNTIME_DIR="$tmp/run" XDG_CONFIG_HOME="$tmp/home/.config"
 mkdir -p "$HOME/.config/omaplace" "$XDG_RUNTIME_DIR/omaplace" "$tmp/bin" "$tmp/nobin"
-export FAKE_LOG="$tmp/calls"
+export FAKE_LOG="$tmp/calls" OMAPLACE_NOTIFY=0
 
 # The fake: logs its arguments, prints FAKE_ANSWER, exits FAKE_EXIT, and when FAKE_RESULT is set writes it as the
 # result file of request FAKE_REQ after FAKE_DELAY seconds (temp file, then rename, like the service).
@@ -143,7 +143,14 @@ export FAKE_RESULT='{"ok":true,"saved":4,"skipped":1,"need_profile":0,"dropped":
 run save work
 check "save waits for its result and exits 0" "$(is "$code" 0)"
 check "save prints counts" "$(is "$out" "saved work: 4 windows, 1 skipped, 0 need a profile")"
+
 check "save maps its name" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace save work")"
+
+# From the Omarchy menu (no terminal): the same answer goes to a notification, not stdout.
+printf '#!/usr/bin/env bash\nprintf "%%s|" "$@" > "%s/notified"\n' "$tmp" > "$tmp/bin/omarchy-notification-send"; chmod +x "$tmp/bin/omarchy-notification-send"
+OMAPLACE_NOTIFY=1 "$bash_bin" "$cli" save work >/dev/null 2>&1 </dev/null
+check "no terminal: save answer is a notification" "$(grep -q "saved work: 4 windows" "$tmp/notified" 2>/dev/null && echo 0 || echo 1)"
+rm -f "$tmp/bin/omarchy-notification-send"
 
 export FAKE_REQ=q2-1700000000001 FAKE_ANSWER='{"ok":true,"pending":true,"req":"q2-1700000000001"}'
 export FAKE_RESULT='{"ok":true,"state":"done","run":"r2-1","placed":3,"started":2,"skipped":0,"not_reopened":0,"failed":0}'

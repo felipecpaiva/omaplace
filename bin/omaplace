@@ -38,6 +38,14 @@ if [ "${1:-}" = "--json" ]; then json=1; shift; fi
 word=$1; shift
 need() { [ "$1" -eq "$2" ] || bad "$word takes $2 argument(s)"; }
 
+# Started from the Omarchy menu there is no terminal: show the answer of save and rule as a notification instead.
+# (open and restore already send their own summary from the service.)
+if [ "${OMAPLACE_NOTIFY:-1}" != 0 ] && [ ! -t 1 ] && [ ! -t 2 ] && { [ "$word" = save ] || [ "$word" = rule ]; } && command -v omarchy-notification-send >/dev/null; then
+  quiet_out=$(mktemp)
+  exec >"$quiet_out" 2>&1
+  trap 'omarchy-notification-send -g "󰕰" "omaplace" "$(head -c 300 "$quiet_out")" >/dev/null 2>&1; rm -f -- "$quiet_out"' EXIT
+fi
+
 # The menu rows (WP8): the name comes from Omarchy's pickers. Closing a picker exits 0 and does nothing.
 if [ "$word" = save ] && [ "${1:-}" = --ask ] && [ $# -eq 1 ]; then
   ws=$(hyprctl activeworkspace -j 2>/dev/null | sed -n -E 's/.*"name": *"([^"]*)".*/\1/p' | head -n1 | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_\n-' '-' | cut -c1-40 || true)

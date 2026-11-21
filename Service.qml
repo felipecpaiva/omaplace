@@ -243,7 +243,7 @@ Item {
   }
 
   function evalCapture() {
-    evalProc.command = ["hyprctl", "eval", LuaCall.wrap("capture", [LuaLiteral.encode(root.req.id), "\"focused\""])]
+    evalProc.command = ["hyprctl", "eval", LuaCall.wrap("capture", [LuaLiteral.encode(root.req.id), "\"focused\""], LuaLiteral.encode(root.replyPath()))]
     evalProc.running = true
   }
 
@@ -278,6 +278,14 @@ Item {
     } else {
       root.readCapture()
     }
+  }
+
+  function replyPath() { return root.runtimeDir + "/reply-" + root.req.id + ".txt" }
+
+  function readReply() {
+    if (!root.req) return
+    replyProc.command = ["cat", "--", root.replyPath()]
+    replyProc.running = true
   }
 
   function readCapture() {
@@ -388,6 +396,7 @@ Item {
     let spent = []
     if (r.planPath) spent.push(r.planPath)
     if (r.kind !== "open") spent.push(root.runtimeDir + "/capture-" + r.id + ".json")
+    spent.push(root.runtimeDir + "/reply-" + r.id + ".txt")
     if (root.lastResultPath !== "") spent.push(root.lastResultPath)
     if (spent.length > 0) Quickshell.execDetached(["rm", "-f", "--"].concat(spent))
     resultFile.path = root.runtimeDir + "/result-" + r.id + ".json"
@@ -638,7 +647,9 @@ Item {
     }
   }
 
-  Process { id: evalProc; stdout: StdioCollector { onStreamFinished: root.afterEval(text) } }
+  // hyprctl prints only "ok": when it is done, read the answer the Lua chunk wrote (LuaCall.wrap).
+  Process { id: evalProc; stdout: StdioCollector { onStreamFinished: root.readReply() } }
+  Process { id: replyProc; stdout: StdioCollector { onStreamFinished: root.afterEval(text) } }
   Process { id: catProc; stdout: StdioCollector { onStreamFinished: root.onCaptureText(text) } }
   Process { id: procProc; stdout: StdioCollector { onStreamFinished: root.onProcinfo(text) } }
   Process { id: reloadProc; command: ["hyprctl", "eval", "_G.omaplace.reload_config()"] }
@@ -694,7 +705,7 @@ Item {
     printErrors: false
     onSaved: {
       if (!root.req || root.req.kind !== "open" || root.req.planPath !== path) return
-      evalProc.command = ["hyprctl", "eval", "_G.omaplace.open_file(" + LuaLiteral.encode(root.req.planPath) + ")"]
+      evalProc.command = ["hyprctl", "eval", LuaCall.wrap("open_file", [LuaLiteral.encode(root.req.planPath)], LuaLiteral.encode(root.replyPath()))]
       evalProc.running = true
     }
     onSaveFailed: root.finish(root.fail("failed", "cannot write the plan file"))

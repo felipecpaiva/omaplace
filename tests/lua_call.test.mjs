@@ -6,20 +6,30 @@ import { execFileSync } from "node:child_process"
 const load = (f) => readFileSync(new URL("../js/" + f, import.meta.url), "utf8").replace(".pragma library", "")
 const { wrap, code } = new Function(load("LuaCall.js") + "; return { wrap, code }")()
 
-test("wrap builds one Lua chunk that answers with a code", () => {
-  const lua = wrap("open_file", ['"/run/made-up/omaplace/plan-r1-2.lua"'])
-  assert.match(lua, /^return \(function\(\) /)
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+
+test("wrap builds one Lua chunk that writes its answer to the reply file", () => {
+  const lua = wrap("open_file", ['"/run/made-up/omaplace/plan-r1-2.lua"'], '"/run/made-up/omaplace/reply-q1.txt"')
   assert.match(lua, /o\.open_file\("\/run\/made-up\/omaplace\/plan-r1-2\.lua"\)/)
   assert.match(lua, /omaplace:no_lua/)
-  assert.throws(() => wrap("open_file()..x", []), /bad method/)
+  assert.match(lua, /io\.open\("\/run\/made-up\/omaplace\/reply-q1\.txt", "w"\)/)
+  assert.throws(() => wrap("open_file()..x", [], '"r"'), /bad method/)
+  assert.throws(() => wrap("open_file", []), /reply path/)
 })
 
-test("wrap runs in Lua (run-all needs lua anyway)", () => {
-  const run = (pre, chunk) => execFileSync("lua", ["-e", pre + " print((load(" + JSON.stringify(chunk) + "))())"]).toString().trim()
-  const lua = wrap("open_file", ['"p"'])
-  assert.equal(run("", lua), "omaplace:no_lua")
-  assert.equal(run("omaplace = { open_file = function() return nil, 'bad_plan' end }", lua), "omaplace:bad_plan")
-  assert.equal(run("omaplace = { open_file = function() return 'r1' end }", lua), "omaplace:ok")
+test("wrap runs in Lua and the reply file holds the code (hyprctl eval prints only ok, live 2026-11-21)", () => {
+  const dir = mkdtempSync(tmpdir() + "/omaplace-luacall-")
+  const reply = dir + "/reply.txt"
+  const run = (pre) => {
+    execFileSync("lua", ["-e", pre + " ; " + wrap("open_file", ['"p"'], JSON.stringify(reply))])
+    return readFileSync(reply, "utf8")
+  }
+  try {
+    assert.equal(run(""), "omaplace:no_lua")
+    assert.equal(run("omaplace = { open_file = function() return nil, 'bad_plan' end }"), "omaplace:bad_plan")
+    assert.equal(run("omaplace = { open_file = function() return 'r1' end }"), "omaplace:ok")
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
 test("code reads the answer, unknown errors read as failed, no answer reads as empty", () => {
