@@ -4,7 +4,7 @@
   "name": "omaplace",
   "version": "0.0.1",
   "author": "Felipe Paiva",
-  "description": "App placement rules, scenes and session restore for Omarchy, with monitors it recognizes again. Settings window for omaplace.",
+  "description": "App placement rules, scenes and session restore for Omarchy, with monitors it recognizes again. Adds nothing to the bar and no keys. Open the settings from the launcher or with: omarchy-shell shell toggle io.github.felipecpaiva.omaplace",
   "license": "MIT",
   "kinds": ["service", "panel"],
   "entryPoints": {

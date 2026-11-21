@@ -8,6 +8,7 @@ import "js/ArgFilter.js" as ArgFilter
 import "js/Plan.js" as Plan
 import "js/LuaLiteral.js" as LuaLiteral
 import "js/Summary.js" as Summary
+import "js/Settings.js" as Settings
 
 // omaplace service (design 4.3, 6.2, 6.3, 7.2): the CLI's IPC target and the only file that runs processes.
 // All data work goes through the js/ modules. One slow request (save, open, rule add) runs at a time; every other
@@ -34,8 +35,27 @@ Item {
   property var req: null
   property string writeError: ""
 
+  // Settings window (WP6) state: live monitor names, the folder chooser, and a counter the window watches for answers
+  // that arrive later (chooser, monitors).
+  property var liveMonitors: []
+  property bool picking: false
+  property var pickTarget: null
+  property int revision: 0
+  property string lastAnswer: ""
+
+  // Launcher entry (WP6), like omagnet's: written at load, removed at unload, and only ever over a file with our marker.
+  readonly property string launcherSource: Summary.fromUrl(Qt.resolvedUrl("omaplace.desktop"))
+  readonly property string launcherDest: root.home + "/.local/share/applications/omaplace.desktop"
+  readonly property string launcherMarker: "X-Omaplace-Managed=true"
+  property bool launcherInstalled: false
+
   // DesktopEntries is lazy: the first read is empty, so it is touched at load (no process, no timer).
-  Component.onCompleted: { let touch = DesktopEntries.applications.values.length }
+  Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher() }
+  // find deletes the file only when grep finds the marker line in it: argv only, no shell.
+  Component.onDestruction: {
+    if (root.launcherInstalled)
+      Quickshell.execDetached(["find", root.launcherDest, "-maxdepth", "0", "-type", "f", "-exec", "grep", "-qx", root.launcherMarker, "{}", ";", "-delete"])
+  }
 
   IpcHandler {
     target: "io.github.felipecpaiva.omaplace"
@@ -347,6 +367,154 @@ Item {
     }
   }
 
+  // ---- settings window (WP6). Plain functions the panel calls; it never writes a file itself. Each write uses the same
+  // guards as above (busy, writableScenes, try/catch) and goes through writeConfig (which also tells Lua to reload) or
+  // writeScenes (with the .bak first).
+
+  function installLauncher() {
+    if (root.launcherSource === "" || root.home === "") return
+    let want = root.readNow(launcherSourceFile)
+    if (want.indexOf(root.launcherMarker) === -1) return
+    let have = root.readNow(launcherFile)
+    if (have !== "" && have.indexOf(root.launcherMarker) === -1) return // a file of the user's own: never written over
+    root.launcherInstalled = true
+    // shortcut: FileView does not create ~/.local/share/applications; it exists on Omarchy, add a mkdir if a report says otherwise
+    if (have !== want) launcherFile.setText(want)
+  }
+
+  // A fresh install has no ~/.config/omaplace until the first slow request; the window calls this when it opens.
+  function ensureDirs() { if (!root.dirsReady && !root.req && !mkdirProc.running) mkdirProc.running = true }
+
+  function refreshMonitors() { if (!monitorsProc.running) monitorsProc.running = true }
+
+  // Everything the window shows, read now. Windows with an unknown context carry what the picker needs (`need`).
+  function panelData() {
+    try {
+      let cfg = root.config()
+      let table = root.strategies(cfg)
+      let doc = SceneStore.parse(root.readNow(scenesFile))
+      let needs = {}
+      let scenes = Object.keys(doc.scenes).map(function (name) {
+        let wins = doc.scenes[name].windows.map(function (w) {
+          let out = Object.assign({}, w)
+          if (w.context === "?") {
+            if (!needs[w.class]) needs[w.class] = root.contextInfo(w.class, table)
+            out.need = needs[w.class]
+          }
+          return out
+        })
+        return { name: name, windows: wins }
+      })
+      let rules = Object.keys(cfg.rules).map(function (name) { return Object.assign({ name: name }, cfg.rules[name]) })
+      return {
+        ok: true, settings: cfg.settings, rules: rules, scenes: scenes, sessions: root.sessionRows(),
+        warnings: cfg.warnings.concat(doc.warnings), scenesWritable: !doc.readOnly && doc.errors.length === 0
+      }
+    } catch (e) {
+      return { ok: false, reason: String(e.message || e), settings: ConfigIO.parse("").settings, rules: [], scenes: [], sessions: [], warnings: [], scenesWritable: false }
+    }
+  }
+
+  // What the picker offers for a window of this class: kind "profile" (with the Chromium profiles found), "folder", or "none".
+  // Only profile ids and names leave Local State (Settings.profilesFromLocalState); the text is dropped right after.
+  function contextInfo(cls, table) {
+    let r = AppResolve.resolve(cls, [], table, { context: "?" })
+    let dir = r.contextKind === "profile" ? Settings.profileDir(r.strategy) : ""
+    let profiles = []
+    if (dir !== "") {
+      localStateFile.path = root.home + "/.config/" + dir + "/Local State"
+      profiles = Settings.profilesFromLocalState(root.readNow(localStateFile))
+      localStateFile.path = ""
+    }
+    return { kind: r.contextKind, profiles: profiles }
+  }
+
+  // sessions.json plus the window count of each session file. Instance names are checked before they become a path.
+  function sessionRows() {
+    let index = Summary.parseJson(root.readNow(sessionsFile))
+    let counts = {}
+    for (let e of (Array.isArray(index) ? index : [])) {
+      if (!e || typeof e.instance !== "string" || !/^[A-Za-z0-9_]{1,128}$/.test(e.instance)) continue
+      countFile.path = root.stateDir + "/session-" + e.instance + ".json"
+      let snap = Summary.parseJson(root.readNow(countFile))
+      counts[e.instance] = snap && Array.isArray(snap.windows) ? snap.windows.length : -1
+    }
+    countFile.path = ""
+    let rows = Settings.sessionRows(index, counts, Summary.instanceName(Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""))
+    return rows.filter(function (r) { return /^[A-Za-z0-9_]{1,128}$/.test(r.instance) })
+  }
+
+  function setSetting(key, value) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    let c = Settings.settingChange(ConfigIO.SETTING_SPECS, key, value)
+    if (!c.ok) return Summary.answer(root.fail("failed", c.why))
+    if (!root.dirsReady) { root.ensureDirs(); return Summary.answer(root.fail("failed", "the settings folder is not ready yet, try again")) }
+    try {
+      let text = root.readNow(configFile)
+      let err = root.writeConfig(text, ConfigIO.setValue(text, key, c.value))
+      return Summary.answer(err === "" ? { ok: true } : root.fail("failed", err))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  function setRuleField(name, field, value) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    if (["monitor", "slot", "follow", "enabled"].indexOf(field) === -1) return Summary.answer(root.fail("failed", "that rule field cannot be changed here"))
+    try {
+      let text = root.readNow(configFile)
+      if (!ConfigIO.parse(text).rules[name]) return Summary.answer(root.fail("not_found"))
+      let change = {}
+      change[field] = value
+      let err = root.writeConfig(text, ConfigIO.setRule(text, name, change))
+      return Summary.answer(err === "" ? { ok: true } : root.fail("failed", err))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  // index is the window's place in the scene; cls must still match, since the CLI may have rewritten scenes.toml meanwhile.
+  function setSceneWindow(scene, index, cls, field, value) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    if (!Summary.validName(scene)) return Summary.answer(root.fail("bad_name"))
+    try {
+      let w = root.writableScenes()
+      if (w.error) return Summary.answer(w.error)
+      let s = w.doc.scenes[scene]
+      let win = s ? s.windows[index] : null
+      if (!win || win.class !== cls) return Summary.answer(root.fail("not_found", "the scene changed on disk, look again"))
+      let edit = Settings.windowEdit(win, field, value)
+      if (!edit.ok) return Summary.answer(root.fail("failed", edit.why))
+      s.windows[index] = edit.win
+      let err = root.writeScenes(w.text, SceneStore.serialize(w.doc))
+      return Summary.answer(err === "" ? { ok: true } : root.fail("failed", err))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  // Omarchy's file chooser for an IDE window's project folder. The answer arrives later as lastAnswer and revision.
+  function pickFolder(scene, index, cls) {
+    if (root.req || root.picking) return Summary.answer(root.fail("busy"))
+    root.pickTarget = { scene: scene, index: index, cls: cls }
+    root.picking = true
+    pickProc.running = true
+    return Summary.answer({ ok: true, pending: true })
+  }
+
+  function onPicked(text) {
+    let t = root.pickTarget
+    root.pickTarget = null
+    root.picking = false
+    let folder = String(text || "").split("\n")[0]
+    if (!t || folder === "") return
+    root.lastAnswer = root.setSceneWindow(t.scene, t.index, t.cls, "context", Summary.shortHome(folder, root.home))
+    root.revision++
+  }
+
+  // The final answer of a slow request the window started (open, restore, rule add), or "" when it is not there.
+  function resultOf(id) {
+    if (!/^q[0-9]+-[0-9]+$/.test(String(id))) return ""
+    answerFile.path = root.runtimeDir + "/result-" + id + ".json"
+    let text = root.readNow(answerFile).trim()
+    answerFile.path = ""
+    return text
+  }
+
   // ---- processes (argv only)
 
   Process {
@@ -380,6 +548,20 @@ Item {
   Process { id: reloadProc; command: ["hyprctl", "eval", "_G.omaplace.reload_config()"] }
   Process { id: notifyProc }
   Process { id: settingsProc; command: ["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omaplace"] }
+
+  Process {
+    id: monitorsProc
+    command: ["hyprctl", "monitors", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: { root.liveMonitors = Settings.monitorNames(Summary.parseJson(text)); root.revision++ }
+    }
+  }
+  Process {
+    id: pickProc
+    command: ["omarchy", "file", "select", "--title", "Project folder for this window", "--directory"]
+    stdout: StdioCollector { onStreamFinished: root.onPicked(text) }
+    onExited: if (root.picking) root.onPicked("")
+  }
 
   // ---- one-shot timers, armed only while a request runs
 
@@ -418,4 +600,10 @@ Item {
     onSaveFailed: root.finish(root.fail("failed", "cannot write the plan file"))
   }
   FileView { id: resultFile; blockWrites: true; atomicWrites: true; printErrors: false }
+  // Settings window reads (WP6): each path is set right before a read and cleared after it.
+  FileView { id: localStateFile; blockLoading: true; printErrors: false }
+  FileView { id: countFile; blockLoading: true; printErrors: false }
+  FileView { id: answerFile; blockLoading: true; printErrors: false }
+  FileView { id: launcherSourceFile; path: root.launcherSource; blockLoading: true; printErrors: false }
+  FileView { id: launcherFile; path: root.launcherDest; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false }
 }
