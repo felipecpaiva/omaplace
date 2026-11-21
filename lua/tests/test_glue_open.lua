@@ -1,4 +1,4 @@
--- Plain Lua check:  lua lua/tests/test_glue_open.lua   (fake hl, a fixture HOME, a temporary runtime folder)
+-- Plain Lua check:  lua lua/tests/test_glue_open.lua   (fake hl, a fixture HOME, a fixture runtime folder)
 local dir = arg[0]:match("^(.*)/") or "."
 local fake = dofile(dir .. "/fake_hl.lua").new()
 local Capture = dofile(dir .. "/../capture.lua")
@@ -9,10 +9,14 @@ local function eq(got, want, name)
   assert(got == want, string.format("%s: got %s, want %s", name, tostring(got), tostring(want)))
 end
 
--- A private runtime folder for this test only (the module never creates it itself in a test: hl.exec_cmd is fake).
-local runtime = os.tmpname()
-os.remove(runtime)
-assert(os.execute("mkdir -m 700 '" .. runtime .. "'"), "cannot make a temporary folder")
+-- The runtime folder is a fixture in the repo (its .gitignore keeps what the test writes out of git).
+local runtime = dir .. "/fixtures/runtime"
+local written = { "capture-q1.json", "capture-q2.json", "status.json", "status.json.tmp", "plan-r11.lua", "plan-bad.lua",
+  "plan-evil.lua", "plan-num.lua", "plan-bin.lua" }
+local function clean()
+  for _, name in ipairs(written) do os.remove(runtime .. "/omaplace/" .. name) end
+end
+clean() -- a failed earlier run may have left files
 local real_getenv = os.getenv
 os.getenv = function(k)
   if k == "HOME" then return dir .. "/fixtures/home-none" end
@@ -30,7 +34,6 @@ local function read(name)
   f:close()
   return t
 end
-assert(os.execute("mkdir -m 700 '" .. runtime .. "/omaplace'"))
 
 _G.hl, _G.o = fake.hl, fake.o
 local function mon(name, desc, x, ws, focused)
@@ -55,14 +58,26 @@ end
 local moves, focus = {}, {}
 fake.hl.dispatch = function(call)
   fake.dispatched[#fake.dispatched + 1] = call
-  local a, w = call.args or {}, (call.args or {}).window
+  local a = call.args or {}
+  local w
+  for _, x in ipairs(fake.windows) do
+    if "address:" .. x.address == a.window then w = x end
+  end
+  if call.name == "window.swap" then
+    local t
+    for _, x in ipairs(fake.windows) do
+      if "address:" .. x.address == a.target then t = x end
+    end
+    w.at, t.at = t.at, w.at
+    return
+  end
   if call.name == "window.move" and a.workspace then
     w.workspace = { id = tonumber(a.workspace) }
     moves[#moves + 1] = { ws = a.workspace, follow = a.follow }
   elseif call.name == "window.move" then
     w.at = { x = a.x, y = a.y }
   elseif call.name == "window.resize" then
-    w.size = { x = a.x, y = a.y }
+    if not w.refuse then w.size = { x = a.x, y = a.y } end
   elseif call.name == "window.tag" then
     local sign, name = a.tag:sub(1, 1), a.tag:sub(2)
     for i = #w.tags, 1, -1 do
@@ -178,6 +193,7 @@ fake.advance(40)
 eq(mail.size.x, 1000, "scene app placed at its rect")
 eq(notes.size.x, 300, "no rect on a desktop that is not floating")
 eq(_G.omaplace.status().state, "done", "run done")
+eq(focus[#focus], "4", "view ends on the last rule desktop")
 local st = read("status.json")
 eq(st:find('"state":"placed"', 1, true) ~= nil, true, "status: placed")
 eq(st:find("Made up", 1, true), nil, "status has no title")
@@ -238,6 +254,74 @@ eq(has(p1, "omaplace-ctx=" .. Capture.ctx_hex("Profile 1")), true, "context tag"
 fake.advance(2000)
 eq(_G.omaplace.status().state, "done", "profiles run done")
 
+-- tiled reorder (S8): windows that landed 1, 3, 2 are swapped into order; then the view goes back to the target
+fake.windows, fake.exec_log, fake.dispatched, focus = {}, {}, {}, {}
+_G.omaplace.open({ run = "r6b", target = { fp = {}, slot = 0 }, layout = "tiled", existing = "new", windows = {
+  { class = "t.One", order = 1, mode = "launch", launch = { "one" } },
+  { class = "t.Two", order = 2, mode = "launch", launch = { "two" } },
+  { class = "t.Three", order = 3, mode = "launch", launch = { "three" } },
+} })
+local one = new_window("t.One", 1, { floating = false, at = { x = 0, y = 0 } })
+fake.emit("window.open", one)
+local two = new_window("t.Two", 1, { floating = false, at = { x = 1000, y = 0 } })
+fake.emit("window.open", two)
+local three = new_window("t.Three", 1, { floating = false, at = { x = 500, y = 0 } })
+fake.emit("window.open", three)
+eq(count("window.swap"), 1, "one swap")
+eq(two.at.x < three.at.x, true, "two now left of three")
+eq(focus[#focus], "1", "view back on the target at the end")
+eq(_G.omaplace.status().state, "done", "reordered run done")
+
+-- the target shows tiled windows: the run is sequential even if the plan says floating
+fake.windows, fake.exec_log = {}, {}
+new_window("t.Old", 1, { floating = false })
+_G.omaplace.open({ run = "r6c", target = { fp = {}, slot = 0 }, layout = "floating", existing = "new", windows = {
+  { class = "t.A", mode = "launch", launch = { "a" } }, { class = "t.B", mode = "launch", launch = { "b" } },
+} })
+fake.advance(500)
+eq(#fake.exec_log, 1, "tiled target seen: one at a time")
+fake.advance(20000)
+fake.advance(20000)
+eq(_G.omaplace.status().state, "partial", "both expired")
+
+-- a moved window that is gone before its turn fails, the run is partial
+fake.windows = {}
+local soon_gone = new_window("t.Gone", 3, { floating = false })
+local blocker = new_window("t.First", 3, { floating = false })
+fake.exec_log = {}
+_G.omaplace.open({ run = "r6d", target = { fp = {}, slot = 0 }, layout = "tiled", existing = "move", windows = {
+  { class = "t.Launch", order = 1, mode = "launch", launch = { "l" } },
+  { class = "t.Gone", order = 2, mode = "launch", launch = { "g" } },
+} })
+eq(blocker.workspace.id, 3, "unrelated window untouched")
+fake.windows = { blocker }
+fake.emit("window.open", new_window("t.Launch", 1, { floating = false }))
+eq(_G.omaplace.status().items[2].state, "failed", "gone window failed")
+eq(_G.omaplace.status().items[2].reason, "gone", "reason gone")
+eq(_G.omaplace.status().state, "partial", "partial")
+eq(soon_gone.workspace.id, 3, "never moved")
+
+-- an app that refuses its size is reported, not shown as placed
+fake.windows = {}
+_G.omaplace.open({ run = "r6e", target = { fp = {}, slot = 0 }, layout = "floating", existing = "new", windows = {
+  { class = "t.Stiff", rect = { 0, 0, 0.5, 1 }, mode = "launch", launch = { "stiff" } } } })
+fake.emit("window.open", new_window("t.Stiff", 1, { refuse = true, tags = { "omarchy-floating-workspace" } }))
+fake.advance(1100 + 40 * 3)
+eq(_G.omaplace.status().items[1].state, "failed", "size refused is failed")
+eq(_G.omaplace.status().items[1].reason, "size_refused", "reason")
+eq(fake.pending_timers(), 0, "idle")
+
+-- a dispatch that raises once does not leave the run live (later opens are not busy)
+fake.windows = {}
+local real_dispatch = fake.hl.dispatch
+fake.hl.dispatch = function() fake.hl.dispatch = real_dispatch; error("rejected") end
+_G.omaplace.open({ run = "r6f", target = { fp = {}, slot = 0 }, layout = "floating", existing = "new", windows = {
+  { class = "t.Boom", rect = { 0, 0, 1, 1 }, mode = "launch", launch = { "boom" } } } })
+fake.emit("window.open", new_window("t.Boom", 1))
+eq(_G.omaplace.status().items[1].state, "failed", "raise fails the slot")
+eq(_G.omaplace.status().state, "partial", "run ended")
+eq(_G.omaplace.open({ run = "r6g", windows = {} }), "r6g", "not stuck busy")
+
 -- interrupted: a reload during a run stops it and says so
 fake.windows, fake.exec_log = {}, {}
 _G.omaplace.open({ run = "r7", target = { fp = {}, slot = 0 }, layout = "floating",
@@ -287,10 +371,7 @@ eq(select(2, _G.omaplace.open_file(binary)), "bad_plan", "binary chunk refused")
 eq(select(2, _G.omaplace.open_file("/etc/hostname")), "bad_path", "only plan files in the runtime folder")
 eq(select(2, _G.omaplace.open_file(runtime .. "/omaplace/../omaplace/plan-r11.lua")), "bad_path", "no dot dot")
 
-for _, name in ipairs({ "capture-q1.json", "capture-q2.json", "status.json", "plan-r11.lua", "plan-bad.lua",
-  "plan-evil.lua", "plan-num.lua", "plan-bin.lua" }) do os.remove(runtime .. "/omaplace/" .. name) end
-os.remove(runtime .. "/omaplace")
-os.remove(runtime)
+clean()
 print = real_print
 os.getenv = real_getenv
 print(string.format("test_glue_open: %d checks ok", checks))

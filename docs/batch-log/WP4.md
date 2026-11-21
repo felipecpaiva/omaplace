@@ -7,7 +7,8 @@
   the `omaplace-ctx=<hex>` tag) and `pid`. Special workspaces are skipped, except minimized windows, which count on the
   home workspace from Omarchy's `omarchy-minimized-from-<id>` tag. Ignored classes are skipped. No title, no address.
   Helpers: `ctx_hex`, `ctx_unhex`, `tags_of`, `context_of`, `home_of`, `ignore_set`.
-- `lua/tickets.lua` (pure): `new`, `claim`, `expire`, `next_launches`, plus `fail`, `finished`, `next_wake`.
+- `lua/tickets.lua` (pure): `new`, `claim`, `expire`, `next_launches`, plus `fail`, `finished`, `next_wake`, and
+  `swaps(windows)`: the swaps that put tiled windows in saved order from their current places (S8).
 - `lua/place.lua` (hl): `to_workspace(window, id, silent)`, `put(window, rect_px, done)`, `fit_shadow_if_present`,
   `find`. All waits are one-shot timers with the body in `pcall`.
 - `lua/omaplace.lua`: `_G.omaplace.open(plan)`, `open_file(path)`, `capture(req_id, scope)`; `status()` now also has
@@ -17,9 +18,10 @@
   `status.json` by a Lua state that is gone is rewritten to `interrupted` on load. Rule code untouched.
 - `lua/tests/fake_hl.lua`: timer handles also have `set_enabled` and `is_enabled` (Hyprland's real methods); `cancel`
   kept, so old tests still pass.
+- `lua/tests/fixtures/runtime/`: the glue test's runtime folder; its `.gitignore` keeps what the test writes out of git.
 - `lua/tests/test_glue_rules.lua`: points `XDG_RUNTIME_DIR` at a folder that does not exist, so the rules test never
   reads the real runtime folder.
-- Tests: `test_capture.lua` (34 checks), `test_tickets.lua` (54), `test_glue_open.lua` (84).
+- Tests: `test_capture.lua` (34 checks), `test_tickets.lua` (64), `test_glue_open.lua` (102).
 
 ## Decisions (design was silent or unclear)
 - **Context gate.** A class with any context slot launches one slot at a time. The gate stays open while the launched
@@ -62,11 +64,35 @@
   must never store it.
 - Old `omaplace-slot=` tags of an earlier run are removed when a window is claimed again.
 
+- **Live results folded in (main, S2, S3, S8, S9).** At the end of a tiled run the glue reads each claimed window's
+  `at` on its target workspace and dispatches `hl.dsp.window.swap` (by `address:` selector) as `Tickets.swaps` says.
+  At the end of every run the view goes back to the target workspace, or to the last rule desktop (D9), with
+  `hl.dsp.focus({ workspace })`. All window selectors are `"address:<addr>"` strings, like Omarchy's own dispatches.
+- **Layout.** The glue looks at the target workspace at `open`: a window with `omarchy-floating-workspace` means
+  floating, a tiled window without it means tiled; an empty target keeps `plan.layout`. So for an empty target WP5 must
+  send the right `layout` (Plan.js defaults to `floating`); reading Omarchy's mode file is not done (design section 3
+  lists `~/.local/state/omarchy/**` as never touched). On a wrong `floating` guess for an empty tiled target the windows
+  are not floating, so no rect is forced; only the order fix is lost.
+- **Nothing fails silently.** A put that ends `size_refused`, `gone` or `not_floating` marks the item `failed` with that
+  reason (not floating on a tiled desktop is not an error). A moved window that is gone before its turn fails with
+  `gone`. A raise in a step, a start, an apply or a put fails the slot (`error`); a raise in a step ends the run as
+  `partial`, so a later `open` is never stuck on `busy`.
+- `open_file` logs a fixed text for a bad file, never the parser message (it can quote plan text).
+
 ## Verified
 - `bash tests/run-all.sh` (22 run, 0 failed, 3 skipped) and `bash tests/scrub.sh` pass, after merging main twice
   (fix1 and the `open_file` design update).
-- Glue tests run against a temporary runtime folder made by the test; the real `~/.config` and runtime folder are never
-  touched.
+- Glue tests run against the fixture runtime folder in the repo; the real `~/.config` and runtime folder are never
+  touched. The test cleans its files at the start and the end.
+
+## Known limits (not fixed)
+- The one-time `mkdir` through `hl.exec_cmd` at load (only when the folder is missing) is a short process the design
+  does not list.
+- A reload stops the run timer, but settle and put one-shots already armed still fire once (they act on the window
+  only; the old run is not live, so its status is not touched).
+- Capture takes a minimized window's monitor from the special workspace it sits on, not from its home workspace.
+- The tiled reorder runs as soon as the last slot is final; if Hyprland's `at` is not final by then (animation), the
+  order check could see old places (live check in the checklist).
 
 ## Measurement (plain `lua`, this laptop)
 - Capture of 120 windows plus JSON encode: about 2 ms.
@@ -76,8 +102,10 @@
 ## Only a live test can confirm (checklist WP4)
 - Tag names with `=` and `/` (`omaplace-slot=r1/1`) are accepted by the tag dispatcher.
 - `hl.dsp.window.move({ workspace, follow, window })` and `hl.dsp.focus({ workspace })` behave as in Omarchy's code.
-- `window.open` arrives for `uwsm-app` launches, and the timing of the settle and the 40 ms size check (S2, S4).
-- Chrome profile windows and restored windows inside the quiet window (S9, S10); tiled order (S8).
+- The settle and the 40 ms size check land the exact rect (S4). (S2 done on main: `window.open` about 0.2 s after
+  launch. S3 done: no `window.open`, the ticket expires.)
+- The swap fix on a real dwindle and scrolling workspace, end to end (S8 found the problem; the fix is untested live).
+- Restored windows of a closed profile inside the quiet window (S9 part 2, S10); the view going back at the end.
 
 ## SKIPs
 - luacheck, stylua, shellcheck not installed.

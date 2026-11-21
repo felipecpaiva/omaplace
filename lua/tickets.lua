@@ -84,10 +84,11 @@ function T.expire(book, now)
   return out
 end
 
--- Mark a slot failed (the glue could not launch or move it).
+-- Mark a slot failed (the glue could not launch, move or place it).
 function T.fail(book, n, reason)
   local s = book.slots[n]
-  if s and not FINAL[s.state] then s.state = "failed" end
+  -- a claimed slot can still fail (its window went away before its turn, or the put did not land)
+  if s and s.state ~= "skipped" and s.state ~= "expired" then s.state = "failed" end
   if s then s.reason, s.started = reason, true end
   return s
 end
@@ -158,6 +159,33 @@ function T.next_wake(book, now)
     end
   end
   return best
+end
+
+-- Swaps that put tiled windows in their saved left-to-right order (dwindle splits the focused window, so windows
+-- opened in order can still land out of order, S8). windows = list of { id, x, y, order }. Returns a list of
+-- { a, b } id pairs, to be done in that order; a swap exchanges the places of two windows exactly.
+function T.swaps(windows)
+  local function by_place(a, b)
+    if a.x ~= b.x then return a.x < b.x end
+    return a.y < b.y
+  end
+  local places, want = {}, {}
+  for i, w in ipairs(windows or {}) do places[i], want[i] = w, w end
+  table.sort(places, by_place)
+  table.sort(want, function(a, b)
+    if a.order ~= b.order then return a.order < b.order end
+    return by_place(a, b)
+  end)
+  local out = {}
+  for i = 1, #want do
+    if places[i] ~= want[i] then
+      local j = i + 1
+      while places[j] ~= want[i] do j = j + 1 end
+      out[#out + 1] = { places[i].id, want[i].id }
+      places[i], places[j] = places[j], places[i]
+    end
+  end
+  return out
 end
 
 return T

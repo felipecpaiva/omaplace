@@ -213,10 +213,38 @@ local function stop_timer(run)
   run.timer = nil
 end
 
+-- Tiled targets: dwindle splits the focused window, so put the run's windows in saved order with swaps (S8).
+local function reorder(run)
+  local by_ws = {}
+  for _, s in ipairs(run.book.slots) do
+    local info = run.info[s.n]
+    local w = s.state == "claimed" and info.address and Place.find(info.address)
+    if w and not w.floating and w.workspace and w.workspace.id == info.target.ws then
+      local x, y = 0, 0
+      if type(w.at) == "table" then x, y = tonumber(w.at.x or w.at[1]) or 0, tonumber(w.at.y or w.at[2]) or 0 end
+      local list = by_ws[info.target.ws] or {}
+      by_ws[info.target.ws] = list
+      list[#list + 1] = { id = w.address, x = x, y = y, order = s.n }
+    end
+  end
+  for _, list in pairs(by_ws) do
+    for _, pair in ipairs(Tickets.swaps(list)) do
+      hl.dispatch(hl.dsp.window.swap({ window = "address:" .. pair[1], target = "address:" .. pair[2] }))
+    end
+  end
+end
+
 local function finish(run)
   if not run.live then return end
   run.live = false
   stop_timer(run)
+  if run.layout ~= "floating" then
+    local ok, err = pcall(reorder, run)
+    if not ok then log("reorder failed: " .. tostring(err)) end
+  end
+  -- An app can open on another workspace and pull the view along (S9): put the view on the target, or on the last
+  -- rule desktop (D9).
+  if run.focus_ws then pcall(hl.dispatch, hl.dsp.focus({ workspace = tostring(run.focus_ws) })) end
   local placed, missed = 0, {}
   for _, s in ipairs(run.book.slots) do
     if s.state == "claimed" then placed = placed + 1 else missed[#missed + 1] = s.class .. " " .. s.state end
@@ -230,12 +258,13 @@ end
 local step
 
 -- One put finished (or was not needed). The run ends when every slot is final and no put is still pending.
-local function settled(run)
+local function settled(run, n, ok, reason)
+  if ok == false and n then Tickets.fail(run.book, n, reason or "not_placed") end
   run.pending = run.pending - 1
   if run.live and run.pending == 0 and Tickets.finished(run.book) then finish(run) end
 end
 
-local function tag(w, text) hl.dispatch(hl.dsp.window.tag({ tag = text, window = w })) end
+local function tag(w, text) hl.dispatch(hl.dsp.window.tag({ tag = text, window = Place.sel(w) })) end
 
 -- A window took slot `s`: tag it, send it to its workspace (focus follows a rule desktop, D9), then place it at
 -- its rect if it ends up floating on a floating workspace (D13: never a rect on a tiled one).
@@ -248,15 +277,22 @@ local function apply(run, s, w, fresh)
   tag(w, "+" .. M.SLOT_PREFIX .. run.id .. "/" .. s.n)
   if s.context ~= "" then tag(w, "+" .. Capture.CTX_PREFIX .. Capture.ctx_hex(s.context)) end
   local moved = Place.to_workspace(w, info.target.ws, not info.target.follow)
+  if info.target.follow then run.focus_ws = info.target.ws end
   if not info.rect then return end
   run.pending = run.pending + 1
   local address = w.address
-  local function put_now()
+  local function put_inner()
     local now_w = Place.find(address)
-    if not (now_w and now_w.floating and (info.float_target or has_tag(now_w, M.FLOAT_TAG))) then return settled(run) end
-    local ok, area = pcall(Geometry.usable, info.target.mon)
-    if not ok then return settled(run) end
-    Place.put(now_w, Geometry.place_frac(area, info.rect), function() settled(run) end)
+    if not now_w then return settled(run, s.n, false, "gone") end
+    -- not floating there (a tiled desktop): no rect, and that is not an error (D13)
+    if not (now_w.floating and (info.float_target or has_tag(now_w, M.FLOAT_TAG))) then return settled(run) end
+    local area = Geometry.usable(info.target.mon)
+    Place.put(now_w, Geometry.place_frac(area, info.rect), function(ok, reason) settled(run, s.n, ok, reason) end)
+  end
+  -- a raise must not leave the run waiting for a put that never ends
+  local function put_now()
+    local ok, err = pcall(put_inner)
+    if not ok then log("place failed: " .. tostring(err)); settled(run, s.n, false, "error") end
   end
   -- Omarchy re-arranges a moved window about 1 s later, and a new app may still resize itself: wait (settle_ms).
   if moved or fresh then later(M.settings.settle_ms, put_now) else put_now() end
@@ -288,18 +324,34 @@ local function arm(run, at, now)
 end
 
 -- Expire late slots, start what may start now, then finish or arm one timer for the next deadline.
-step = function(run)
+local function step_inner(run)
   if not run.live then return end
   local now = M.now_ms()
   Tickets.expire(run.book, now)
   while true do
     local batch = Tickets.next_launches(run.book, now)
     if #batch == 0 then break end
-    for _, s in ipairs(batch) do start_slot(run, s) end
+    for _, s in ipairs(batch) do
+      local ok, err = pcall(start_slot, run, s)
+      if not ok then log("start failed: " .. tostring(err)); Tickets.fail(run.book, s.n, "error") end
+    end
   end
   if run.pending == 0 and Tickets.finished(run.book) then return finish(run) end
   arm(run, Tickets.next_wake(run.book, now), now)
   write_status(run)
+end
+
+-- A raise anywhere in a step ends the run (partial) instead of leaving it live and every later open busy.
+step = function(run)
+  local ok, err = pcall(step_inner, run)
+  if ok then return end
+  log("run step failed: " .. tostring(err))
+  for _, s in ipairs(run.book.slots) do
+    if s.state == "waiting" or s.state == "launched" then Tickets.fail(run.book, s.n, "error") end
+  end
+  run.pending = 0
+  pcall(finish, run)
+  run.live = false
 end
 
 local function valid_rect(r)
@@ -355,13 +407,25 @@ local function start_run(plan)
   if not target_of then return nil, main end
   local now = M.now_ms()
   local layout = plan.layout == "floating" and "floating" or "tiled"
+  -- What the target shows now beats the plan: Omarchy tags every window on a floating workspace; a tiled window
+  -- without the tag means tiled. An empty target keeps the plan's layout.
+  if main then
+    local seen
+    for _, w in ipairs(hl.get_windows()) do
+      if w.workspace and w.workspace.id == main.ws then
+        if has_tag(w, M.FLOAT_TAG) then seen = "floating"; break end
+        if not w.floating then seen = "tiled" end
+      end
+    end
+    layout = seen or layout
+  end
   local book = Tickets.new(plan.windows, now, {
     expiry_ms = (math.tointeger(plan.expiry_s) or M.settings.expiry_seconds) * 1000,
     tick_ms = M.settings.launch_tick_ms, quiet_ms = M.settings.context_quiet_ms,
     sequential = layout ~= "floating" and M.settings.tiled_order,
   })
   local run = { id = plan.run, live = true, state = "running", book = book, info = {}, t0 = now, wall0 = os.time(),
-    pending = 0, gen = 0 }
+    pending = 0, gen = 0, layout = layout, focus_ws = main and main.ws }
   for i, w in ipairs(plan.windows) do
     local t = type(w) == "table" and target_of(w) or nil
     run.info[i] = { target = t, launch = w.launch, rect = valid_rect(w.rect),
@@ -410,10 +474,11 @@ function M.open_file(path)
   end
   local text = read_file(path)
   if not text then return nil, "no_file" end
-  local chunk, err = load(text, "plan", "t", {})
-  if not chunk then log("plan file: " .. tostring(err)); return nil, "bad_plan" end
+  local chunk = load(text, "plan", "t", {})
+  -- the message can quote plan text (folders, arguments), so it is never logged
+  if not chunk then log("plan file does not parse"); return nil, "bad_plan" end
   local ok, plan = pcall(chunk)
-  if not ok then log("plan file: " .. tostring(plan)); return nil, "bad_plan" end
+  if not ok then log("plan file failed to run"); return nil, "bad_plan" end
   if type(plan) ~= "table" then return nil, "bad_plan" end
   return M.open(plan)
 end
@@ -429,7 +494,10 @@ function M.on_window_open(w)
   local cls = w.initial_class or ""
   if cls == "" then return end
   local s = Tickets.claim(run.book, { class = cls, context = Capture.context_of(w) }, M.now_ms())
-  if s then apply(run, s, w, true) end
+  if s then
+    local ok, err = pcall(apply, run, s, w, true)
+    if not ok then log("apply failed: " .. tostring(err)); Tickets.fail(run.book, s.n, "error") end
+  end
   step(run)
 end
 

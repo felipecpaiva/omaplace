@@ -1,0 +1,5 @@
+# files the glue test writes while it runs
+*
+!.gitignore
+!omaplace/
+!omaplace/.gitkeep

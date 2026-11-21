@@ -28,10 +28,11 @@ Undo: none needed.
 Undo: close the window.
 
 ## S8: tiled order (dwindle and scrolling)
+Found on main: dwindle alone comes out 1, 3, 2. This check is now for the swap fix at the end of the run.
 1. [ ] On an empty tiled desktop, run a plan with `layout = "tiled"` and three windows of `<app>` (or three terminal
    windows, `launch = { "uwsm-app", "--", "xdg-terminal-exec" }`), run `s8`.
-2. [ ] Launches happen one at a time (each after the previous window opened). Read `at.x`: left to right matches the
-   plan order. No rect was forced.
+2. [ ] Launches happen one at a time (each after the previous window opened). After the last one, read `at.x`: left to
+   right matches the plan order (swaps fixed it). No rect was forced. The view is on the target workspace.
 3. [ ] Same on a scrolling desktop (run `s8b`).
 Undo: close the windows.
 
@@ -42,7 +43,8 @@ Needs Chrome with two profiles. Use profile folder names, not display names (`De
    launches `{ "google-chrome-stable", "--profile-directory=Default", "--new-window" }` and the same for `Profile 1`,
    run `s9`.
 2. [ ] The second launch waits about 2 s after the first window. Each window lands on its own desktop and has its
-   `omaplace-ctx=` tag (`hyprctl clients -j`). The focus ends on desktop 8.
+   `omaplace-ctx=` tag (`hyprctl clients -j`). The view ends on desktop 8, even if Chrome opened a window on another
+   desktop first (main found it does).
 3. [ ] Untagged Chrome windows you had open before were not moved.
 4. [ ] With Chrome closed, run it again (`s9b`): restored windows of the first profile that open inside the quiet
    window are given only that profile's slots; note how many windows each profile opened.

@@ -17,6 +17,10 @@ local function find(address)
 end
 M.find = find
 
+-- Hyprland's window selector, the form Omarchy's own dispatches use.
+local function sel(w) return "address:" .. tostring(w.address) end
+M.sel = sel
+
 local function xy(v)
   if type(v) ~= "table" then return 0, 0 end
   return tonumber(v.x or v[1]) or 0, tonumber(v.y or v[2]) or 0
@@ -30,7 +34,7 @@ function M.to_workspace(window, id, silent)
     if not silent then hl.dispatch(hl.dsp.focus({ workspace = tostring(id) })) end
     return false
   end
-  hl.dispatch(hl.dsp.window.move({ workspace = tostring(id), follow = not silent, window = window }))
+  hl.dispatch(hl.dsp.window.move({ workspace = tostring(id), follow = not silent, window = sel(window) }))
   return true
 end
 
@@ -52,8 +56,8 @@ local function attempt(address, r, tries, last, done)
   local w = find(address)
   if not (w and w.floating) then return done(false, "not_floating") end
   local want_w, want_h = round(r.w), round(r.h)
-  hl.dispatch(hl.dsp.window.resize({ x = want_w, y = want_h, relative = false, window = w }))
-  hl.dispatch(hl.dsp.window.move({ x = round(r.x), y = round(r.y), relative = false, window = w }))
+  hl.dispatch(hl.dsp.window.resize({ x = want_w, y = want_h, relative = false, window = sel(w) }))
+  hl.dispatch(hl.dsp.window.move({ x = round(r.x), y = round(r.y), relative = false, window = sel(w) }))
   later(M.verify_ms, function()
     local now = find(address)
     if not now then return done(false, "gone") end
@@ -83,7 +87,7 @@ function M.put(window, rect_px, done)
   local fs = math.tointeger(window.fullscreen) or 0
   if fs ~= 0 then
     -- a maximized or fullscreen window refuses a move
-    hl.dispatch(hl.dsp.window.fullscreen({ mode = fs == 1 and "maximized" or "fullscreen", action = "unset", window = window }))
+    hl.dispatch(hl.dsp.window.fullscreen({ mode = fs == 1 and "maximized" or "fullscreen", action = "unset", window = sel(window) }))
     later(M.unfullscreen_ms, function() attempt(address, rect_px, 0, nil, finish) end, finish)
     return
   end

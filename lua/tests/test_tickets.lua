@@ -128,4 +128,45 @@ do
   eq(#T.new(nil, 0).slots, 0, "nil plan")
 end
 
+-- A claimed slot can still fail.
+do
+  local b = T.new({ { class = "a", mode = "launch" } }, 0, opts)
+  T.claim(b, { class = "a", existing = true }, 0)
+  T.fail(b, 1, "gone")
+  eq(b.slots[1].state, "failed", "claimed slot failed")
+  eq(b.slots[1].reason, "gone", "reason kept")
+end
+
+-- Tiled reorder: swaps from current places to the saved order.
+do
+  local function apply(list, pairs_)
+    local at = {}
+    for _, w in ipairs(list) do at[w.id] = w end
+    for _, p in ipairs(pairs_) do
+      local a, c = at[p[1]], at[p[2]]
+      a.x, c.x, a.y, c.y = c.x, a.x, c.y, a.y
+    end
+    table.sort(list, function(p, q) return p.x < q.x or (p.x == q.x and p.y < q.y) end)
+    local ids = {}
+    for _, w in ipairs(list) do ids[#ids + 1] = w.id end
+    return table.concat(ids, ",")
+  end
+  -- S8: opened 1, 2, 3 but landed 1, 3, 2
+  local w = { { id = "A", order = 1, x = 0, y = 0 }, { id = "B", order = 2, x = 1000, y = 0 }, { id = "C", order = 3, x = 500, y = 0 } }
+  local sw = T.swaps(w)
+  eq(#sw, 1, "one swap fixes 1, 3, 2")
+  eq(apply(w, sw), "A,B,C", "order now A, B, C by place")
+  eq(w[1].order .. w[2].order .. w[3].order, "123", "orders left to right")
+  eq(#T.swaps({ { id = "A", order = 1, x = 0, y = 0 }, { id = "B", order = 2, x = 5, y = 0 } }), 0, "already right")
+  local rev = { { id = 1, order = 1, x = 300, y = 0 }, { id = 2, order = 2, x = 200, y = 0 }, { id = 3, order = 3, x = 100, y = 0 },
+    { id = 4, order = 4, x = 0, y = 0 } }
+  local rsw = T.swaps(rev)
+  apply(rev, rsw)
+  eq(rev[1].id .. rev[2].id .. rev[3].id .. rev[4].id, "1234", "reversed four sorted")
+  eq(#rsw, 2, "two swaps for a reversal of four")
+  local stack = { { id = "top", order = 2, x = 0, y = 0 }, { id = "low", order = 1, x = 0, y = 500 } }
+  eq(#T.swaps(stack), 1, "same x: y decides")
+  eq(#T.swaps(nil), 0, "nil input")
+end
+
 print(string.format("test_tickets: %d checks ok", checks))
