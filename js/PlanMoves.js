@@ -2,8 +2,8 @@
 .import "Zones.js" as Zones
 .import "Plan.js" as Plan
 .import "SceneStore.js" as SceneStore
-// Hand moves of planned windows (design D21, D23, 14.8): read plan-moves.json, tell which moves are new, and turn a move
-// into a scene edit for "Update plan". Pure: text and docs in, no files, no clock. Rects are fractions of the usable area,
+// Hand moves of planned windows (design D21, D23, 14.8): read plan-moves.json and turn a move into a
+// scene edit for "Update plan". Pure: text and docs in, no files, no clock. Rects are fractions of the usable area,
 // like scene rects.
 // move: { id, scene, window (1-based), class, context, kind: "desktop" | "zone", to: { identity, slot, rect (null or absent for tiled windows), floating } }
 
@@ -29,21 +29,7 @@ function parse(text) {
   return list.filter(valid)
 }
 
-// Moves not notified yet: id above lastId. When the newest id is below lastId, Lua's counter started again (Hyprland
-// restarted), so every move counts as new. Returns { moves (oldest first), maxId } with maxId the value to remember.
-function fresh(moves, lastId) {
-  if (moves.length === 0) return { moves: [], maxId: lastId }
-  const maxId = Math.max.apply(null, moves.map((m) => m.id))
-  const from = maxId < lastId ? 0 : lastId
-  return { moves: moves.filter((m) => m.id > from).sort((a, b) => a.id - b.id), maxId }
-}
-
 function find(moves, id) { return moves.find((m) => m.id === id) || null }
-
-// The notification for a move: classes and scene names only (never titles).
-function notice(m) {
-  return { headline: "omaplace: " + m.scene, body: m.kind === "desktop" ? m.class + " moved to another desktop" : m.class + " left its zone" }
-}
 
 function isZoneLayout(layout) { return FIXED_LAYOUTS.indexOf(layout) === -1 }
 
@@ -57,8 +43,7 @@ function zoneAt(layout, rect) {
   return i + 1
 }
 
-// Reasons hold no commas or double quotes: the CLI's field reader stops at either.
-const no = (code, reason) => ({ code, reason: reason.replace(/[",]/g, "") })
+const no = (code, reason) => ({ code, reason })
 
 // Puts win into zone `zone` of scene (a zone layout): the zone and the rect the page would store (design 14.7).
 function setZone(win, layout, zone) {
@@ -87,7 +72,6 @@ function joinPlan(target, win, to) {
 
 // The scene edit for "Update plan" (design 14.8). doc is a SceneStore doc and is never changed.
 // Returns { doc, changed } (changed false: the plan already says so) or { code: "not_found" | "not_possible", reason }.
-// Reasons: see no().
 function edit(scenesDoc, m) {
   if (!valid(m)) return no("not_possible", "the move is not readable")
   const doc = JSON.parse(JSON.stringify(scenesDoc))
@@ -105,9 +89,14 @@ function edit(scenesDoc, m) {
     if (other) return no("not_possible", "zone " + z + " already holds " + other.class)
     setZone(win, scene.layout, z)
   } else {
-    if ((scene.home_monitor || "") === m.to.identity && scene.home_slot === m.to.slot) return { doc, changed: false }
+    // An empty home_monitor means the focused monitor. The move does not say which monitor had the focus, so such a
+    // plan keeps "" and only its slot changes.
+    const anyMonitor = (scene.home_monitor || "") === ""
+    if ((anyMonitor || scene.home_monitor === m.to.identity) && scene.home_slot === m.to.slot) return { doc, changed: false }
+    const twin = scene.windows.filter((w) => w.class === m.class && (w.context || "") === (m.context || "")).length > 1
+    if (twin) return no("not_possible", "plan " + m.scene + " holds more than one " + m.class + " window, so the moved one is not known")
     if (scene.windows.length === 1) {
-      scene.home_monitor = m.to.identity
+      if (!anyMonitor) scene.home_monitor = m.to.identity
       scene.home_slot = m.to.slot
     } else {
       const name = Object.keys(doc.scenes).find((n) => doc.scenes[n].plan === true && (doc.scenes[n].home_monitor || "") === m.to.identity && doc.scenes[n].home_slot === m.to.slot)

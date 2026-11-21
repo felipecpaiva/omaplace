@@ -97,20 +97,9 @@ test("parse keeps only well formed moves; bad text gives none", () => {
   assert.deepEqual(P.parse(""), [])
 })
 
-test("fresh: moves above the last id, oldest first; a counter that started again counts all as new", () => {
-  const list = [mv(5), mv(3), mv(4)]
-  assert.deepEqual(P.fresh(list, 0), { moves: [mv(3), mv(4), mv(5)], maxId: 5 })
-  assert.deepEqual(P.fresh(list, 4), { moves: [mv(5)], maxId: 5 })
-  assert.deepEqual(P.fresh(list, 5), { moves: [], maxId: 5 })
-  assert.deepEqual(P.fresh([mv(1), mv(2)], 40).moves.map((m) => m.id), [1, 2])
-  assert.deepEqual(P.fresh([], 7), { moves: [], maxId: 7 })
-})
-
-test("find and notice: by id; text holds class and scene only", () => {
+test("find: by id", () => {
   assert.equal(P.find([mv(1), mv(2)], 2).id, 2)
   assert.equal(P.find([mv(1)], 9), null)
-  assert.deepEqual(P.notice(mv(1)), { headline: "omaplace: desk-2", body: "org.example.Editor left its zone" })
-  assert.equal(P.notice(mv(1, toDesk(3))).body, "org.example.Editor moved to another desktop")
 })
 
 test("zoneAt: the zone holding the centre, edges included at the screen's end, else 0", () => {
@@ -170,7 +159,6 @@ test("desktop move of a single-window plan onto a desktop with a plan is not pos
   const r = P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", ...toDesk(2) }))
   assert.equal(r.code, "not_possible")
   assert.match(r.reason, /already has plan/)
-  assert.ok(!/[",]/.test(r.reason))
 })
 
 test("desktop move from a many-window plan joins the target plan by its layout", () => {
@@ -201,4 +189,28 @@ test("desktop move from a many-window plan: no plan there, a full plan, a taken 
   assert.match(P.edit(doc(), mv(1, toDesk(3, [0, 0, 0.3, 0.3]))).reason, /used twice/)
   assert.match(P.edit(doc(), mv(1, toDesk(3))).reason, /outside every zone/)
   assert.match(P.edit(doc(), mv(1, toDesk(2, null, { to: { identity: "Other Monitor", slot: 2, rect: null } }))).reason, /no plan on desktop 2/)
+})
+
+test("desktop move out of a plan holding two windows of that class and context is not possible", () => {
+  const d = doc()
+  d.scenes["desk-5"].windows.push({ ...d.scenes["desk-5"].windows[0], zone: 3 })
+  const r = P.edit(d, mv(1, { scene: "desk-5", class: "org.example.Term", ...toDesk(6) }))
+  assert.equal(r.code, "not_possible")
+  assert.match(r.reason, /more than one org\.example\.Term window/)
+  // a different context is a different app (D18): not a twin
+  d.scenes["desk-5"].windows[2].context = "~/made-up"
+  assert.equal(P.edit(d, mv(1, { scene: "desk-5", class: "org.example.Term", ...toDesk(6) })).changed, true)
+})
+
+test("a one-window plan on the focused monitor (home_monitor empty) keeps it empty and only changes its slot", () => {
+  const d = doc()
+  d.scenes["desk-3"].home_monitor = ""
+  const mail = { scene: "desk-3", class: "org.example.Mail" }
+  const r = P.edit(d, mv(1, { ...mail, ...toDesk(7) }))
+  assert.equal(r.changed, true)
+  assert.equal(r.doc.scenes["desk-3"].home_monitor, "")
+  assert.equal(r.doc.scenes["desk-3"].home_slot, 7)
+  assert.doesNotThrow(() => S.serialize(r.doc))
+  // the same slot on whatever monitor is the same desktop for such a plan
+  assert.equal(P.edit(d, mv(1, { ...mail, ...toDesk(3) })).changed, false)
 })

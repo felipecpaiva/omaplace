@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # omaplace command line (design 7.3). Maps words to the service's IPC methods and prints the answer.
 # Exit codes: 0 ok (also a picker closed without a choice), 2 bad usage, 3 not found or nothing to save, 4 partial,
-# 5 failed, 6 Lua module not loaded.
+# 5 failed, 6 Lua module not loaded, 7 plan not updated (the move does not fit the plan).
 set -euo pipefail
 
 target=io.github.felipecpaiva.omaplace
@@ -28,7 +28,7 @@ Usage: omaplace [--json] <command>
 
   --json                print the service's JSON answer instead of text
 Exit codes: 0 ok (also a picker closed without a choice), 2 bad usage, 3 not found or nothing to save,
-4 partial, 5 failed, 6 Lua module not loaded.
+4 partial, 5 failed, 6 Lua module not loaded, 7 plan not updated (the move does not fit the plan).
 USAGE
 }
 bad() { echo "omaplace: $1" >&2; usage >&2; exit 2; }
@@ -79,8 +79,11 @@ case $word in
   *) bad "unknown command: $word" ;;
 esac
 
-field() { # field <json> <key>: a string or number value, empty when absent
-  sed -n -E 's/.*"'"$2"'":"?([^",}]*)"?.*/\1/p' <<< "$1" | head -n1
+field() { # field <json> <key>: a string (whole, commas and escaped quotes too) or number value, empty when absent
+  local v
+  v=$(sed -n -E 's/.*"'"$2"'":"(([^"\\]|\\.)*)".*/\1/p' <<< "$1" | head -n1)
+  [ -n "$v" ] || v=$(sed -n -E 's/.*"'"$2"'":([^",}]*).*/\1/p' <<< "$1" | head -n1)
+  printf '%s\n' "$v" | sed -E 's/\\(["\\])/\1/g'
 }
 
 answer=$(omarchy-shell "$target" "${args[@]}") || {
@@ -117,7 +120,7 @@ if [ "$ok" != true ]; then
     not_found) [ "$json" = 1 ] || { reason=$(field "$answer" reason); echo "omaplace: not found${reason:+ ($reason)}" >&2; }; exit 3 ;;
     bad_name) [ "$json" = 1 ] || echo "omaplace: names are 1 to 40 of a-z, 0-9, _ and -" >&2; exit 2 ;;
     empty) [ "$json" = 1 ] || echo "omaplace: nothing to save on this desktop" >&2; exit 3 ;;
-    not_possible) [ "$json" = 1 ] || echo "omaplace: plan not updated: $(field "$answer" reason)" >&2; exit 5 ;;
+    not_possible) [ "$json" = 1 ] || echo "omaplace: plan not updated: $(field "$answer" reason)" >&2; exit 7 ;;
     no_lua)
       if [ "$json" = 0 ]; then
         echo "omaplace: the Lua module is not loaded. Add this line to ~/.config/hypr/hyprland.lua:" >&2

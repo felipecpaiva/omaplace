@@ -42,12 +42,24 @@ test("no set command at login: skip and say so", () => {
 
 test("no set command, user started: toggle up to 2 times, verify after each", () => {
   const s = { want: "floating", hasSet: false, userStarted: true }
-  assert.deepEqual(M.decide({ ...s, current: "dwindle", tries: 0 }), { step: "toggle" })
-  assert.deepEqual(M.decide({ ...s, current: "scrolling", tries: 1 }), { step: "toggle" })
+  assert.deepEqual(M.decide({ ...s, current: "dwindle", tries: 0 }), { step: "toggle", direction: "back" }) // tiled to floating: one press back
+  assert.deepEqual(M.decide({ ...s, current: "scrolling", tries: 1 }), { step: "toggle", direction: "next" }) // a press that did not take: verify, press again
   assert.deepEqual(M.decide({ ...s, current: "floating", tries: 2 }), { step: "none" })
   const r = M.decide({ ...s, current: "dwindle", tries: 2 })
   assert.equal(r.step, "fail")
   assert.match(r.reason, /after 2 presses/)
+})
+
+test("the toggle direction reaches every mode in one press (Omarchy's next and back cycles)", () => {
+  // the cycles of omarchy-hyprland-workspace-layout-toggle, in its own words
+  const next = { dwindle: "scrolling", scrolling: "floating", floating: "dwindle" }
+  const back = { dwindle: "floating", floating: "scrolling", scrolling: "dwindle" }
+  for (const cur of ["dwindle", "scrolling", "floating"]) for (const want of ["tiled", "scrolling", "floating"]) {
+    const d = M.decide({ want, current: cur, hasSet: false, userStarted: true, tries: 0 })
+    if (M.fromOmarchy(cur) === want) { assert.equal(d.step, "none"); continue }
+    const after = (d.direction === "next" ? next : back)[cur]
+    assert.equal(M.fromOmarchy(after), want, cur + " to " + want + " by " + d.direction)
+  }
 })
 
 test("no set command, mode unreadable: never press blind", () => {

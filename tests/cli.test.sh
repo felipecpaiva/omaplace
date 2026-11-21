@@ -273,10 +273,10 @@ check "plan-update says which plan" "$(is "$out" "plan desk-2 updated")"
 export FAKE_ANSWER='{"ok":true,"scene":"desk-2","changed":false}'
 run plan-update 7
 check "plan-update with nothing to change says so" "$(is "$out:$code" "the plan already says so:0")"
-export FAKE_ANSWER='{"ok":false,"code":"not_possible","reason":"zone 2 already holds org.example.Chat"}'
+export FAKE_ANSWER='{"ok":false,"code":"not_possible","reason":"plan desk-3 would be invalid: desktop 2 of \"Example Corp EX27\" already has plan desk-2, pick another"}'
 run plan-update 8
-check "plan-update not possible exits 5" "$(is "$code" 5)"
-check "plan-update not possible gives the reason" "$(is "$out" "omaplace: plan not updated: zone 2 already holds org.example.Chat")"
+check "plan-update not possible exits 7" "$(is "$code" 7)"
+check "plan-update not possible gives the whole reason, commas and quotes too" "$(is "$out" 'omaplace: plan not updated: plan desk-3 would be invalid: desktop 2 of "Example Corp EX27" already has plan desk-2, pick another')"
 export FAKE_ANSWER='{"ok":false,"code":"not_found","reason":"that move is too old"}'
 run plan-update 9
 check "plan-update of an unknown move exits 3 with the reason" "$(is "$out:$code" "omaplace: not found (that move is too old):3")"
@@ -289,7 +289,7 @@ export FAKE_ANSWER='{"ok":false,"code":"not_possible","reason":"the window is ou
 code=0
 OMAPLACE_NOTIFY=1 "$bash_bin" "$cli" plan-update 3 >/dev/null 2>&1 </dev/null || code=$?
 check "no terminal: plan-update answer is a notification" "$(grep -q "plan not updated: the window is outside every zone" "$tmp/notified" 2>/dev/null && echo 0 || echo 1)"
-check "no terminal: plan-update keeps its exit code" "$(is "$code" 5)"
+check "no terminal: plan-update keeps its exit code" "$(is "$code" 7)"
 rm -f "$tmp/bin/omarchy-notification-send" "$tmp/notified"
 reset
 
