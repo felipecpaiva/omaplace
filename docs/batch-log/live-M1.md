@@ -49,3 +49,11 @@ Plugin installed by cloning the repo into `~/.config/omarchy/plugins/io.github.f
 | A real restore after a new Hyprland login | not done (needs a logout or reboot) |
 
 Note: `omaplace restore` prints only `ok`; a counts line like `open` would be nicer.
+
+# Live check WP9 app memory, 2026-11-21
+
+| Check | Result |
+|---|---|
+| `omaplace open livetest` on 9 writes `~/.local/state/omaplace/memory.lua` (mode scene) | pass: foot and omacalc remembered with monitor fingerprint, slot 9 and rect |
+| Omacalc closed, then started by hand from workspace 2 | pass: it opened on 9 at its scene spot (600,229 400x568); the view stayed on 2 |
+| Finding: Hyprland's Lua monitor object has no `make` or `model` (only `description`, `serial`) | fixed: the model key now comes from the description without the serial, so the "model" fallback works live |

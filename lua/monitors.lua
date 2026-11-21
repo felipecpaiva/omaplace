@@ -37,6 +37,15 @@ local function identity_of(monitor, all)
   return described(monitor)
 end
 
+-- Hyprland's Lua monitor has no make or model field (hyprctl's JSON has them; checked live 2026-11-21), only a
+-- description of "make model serial". So the model key is `model` when present, else the description without the serial.
+local function model_of(monitor, serial)
+  if (monitor.model or "") ~= "" then return monitor.model end
+  local d = monitor.description or ""
+  if serial ~= "" and d:sub(-#serial - 1) == " " .. serial then d = d:sub(1, -#serial - 2) end
+  return d
+end
+
 function M.fingerprint(monitor, all_monitors)
   local serial = monitor.serial or ""
   local twins = 0
@@ -47,7 +56,7 @@ function M.fingerprint(monitor, all_monitors)
     twin = twins > 1 or nil, -- the identity was shared with another screen when this was saved
     identity = identity_of(monitor, all_monitors),
     make = monitor.make or "",
-    model = monitor.model or "",
+    model = model_of(monitor, serial),
     serial_hash = serial ~= "" and fnv1a(serial) or "",
     internal = is_internal(monitor),
     width = monitor.width, height = monitor.height,

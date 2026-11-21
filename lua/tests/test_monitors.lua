@@ -153,4 +153,16 @@ do
   eq(hh ~= "identity", true, "unplugged twin: never by identity")
 end
 
+-- Hyprland's Lua monitor has no make or model (live 2026-11-21): the model key comes from the description,
+-- without the serial, so the "model" fallback still finds the same screen on another port.
+do
+  local saved = { name = "DP-1", description = "Example Corp EX27 SN123", serial = "SN123", width = 2560, height = 1440, scale = 1, transform = 0 }
+  local fp = M.fingerprint(saved, { saved })
+  eq(fp.model, "Example Corp EX27", "model key from the description without the serial")
+  local moved = { name = "DP-3", description = "Example Corp EX27 SN999", serial = "SN999", width = 2560, height = 1440, scale = 1, transform = 0 }
+  local got, how = M.resolve(fp, { moved }, "skip")
+  eq(got and got.name, "DP-3", "same model on another port is found")
+  eq(how, "model", "by the model step")
+end
+
 print("test_monitors ok (" .. checks .. " checks)")
