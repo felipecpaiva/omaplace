@@ -710,6 +710,9 @@ Item {
     if (root.launcherSource === "" || root.home === "") return
     let want = root.readNow(launcherSourceFile)
     if (want.indexOf(root.launcherMarker) === -1) return
+    // The icon ships in the plugin folder, so the installed entry names it by full path (no install step outside it).
+    let dir = root.launcherSource.slice(0, root.launcherSource.lastIndexOf("/"))
+    want = want.replace(/^Icon=omaplace$/m, "Icon=" + dir + "/branding/logo/icon-256.png")
     let have = root.readNow(launcherFile)
     if (have !== "" && have.indexOf(root.launcherMarker) === -1) return // a file of the user's own: never written over
     root.launcherInstalled = true
