@@ -27,6 +27,10 @@
     its desktop that is more than 2 percent off (once, until back within 2 percent or closed). Not while a run is live.
     A move that cannot be read (special workspace) does not count as reported. Move ids go on from the file's seq in a
     new Lua state, so an old "Update plan" action never hits a new move.
+  - A run of a plan scene ("Open all", login; the plan literal carries `scene` from `Plan.fromScene`) tracks the
+    windows it placed like snapped ones when it ends (`track_run`). Run windows come sorted by order, so
+    `Plans.match_run` maps them back to the scene window index by class and context, same rect first. Windows open
+    before Lua loaded stay untracked.
   - On every plans load a snapped window is looked up again: it follows its plan's new desktop, rect and window index
     (flags cleared), or is dropped when no plan snaps it any more.
   - `login.json` `{ instance, plans }` once per Lua state when a plan has `open_at_login`, skipped when the file already
@@ -34,7 +38,7 @@
     tried again on the next plans load, so the service must call reload_plans() at start.
   - `_G.omaplace.desktops(req_id)`: returns the table, and with a request id also writes
     `$XDG_RUNTIME_DIR/omaplace/desktops-<req_id>.json` (LuaCall cannot return a table through `hyprctl eval`).
-- Tests: `lua/tests/test_plans.lua` (37 checks), `lua/tests/test_glue_plans.lua` (116 checks, fixture
+- Tests: `lua/tests/test_plans.lua` (44 checks), `lua/tests/test_glue_plans.lua` (124 checks, fixture
   `lua/tests/fixtures/home-plans`). Live checks: `docs/checklist/WP12a.md`.
 
 ## Verified

@@ -420,6 +420,46 @@ eq(logged("window.open handler failed"), true, "a failing open is logged")
 fake.emit("window.open", "not a window")
 fake.emit("window.active", 42)
 
+-- a run of a plan scene ("Open all", login): the windows it placed are tracked like snapped ones (D21)
+m2.snapped["0xbad"], m2.last_active = nil, nil
+fake.windows = {}
+os.remove(rt .. "/plan-moves.json") -- the old login's reports
+_G.omaplace.open({ run = "p2", scene = "desk-2", target = { fp = { identity = "Example Corp EX27" }, slot = 2 },
+  existing = "new", layout = "floating", windows = {
+    { class = "org.example.Chat", order = 1, rect = { 0.5, 0, 0.5, 1 }, mode = "launch", launch = { "chat" } },
+    { class = "org.example.Editor", order = 2, rect = { 0, 0, 0.5, 1 }, mode = "launch", launch = { "editor" } } } })
+fake.advance(300)
+local rchat = new_window("org.example.Chat", 3)
+fake.emit("window.open", rchat)
+local red = new_window("org.example.Editor", 3)
+fake.emit("window.open", red)
+fake.advance(3000)
+eq(_G.omaplace.status().state, "done", "plan run done")
+eq(red.workspace.id, 12, "run put Editor on the plan's desktop")
+eq(m2.snapped[red.address] and m2.snapped[red.address].window, 1, "Editor tracked as window 1")
+eq(m2.snapped[rchat.address] and m2.snapped[rchat.address].window, 2, "Chat tracked as window 2")
+eq(moves_file():find('"kind"', 1, true), nil, "the run's own moves are not reported")
+user_move(red, 13)
+eq(moves_file():find('"kind":"desktop"', 1, true) ~= nil and moves_file():find('"window":1', 1, true) ~= nil, true,
+  "a run-placed window moved by hand is reported")
+fake.emit("window.active", rchat)
+rchat.at = { x = 3300, y = 0 }
+fake.emit("window.active", red)
+eq(moves_file():find('"kind":"zone"', 1, true) ~= nil and moves_file():find('"window":2', 1, true) ~= nil, true,
+  "a run-placed window out of its zone is reported")
+-- a run of a scene that is not a plan tracks nothing
+close(red)
+close(rchat)
+_G.omaplace.open({ run = "p3", scene = "not-a-plan", target = { fp = {}, slot = 6 }, existing = "new",
+  layout = "floating", windows = { { class = "org.example.Chat", order = 1, rect = { 0, 0, 1, 1 }, mode = "launch",
+    launch = { "chat" } } } })
+fake.advance(150)
+local rchat2 = new_window("org.example.Chat", 3)
+fake.emit("window.open", rchat2)
+fake.advance(3000)
+eq(m2.snapped[rchat2.address], nil, "not a plan scene: untracked")
+close(rchat2)
+
 -- desktops(): every monitor's slots, also as a file for the service
 local d = _G.omaplace.desktops()
 eq(#d.monitors, 2, "two monitors")

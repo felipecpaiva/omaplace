@@ -89,6 +89,44 @@ function M.lookup(set, class, context)
   return e.plan, e.index, w
 end
 
+function M.by_scene(set, scene)
+  for _, p in ipairs(type(set) == "table" and set.plans or {}) do
+    if p.scene == scene then return p end
+  end
+end
+
+local function same_rect(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" then return false end
+  for i = 1, 4 do
+    if math.abs((tonumber(a[i]) or 0) - (tonumber(b[i]) or 0)) > 1e-9 then return false end
+  end
+  return true
+end
+
+-- The plan window each run item ({ class, context, rect }) is: a run's windows come sorted by order, not in
+-- scene.windows order. Same class and context: the one with the same rect first, else the first one left.
+-- Returns { [item number] = window index }; items no window matches are left out.
+function M.match_run(plan, items)
+  local out, taken = {}, {}
+  local function pick(it, want_rect)
+    for i, w in ipairs(plan.windows) do
+      if not taken[i] and w.class == it.class and key(w.class, w.context) == key(it.class, it.context)
+        and (not want_rect or same_rect(w.rect, it.rect)) then
+        return i
+      end
+    end
+  end
+  for k, it in ipairs(items) do
+    local i = pick(it, true)
+    if i then out[k], taken[i] = i, true end
+  end
+  for k, it in ipairs(items) do
+    local i = not out[k] and pick(it, false)
+    if i then out[k], taken[i] = i, true end
+  end
+  return out
+end
+
 -- Scene names of the plans ticked "open at login".
 function M.login_plans(set)
   local out = {}

@@ -413,6 +413,8 @@ local function conclude(run)
     end)
     if not ok_m then log("memory update failed: " .. tostring(err_m)) end
   end
+  local ok_p, err_p = pcall(function() M.track_run(run) end)
+  if not ok_p then log("plan tracking failed: " .. tostring(err_p)) end
   write_status(run)
   log(string.format("run %s %s: %d placed%s", run.id, run.state, placed,
     #missed > 0 and (", not placed: " .. table.concat(missed, ", ")) or ""))
@@ -1155,6 +1157,27 @@ function M.place_from_plan(w)
     end)
   end)
   return true
+end
+
+-- A run of a plan scene ("Open all", login) ended: its placed windows are tracked like snapped ones (D21). Windows
+-- the run did not place stay untracked.
+function M.track_run(run)
+  local plan = run.scene and M.plans and Plans.by_scene(M.plans, run.scene)
+  if not plan then return end
+  local slots, items = {}, {}
+  for _, s in ipairs(run.book.slots) do
+    local info = run.info[s.n]
+    if s.state == "claimed" and info.address and info.target then
+      slots[#slots + 1] = s
+      items[#items + 1] = { class = s.class, context = s.context, rect = info.rect }
+    end
+  end
+  for k, index in pairs(Plans.match_run(plan, items)) do
+    local s, pw = slots[k], plan.windows[index]
+    local info = run.info[s.n]
+    M.snapped[info.address] = { scene = plan.scene, window = index, class = pw.class, context = pw.context,
+      ws = info.target.ws, rect = pw.rect, floating = pw.floating, placed = true }
+  end
 end
 
 function M.on_plan_event(event, w)

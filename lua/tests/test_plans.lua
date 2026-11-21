@@ -85,4 +85,21 @@ eq(d.monitors[2].focused, true, "focused flag")
 local d2 = Plans.desktops(live, function(m, s) if m.name == "DP-2" then error("boom") end return s end, function() return "x" end)
 eq(#d2.monitors[1].slots, 0, "a failing workspace_id gives no slots, no raise")
 
+-- by_scene and match_run (a run's windows come sorted by order)
+eq(Plans.by_scene(set, "desk-3").home_slot, 3, "plan by scene name")
+eq(Plans.by_scene(set, "nope"), nil, "unknown scene")
+local p2 = Plans.by_scene(set, "desk-2") -- Editor {0,0,.5,1}, Chat {.5,0,.5,1}, Editor {.5,0,.5,1}
+local m = Plans.match_run(p2, {
+  { class = "org.example.Chat", context = "", rect = { 0.5, 0, 0.5, 1 } },
+  { class = "org.example.Editor", context = "", rect = { 0.5, 0, 0.5, 1 } },
+  { class = "org.example.Editor", context = "", rect = { 0.3, 0, 0.5, 1 } },
+  { class = "org.example.Stray", context = "" },
+})
+eq(m[1], 2, "Chat is window 2")
+eq(m[2], 3, "the Editor with the right-half rect is window 3")
+eq(m[3], 1, "the other Editor takes the one left")
+eq(m[4], nil, "a class not in the plan is not matched")
+eq(Plans.match_run(Plans.by_scene(set, "desk-3"), { { class = "google-chrome", context = "" } })[1], nil,
+  "an untagged browser does not match a profile window")
+
 print(string.format("test_plans: %d checks ok", checks))
