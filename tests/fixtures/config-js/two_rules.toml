@@ -1,0 +1,13 @@
+schema = 1
+
+# editor on the left monitor
+[rule.editor]
+app = "org.example.Editor"
+monitor = "Example Corp EX27 #1"
+slot = 3
+follow = true
+
+[rule.mail]
+app = "org.example.Mail"
+slot = 10
+enabled = false

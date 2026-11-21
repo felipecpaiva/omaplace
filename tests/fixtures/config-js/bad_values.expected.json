@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "settings": {
+    "schema": 1,
+    "missing_monitor_scene": "focused",
+    "missing_monitor_rule": "skip",
+    "existing_default": "move",
+    "expiry_seconds": 20,
+    "settle_ms": 1100,
+    "launch_tick_ms": 150,
+    "session": "on",
+    "session_debounce_s": 15,
+    "session_keep": 5,
+    "request_timeout_s": 60,
+    "restore_at_login": "off",
+    "app_memory": "scene",
+    "context_quiet_ms": 2000,
+    "tiled_order": true,
+    "ignore": ""
+  },
+  "rules": {
+    "broken": {
+      "app": "org.example.Editor",
+      "monitor": "",
+      "slot": 1,
+      "follow": false,
+      "enabled": true
+    }
+  },
+  "strategies": {},
+  "warnings": [
+    "expiry_seconds: out of range 1..600, using 20",
+    "settle_ms: expected a whole number, using 1100",
+    "session: expected one of on, off, using \"on\"",
+    "tiled_order: expected true or false, using true",
+    "ignore: string holds a double quote (this format has no escapes), using \"\"",
+    "app_memory: not a string, number or boolean, using \"scene\"",
+    "line 8: not a key = value line, ignored",
+    "rule.broken.slot: out of range 1..10, using 1",
+    "rule.broken.follow: expected true or false, using false",
+    "section [rule.bad name!]: bad name, skipped"
+  ]
+}

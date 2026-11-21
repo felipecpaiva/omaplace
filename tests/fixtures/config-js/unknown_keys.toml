@@ -1,0 +1,9 @@
+future_option = "x"
+number_option = 7
+expiry_seconds = 25
+[theme]
+accent = "#ff8800"
+[rule.editor]
+app = "org.example.Editor"
+slot = 2
+color = "red"
