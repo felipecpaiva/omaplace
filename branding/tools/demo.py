@@ -43,12 +43,14 @@ EDITOR_SCROLL = 0            # wheel clicks down after picking the tile, if "Ope
 OPEN_ALL = (0, 0)            # the "Open all" button of desktop 8's editor (after EDITOR_SCROLL)
 OMACALC_GRAB = (60, 14)      # where to press on Omacalc to drag it, from its top-left corner (its title bar)
 DRAG_BY = -600               # how far the drag moves Omacalc: its centre ends in the left zone, a strip of the terminal stays
-NOTIF_ZOOM = 2               # the notification part is captured at SCREEN / NOTIF_ZOOM, scaled up to the same frame size
-NOTIF_AT = (800, 0)          # top-left of that zoomed region (Omarchy puts notifications top right)
+BAR = 25                     # the bar's height (the monitor's reserved top); checked before the run. Recording starts below it
+NOTIF_ZOOM = 2               # the notification part is captured at the area's size / NOTIF_ZOOM, scaled up to the same frame size
+NOTIF_AT = (800, 25)         # top-left of that zoomed region (Omarchy puts notifications top right)
 NOTIF_BUTTON = (0, 0)        # the "Update plan" button on the notification card
-FULL = f"0,0 {SCREEN[0]}x{SCREEN[1]}"
-NOTIF = f"{NOTIF_AT[0]},{NOTIF_AT[1]} {SCREEN[0] // NOTIF_ZOOM}x{SCREEN[1] // NOTIF_ZOOM}"
-assert SCREEN[0] % NOTIF_ZOOM == 0 and SCREEN[1] % NOTIF_ZOOM == 0, "the zoomed frames must have the full frames' pixel size"
+AREA = (SCREEN[0], (SCREEN[1] - BAR) // NOTIF_ZOOM * NOTIF_ZOOM)   # recorded size, a multiple of the zoom so both frame sizes match
+FULL = f"0,{BAR} {AREA[0]}x{AREA[1]}"
+NOTIF = f"{NOTIF_AT[0]},{NOTIF_AT[1]} {AREA[0] // NOTIF_ZOOM}x{AREA[1] // NOTIF_ZOOM}"
+assert AREA[0] % NOTIF_ZOOM == 0 and AREA[1] % NOTIF_ZOOM == 0, "the zoomed frames must have the full frames' pixel size"
 
 REL = os.path.relpath(ROOT, HOME)
 CD = ROOT if REL.startswith("..") else "~/" + REL   # ~ so the home folder's name is never written into the plan
@@ -183,7 +185,7 @@ def moves_seq():
 class Recorder:
     """grim frame loop. region and zoom can change mid scene; every frame keeps the full region's pixel size."""
     def __init__(self, region=FULL):
-        self.region, self.zoom, self.frames, self.marks, self.stop = region, 1, [], [], threading.Event()
+        self.view, self.frames, self.marks, self.stop = (region, 1), [], [], threading.Event()   # one tuple: never half switched
         self.dir = tempfile.mkdtemp(prefix="omaplace-demo-")
 
     def __enter__(self):
@@ -191,13 +193,13 @@ class Recorder:
         def grab():
             n = 0
             while not self.stop.is_set():
-                p = os.path.join(self.dir, f"f{n:05d}.jpg"); a = time.time() - self.t0
-                subprocess.run(["grim", "-s", str(self.zoom), "-g", self.region, "-t", "jpeg", "-q", "88", p], capture_output=True)
+                p = os.path.join(self.dir, f"f{n:05d}.jpg"); a = time.time() - self.t0; region, zoom = self.view
+                subprocess.run(["grim", "-s", str(zoom), "-g", region, "-t", "jpeg", "-q", "88", p], capture_output=True)
                 self.frames.append((a, p)); n += 1
         self.th = threading.Thread(target=grab); self.th.start()
         return self
 
-    def look(self, region, zoom=1): self.region, self.zoom = region, zoom
+    def look(self, region, zoom=1): self.view = (region, zoom)
     def caption(self, text): self.marks.append((time.time() - self.t0, text))
 
     def finish(self, name):
@@ -249,7 +251,9 @@ def scene_desktops():
         r.caption("The preview shows each app in its zone"); time.sleep(2.2)
         r.caption("Open all starts the apps"); tap(*OPEN_ALL); time.sleep(2.5)
         settings(False)
-        r.caption("Each app lands in its zone"); wait_for((DEMO_CLASS, "omacalc")); time.sleep(2.5)
+        r.caption("Each app lands in its zone")
+        if not wait_for((DEMO_CLASS, "omacalc")): raise RuntimeError("Open all placed nothing: is the plugin's Lua line loaded? (bin/omaplace save x exits 6 if not)")
+        time.sleep(2.5)
         r.finish("desktops")
 
 
@@ -290,8 +294,8 @@ def scene_update():
                 while time.time() < end and not (tw.most >= 1 and moves_seq() > seq0): time.sleep(0.15)
                 if moves_seq() <= seq0 or tw.most < 1: raise RuntimeError("no Update plan notification after the zone move")
                 r.look(NOTIF, NOTIF_ZOOM); r.caption("One notification: Update plan?"); time.sleep(1.6)
-                clean = tw.most == 1
                 to(*NOTIF_BUTTON); time.sleep(0.4)
+                clean = tw.most == 1 and notif("count") == "1"   # read last, with the pointer already on the button
             if not clean: raise RuntimeError("another notification showed; nothing pressed, GIF not written: run the update scene again")
             click()
         finally:
@@ -308,7 +312,7 @@ def scene_update():
 
 
 def scene_scenes():
-    baseline(); put(SCENES, ""); rescan(); focus_ws(SPARE)   # no plan here: the windows stay where they are put
+    baseline(); put(SCENES, "schema = 1\n"); rescan(); focus_ws(SPARE)   # no plan here: the windows stay where they are put
     launch(DEMO_TERM, "float; size 760 520; move 60 110"); time.sleep(1.5)
     launch("omacalc", "float; size 420 560; move 980 300"); wait_for((DEMO_CLASS, "omacalc")); time.sleep(1.0)
     to(SCREEN[0] // 2, SCREEN[1] - 40)
@@ -354,8 +358,9 @@ def preflight():
     mon = mons[0]
     w, h = (mon["height"], mon["width"]) if mon["transform"] % 2 else (mon["width"], mon["height"])
     size = (round(w / mon["scale"]), round(h / mon["scale"]))
-    if size != SCREEN or (mon["x"], mon["y"]) != (0, 0):
-        raise SystemExit(f"the monitor is {size[0]}x{size[1]} at {mon['x']},{mon['y']}; SCREEN says {SCREEN[0]}x{SCREEN[1]} at 0,0")
+    if size != SCREEN or (mon["x"], mon["y"]) != (0, 0) or mon["reserved"][1] != BAR:
+        raise SystemExit(f"the monitor is {size[0]}x{size[1]} at {mon['x']},{mon['y']} with {mon['reserved'][1]} px reserved on top;"
+                         f" SCREEN and BAR say {SCREEN[0]}x{SCREEN[1]} at 0,0 with {BAR}")
     cl = clients()
     if any(c["workspace"]["id"] == SPARE for c in cl): raise SystemExit(f"workspace {SPARE} is not empty; not touching it")
     if any(c["class"] in (DEMO_CLASS, "omacalc") for c in cl): raise SystemExit("close Omacalc first (the demo closes its windows)")

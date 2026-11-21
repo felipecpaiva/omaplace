@@ -28,7 +28,7 @@ A scene refuses to run while a coordinate it needs is still `(0, 0)`.
 
 ## Run
 
-Needs one monitor (the size in `SCREEN`), an empty workspace 8, no Omacalc open, the plugin enabled with its Lua line
+Needs one monitor (the size in `SCREEN`, the bar height in `BAR`; recording crops the bar off), an empty workspace 8, no Omacalc open, the plugin enabled with its Lua line
 loaded, grim, ffmpeg, kitty, bat, omacalc, and the omahop repository next to this one (its uinput helper).
 
 ```
