@@ -781,11 +781,12 @@ left to right, then top to bottom). Everything after that is the existing opener
 | # | Decision | Status |
 |---|---|---|
 | D19 | Choosing a zone layout switches the desktop to Omarchy's floating mode. Every card shows its layout clearly, the layout is easy to change, and a preview shows where each window goes | decided (Felipe, 2026-11-21) |
-| D20 | Apps snap, button fills: a planned app opened at any time goes to its desktop and zone (a rule plus the plan's rect through app memory); "Open all" starts the missing ones; nothing starts at login unless that desktop's "open at login" is ticked (off by default) | decided (Felipe, 2026-11-21) |
+| D20 | Apps snap, button fills: a planned app opened at any time goes to its desktop and zone through the plan lookup (14.7), not through app memory; "Open all" starts the missing ones; nothing starts at login unless that desktop's "open at login" is ticked (off by default) | decided (Felipe, 2026-11-21) |
 | D21 | The plan stays fixed; it changes only on the Desktops page. When the user moves a planned window to another zone or desktop by hand, omaplace sends one notification with an "Update plan" action (`omarchy-notification-send --action`); pressing it writes the new place into the plan, ignoring it changes nothing. Uses the move report from `auto` mode (`moves.json`) | decided (Felipe, 2026-11-21) |
-| D22 | How the desktop mode is set for a desktop that is not focused | **open**, see 14.4 |
+| D22 | Desktop mode: use `omarchy-hyprland-workspace-layout-set <workspace> <mode>` when Omarchy has it (upstream PR from us); until then the card focuses that desktop and presses Omarchy's toggle at most 2 times, checking `omarchy-hyprland-workspace-layout-current <id>` after each press. omaplace never writes Omarchy's state. Switch first, place after (switching to floating runs Omarchy's `arrange`) | decided (Felipe, 2026-11-21, option 1) |
+| D23 | A zone change on the same desktop is noticed when focus leaves the window (`window.active`): if the window that lost focus is a planned, snapped window and its rect is more than 2 percent of the usable area away from its zone, one "Update plan" notification is sent for it (once per window until it is back in its zone or closed). No polling | decided (Felipe, 2026-11-21) |
 
-### 14.4 Open: setting a desktop's mode (D22)
+### 14.4 Setting a desktop's mode (D22, decided: option 1)
 
 Omarchy has `omarchy-hyprland-workspace-layout-toggle`, which only cycles the focused desktop, and Lua
 `o.workspace_mode({ workspace, mode })`, which applies a mode but does not save it. The toggle saves the mode in
@@ -797,6 +798,30 @@ promised never to write Omarchy's state (section 3). Options:
    toggle until the mode matches. Recommended: extends Omarchy, never writes its state.
 2. omaplace calls `o.workspace_mode` live and re-applies the plan's mode at every load from its own plan. Nothing of
    Omarchy's is written, but Omarchy's bar shows the wrong mode for that desktop.
+
+### 14.7 Build notes (review before WP11, 2026-11-21)
+
+- **Plan lookup, separate from app memory.** Memory can be `off`, and in `last_place` and `auto` a hand move rewrites it,
+  which would break D21. So the service writes a derived file `~/.local/state/omaplace/plans.lua` (a Lua table literal,
+  service is its single writer) from the `plan = true` scenes; Lua reads it at load and on `reload_config` with the same
+  sandboxed loader as plan files (instruction budget, size cap). Order for a new window: run ticket > user rule (D9) >
+  plan > app memory. Only the first window of a class is snapped (same guard as memory).
+- **The rect is computed once, in JS.** The page stores `zone` and also the computed `rect` in `scenes.toml`; Lua never
+  does zone math.
+- **Class from the app picker.** The picker gives a desktop entry; matching uses `initialClass`. Class = `StartupWMClass`,
+  else a class seen for that entry in memory or scenes, else the entry id. An entry whose class is a guess shows
+  "class not confirmed: open it once" on the card; the first time a window of that app opens on its desktop through
+  "Open all", the real class is written back.
+- **Ambiguity.** Snap only when class plus context is in exactly one plan. The same app in two plans, an app with a user
+  rule, and a Chrome profile opened by hand (D18) are not snapped; "Open all" still places them. The card shows a note.
+- **No zone-change event exists.** Hyprland's Lua events have no move or resize end (`window.open`, `close`, `active`,
+  `move_to_workspace`, `fullscreen`, ... only). Desktop changes come from `move_to_workspace`. Zone changes: see D23.
+- **Own moves never notify.** "Open all" and snap moves are marked like memory's own moves.
+- **Open at login once per login.** Lua decides (it sees the instance signature, like the session code); it asks the
+  service to open the ticked plans once per `HYPRLAND_INSTANCE_SIGNATURE`, never on a reload or a shell restart.
+- **`AutoMove.js` skips `plan = true` scenes** (plans change only on the page or through "Update plan").
+- **Order:** WP11, then WP12, then WP13 (WP12 and WP13 both edit `Service.qml`). Zone golden vectors come from a tool
+  script against a local omagnet checkout, as for geometry.
 
 ### 14.5 Spikes
 
