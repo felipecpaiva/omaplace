@@ -20,7 +20,7 @@ Ask Felipe right before each check. No synthetic input, no virtual monitor. The 
 3. [ ] Close them all quickly (three or more within 2 s).
 4. [ ] For 60 s the file time is unchanged and it still lists the windows you closed. After that: if no window is
    left open, it stays unchanged; if other windows are still open, it is rewritten once with those only.
-5. [ ] Open one window, wait 15 s: the file is written again with only that window (writing resumes after the freeze).
+5. [ ] Once the 60 s freeze is over, open one window and wait 15 s: the file is written again with only that window (writing resumes after the freeze).
 
 ## Save now and a new instance
 1. [ ] `hyprctl eval '_G.omaplace.session_save_now()'` writes the file at once (time changes).

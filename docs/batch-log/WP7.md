@@ -12,7 +12,8 @@
     from the rule and scene ones). `sync_session()` runs at load and in `reload_config()`, so turning the setting on or
     off takes effect without re-running the file.
   - One session timer at most (`M.session_timer`): arming switches the old one off and bumps a generation number. A
-    freeze switches it off. When it fires it checks the freeze again (a timer armed before a burst never writes).
+    freeze moves a pending write to the end of the freeze. When the timer fires it checks the freeze again and, if
+    frozen, re-arms at its end (a write never happens inside a freeze).
   - The write: `Capture.snapshot` with scope `all` and kind `session` (the option building is now shared with
     `capture`), `pid` removed, to `~/.local/state/omaplace/session-<instance>.json` (temp file, then rename).
     `<instance>` is `HYPRLAND_INSTANCE_SIGNATURE` with every character outside `[A-Za-z0-9_]` turned into `_`, cut to 128.
@@ -26,7 +27,7 @@
     once and disarms the pending timer, but refuses during a freeze.
   - `_G.omaplace.sessions()`: the index as a Lua list, `{ { instance, saved_at }, ... }`, newest first.
   - Policy state survives a reload of the file (a freeze is kept).
-- Tests: `test_sessionpolicy.lua` (22 checks), `test_glue_session.lua` (51 checks).
+- Tests: `test_sessionpolicy.lua` (22 checks), `test_glue_session.lua` (53 checks).
 - Existing tests: the scene and rule glue tests now run with `session = "off"` so their idle and handler-count checks
   stay exact: `test_glue_open.lua` uses the new fixture `fixtures/home-session-off` (config `session = "off"` and an
   existing state folder) instead of `home-none`; `fixtures/home-rules*/config.toml` got `session = "off"` (only that
@@ -37,8 +38,11 @@
 - **An empty desktop is never written.** Events that come during a close burst (focus moves on as windows close) are
   scheduled at the end of the freeze, as the brief says. After a close-all with no shutdown, that write would find no
   windows and replace the last good snapshot with an empty one. So a snapshot with no windows is skipped. A partial
-  close (some windows left) is written after the freeze, which is the real state.
-- **A write armed before a burst is dropped**, not moved: the burst says the desktop is going away.
+  close (some windows left) is written after the freeze, which is the real state. A write armed before a burst moves
+  to the end of the freeze too.
+- **Session subscriptions live in `M.session_subs`**, not `M.subs`, so `sync_session()` can drop them alone when the
+  setting is switched off; a reload of the file removes both lists.
+- `sync_session()` has its own `pcall` at load and in `reload_config()`, so a session failure never stops the rules.
 - **No signature, no session**: with `HYPRLAND_INSTANCE_SIGNATURE` unset, nothing is written (one log line), because a
   shared file name would let the new boot overwrite the previous one.
 - **Index on every write**, not only the first: `saved_at` stays current and the extra small file costs nothing

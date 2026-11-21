@@ -94,7 +94,7 @@ fake.advance(10000)
 fake.emit("window.close"); fake.emit("window.active")
 fake.emit("window.close"); fake.emit("window.active")
 fake.emit("window.close")
-eq(fake.pending_timers(), 0, "the freeze switches the armed timer off")
+eq(fake.pending_timers(), 1, "the armed write moved, still one timer")
 eq(_G.omaplace.session_save_now(), nil, "save now refuses in a freeze")
 fake.emit("window.active") -- focus moves on while windows close: scheduled at the end of the freeze
 fake.advance(59999)
@@ -104,6 +104,16 @@ fake.set_windows({})
 fake.advance(1)
 eq(read("session-inst1.json"), nil, "an empty desktop is never written")
 fake.set_windows({ win("org.example.Editor", 1) })
+
+-- a partial close: the write armed before the burst lands at the end of the freeze, with what is left
+fake.emit("window.open")
+fake.advance(5000)
+for _ = 1, 3 do fake.emit("window.close") end
+fake.advance(59999)
+eq(read("session-inst1.json"), nil, "partial close: nothing inside the freeze")
+fake.advance(1)
+eq((read("session-inst1.json") or ""):find("org.example.Editor", 1, true) ~= nil, true, "written at the end of it")
+os.remove(state .. "/session-inst1.json")
 
 -- save now ignores the debounce
 fake.emit("window.open")

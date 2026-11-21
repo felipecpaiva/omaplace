@@ -86,8 +86,14 @@ function M.rebuild()
   return true
 end
 
+-- A session failure never stops the rules.
+local function sync_session_safe()
+  local ok, err = pcall(function() M.sync_session() end)
+  if not ok then log("session setup failed: " .. tostring(err)) end
+end
+
 function M.reload_config()
-  local ok, err = pcall(function() load_config(); M.sync_session(); assert(M.rebuild()) end)
+  local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()) end)
   if not ok then log("reload failed: " .. tostring(err)); return nil, tostring(err) end
   return true
 end
@@ -663,7 +669,8 @@ local function arm_session(at, now)
   M.session_timer = later(at - now, function()
     if gen ~= M.session_gen then return end
     M.session_timer = nil
-    if Policy.frozen(M.session_state, M.now_ms()) then return end
+    local t = M.now_ms()
+    if Policy.frozen(M.session_state, t) then return arm_session(M.session_state.frozen_until, t) end
     local ok_s, err = M.session_save()
     if not ok_s and err ~= "empty" then log("session save failed: " .. tostring(err)) end
   end)
@@ -674,8 +681,8 @@ function M.on_session_event(kind)
   local r = Policy.on_event(M.session_state, kind, now)
   if r.action == "schedule" then
     arm_session(r.at, now)
-  elseif r.action == "freeze" then
-    arm_session(nil)
+  elseif r.action == "freeze" and M.session_timer then
+    arm_session(r.until_ms, now) -- a pending write moves to the end of the freeze
   end
 end
 
@@ -721,7 +728,7 @@ ensure_dir()
 make_dir(state_dir())
 interrupt_stale(old_m)
 
-local ok, err = pcall(function() load_config(); M.sync_session(); assert(M.rebuild()) end)
+local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()) end)
 if not ok then log("load failed: " .. tostring(err)) end
 
 -- Only rules with an empty monitor follow focus, so a focus change rebuilds only when such a rule exists.
