@@ -69,3 +69,17 @@ Review follow-ups (same day):
 - A tiled window moved to a desktop with no plan stays tiled in its new free plan (`floating = to.floating`).
 - Lua: a zone run never maximizes; a full run on an already maximized window unsets, places, then sets again
   (fake_hl expresses it, so no live checklist entry was needed).
+
+## Live retest after the fixes, 2026-11-21 (main at f948131)
+
+| Check | Result |
+|---|---|
+| Hand-made `scenes.toml` created after the service started | pass: picked up when the settings window opened (`omaplace list` alone does not rescan) |
+| Open all of the 2-column plan | pass: foot left, Omacalc right, both started |
+| Zone swap: Omacalc dragged onto foot's zone, focus to foot, "Update plan" | pass: plan zones swapped, foot re-placed into the right half, nothing started, no false zone report afterwards |
+| Desktop move out of the 2-window plan onto desktop 4 (no plan), "Update plan" | pass: Omacalc left the plan, new `free` plan on desktop 4 holding it at its rect |
+| Full plan, Open all | pass: fullscreen state 1, 1600x975 at 0,25, bar kept |
+| Desktops page with plans: "Zones: 2 columns" and "Full screen" badges and previews | pass (`docs/media/desktops-page.png`) |
+| Cleanup | same as the first run: hyprland.lua byte-identical, `_G.omaplace` gone, plugin disabled, test windows closed, desktop 9 tiled again, test files trashed, runtime folder removed, view on desktop 2 |
+
+Still open: a real mouse click on the notification button (S13), a second monitor (S7), open at login after a real login.
