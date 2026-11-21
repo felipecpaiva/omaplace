@@ -1,0 +1,2 @@
+# made-up config: session snapshots off, so the scene and rule tests see no session timer
+session = "off"

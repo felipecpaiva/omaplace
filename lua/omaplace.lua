@@ -18,6 +18,7 @@ local Place = dofile(dir .. "/place.lua")
 local Json = dofile(dir .. "/json.lua")
 local Shellquote = dofile(dir .. "/shellquote.lua")
 local Geometry = dofile(dir .. "/geometry.lua")
+local Policy = dofile(dir .. "/sessionpolicy.lua")
 
 M.debounce_ms = 500
 M.applied = {} -- spec names declared so far, so a vanished rule can be switched off
@@ -32,9 +33,14 @@ if old_m and type(old_m.applied) == "table" then M.applied = old_m.applied end
 -- If the Lua state survived the reload, drop the old event subscriptions and timer before adding fresh ones.
 if old_m then
   for _, sub in ipairs(old_m.subs or {}) do pcall(sub.remove, sub) end
+  for _, sub in ipairs(old_m.session_subs or {}) do pcall(sub.remove, sub) end
   if old_m.timer then pcall(old_m.timer.set_enabled, old_m.timer, false) end
+  if old_m.session_timer then pcall(old_m.session_timer.set_enabled, old_m.session_timer, false) end
 end
 M.subs = {}
+M.session_subs = {}
+-- a freeze survives a reload of this file (a close-all can come with one)
+M.session_state = old_m and type(old_m.session_state) == "table" and old_m.session_state or Policy.new()
 
 local function log(text) print("omaplace: " .. tostring(text)) end
 
@@ -80,8 +86,14 @@ function M.rebuild()
   return true
 end
 
+-- A session failure never stops the rules.
+local function sync_session_safe()
+  local ok, err = pcall(function() M.sync_session() end)
+  if not ok then log("session setup failed: " .. tostring(err)) end
+end
+
 function M.reload_config()
-  local ok, err = pcall(function() load_config(); assert(M.rebuild()) end)
+  local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()) end)
   if not ok then log("reload failed: " .. tostring(err)); return nil, tostring(err) end
   return true
 end
@@ -139,28 +151,33 @@ local function runtime_dir()
 end
 
 -- Lua cannot make a folder, so ask Hyprland to (async). Called at load and again if a write finds it missing.
-local function ensure_dir()
-  local d = runtime_dir()
+local function make_dir(d)
   if not d then return end
   local f = io.open(d, "r")
   if f then f:close(); return end
   pcall(hl.exec_cmd, "mkdir -p -m 700 " .. Shellquote.join({ d }))
 end
 
--- Write a whole file through a temp file and a rename, so a reader never sees half of it.
-local function write_atomic(name, text)
-  local dir_ = runtime_dir()
-  if not dir_ then return nil, "no_runtime" end
+local function ensure_dir() make_dir(runtime_dir()) end
+
+-- Write a whole file in folder dir_ through a temp file and a rename, so a reader never sees half of it.
+local function write_in(dir_, name, text)
   local path = dir_ .. "/" .. name
   local tmp = path .. ".tmp"
   local f = io.open(tmp, "w")
-  if not f then ensure_dir(); log("cannot write " .. name); return nil, "write_failed" end
+  if not f then make_dir(dir_); log("cannot write " .. name); return nil, "write_failed" end
   local ok_w = f:write(text)
   f:close()
   if not ok_w then os.remove(tmp); return nil, "write_failed" end
   local ok_r, err = os.rename(tmp, path)
   if not ok_r then os.remove(tmp); log("cannot write " .. name .. ": " .. tostring(err)); return nil, "write_failed" end
   return true
+end
+
+local function write_atomic(name, text)
+  local dir_ = runtime_dir()
+  if not dir_ then return nil, "no_runtime" end
+  return write_in(dir_, name, text)
 end
 
 local function has_tag(w, tag)
@@ -177,10 +194,8 @@ local function later(ms, fn)
   end, { type = "oneshot", timeout = math.max(1, math.floor(ms)) })
 end
 
--- capture(req_id, scope): write capture-<req_id>.json (design 5.5). scope "focused" (default) or "all".
-function M.capture(req_id, scope)
-  if type(req_id) ~= "string" or #req_id > 64 or not req_id:match("^[%w_%-]+$") then return nil, "bad_req" end
-  if not runtime_dir() then return nil, "no_runtime" end
+-- The live desktops as a snapshot (design 5.5). scope "focused" or "all".
+local function snapshot_of(scope, kind)
   local live, wins = hl.get_monitors(), hl.get_windows()
   local floating = {}
   for _, w in ipairs(wins) do
@@ -191,10 +206,18 @@ function M.capture(req_id, scope)
   local snap = Capture.snapshot(wins, live, {
     slot_of = slots.slot_of, is_floating = function(id) return floating[id] == true end,
     fingerprint = Monitors.fingerprint, usable = Geometry.usable, ignore = Capture.ignore_set(M.settings.ignore),
-    scope = scope == "all" and "all" or "focused",
+    scope = scope,
     workspace = focused and focused.active_workspace and focused.active_workspace.id,
-    kind = "capture", saved_at = os.time(), mode = slots.mode(),
+    kind = kind, saved_at = os.time(), mode = slots.mode(),
   })
+  return snap
+end
+
+-- capture(req_id, scope): write capture-<req_id>.json (design 5.5). scope "focused" (default) or "all".
+function M.capture(req_id, scope)
+  if type(req_id) ~= "string" or #req_id > 64 or not req_id:match("^[%w_%-]+$") then return nil, "bad_req" end
+  if not runtime_dir() then return nil, "no_runtime" end
+  local snap = snapshot_of(scope == "all" and "all" or "focused", "capture")
   local text, err = Json.encode(snap)
   if not text then log("capture encode failed: " .. tostring(err)); return nil, "failed" end
   return write_atomic("capture-" .. req_id .. ".json", text .. "\n")
@@ -582,14 +605,130 @@ local function interrupt_stale(prev)
   end
 end
 
+-- ---------------------------------------------------------------- session snapshots (design 6.4)
+-- One file per Hyprland instance, so a new boot never overwrites the previous boot's last session. sessions.json
+-- lists the instances newest first (Lua cannot list a folder), and only this file writes either.
+
+local function state_dir()
+  local home = os.getenv("HOME")
+  if not home or home == "" then return nil end
+  return home .. "/.local/state/omaplace"
+end
+
+local warned_instance = false
+local function instance()
+  local sig = (os.getenv("HYPRLAND_INSTANCE_SIGNATURE") or ""):gsub("[^A-Za-z0-9_]", "_"):sub(1, 128)
+  if sig == "" and not warned_instance then
+    warned_instance = true
+    log("HYPRLAND_INSTANCE_SIGNATURE is not set: session snapshots are off")
+  end
+  return sig ~= "" and sig or nil
+end
+
+-- sessions.json is written only below, by Json.encode with sorted keys, so a pattern reads it back.
+local function read_index(d)
+  local out = {}
+  for name, at in (read_file(d .. "/sessions.json") or ""):gmatch('{"instance":"([A-Za-z0-9_]+)","saved_at":(%d+)}') do
+    out[#out + 1] = { instance = name, saved_at = math.tointeger(tonumber(at)) }
+  end
+  return out
+end
+
+-- Write session-<instance>.json now (no debounce, no freeze check) and put this instance first in the index;
+-- instances beyond session_keep lose their file. A desktop with no windows is never written (close-all).
+function M.session_save()
+  local d, inst = state_dir(), instance()
+  if not d or not inst then return nil, "no_instance" end
+  local snap = snapshot_of("all", "session")
+  if #snap.windows == 0 then return nil, "empty" end
+  for _, w in ipairs(snap.windows) do w.pid = nil end -- runtime only, never stored
+  local text, err = Json.encode(snap)
+  if not text then log("session encode failed: " .. tostring(err)); return nil, "failed" end
+  local ok_w, werr = write_in(d, "session-" .. inst .. ".json", text .. "\n")
+  if not ok_w then return nil, werr end
+  local list = { { instance = inst, saved_at = snap.saved_at } }
+  for _, e in ipairs(read_index(d)) do
+    if e.instance ~= inst then
+      if #list < M.settings.session_keep then
+        list[#list + 1] = e
+      else
+        os.remove(d .. "/session-" .. e.instance .. ".json")
+      end
+    end
+  end
+  return write_in(d, "sessions.json", Json.encode(list) .. "\n")
+end
+
+-- One debounce timer at most: arming switches the old one off and bumps the generation. at = nil only disarms.
+local function arm_session(at, now)
+  M.session_gen = (M.session_gen or 0) + 1
+  local gen = M.session_gen
+  if M.session_timer then pcall(M.session_timer.set_enabled, M.session_timer, false) end
+  M.session_timer = nil
+  if not at then return end
+  M.session_timer = later(at - now, function()
+    if gen ~= M.session_gen then return end
+    M.session_timer = nil
+    local t = M.now_ms()
+    if Policy.frozen(M.session_state, t) then return arm_session(M.session_state.frozen_until, t) end
+    local ok_s, err = M.session_save()
+    if not ok_s and err ~= "empty" then log("session save failed: " .. tostring(err)) end
+  end)
+end
+
+function M.on_session_event(kind)
+  local now = M.now_ms()
+  local r = Policy.on_event(M.session_state, kind, now)
+  if r.action == "schedule" then
+    arm_session(r.at, now)
+  elseif r.action == "freeze" and M.session_timer then
+    arm_session(r.until_ms, now) -- a pending write moves to the end of the freeze
+  end
+end
+
+-- session_save_now(): ignores the debounce, not the freeze. true, or nil and frozen | empty | no_instance | write_failed.
+function M.session_save_now()
+  if Policy.frozen(M.session_state, M.now_ms()) then return nil, "frozen" end
+  arm_session(nil)
+  return M.session_save()
+end
+
+-- sessions(): the index, newest first: { { instance = "...", saved_at = <unix s> }, ... }.
+function M.sessions()
+  local d = state_dir()
+  return d and read_index(d) or {}
+end
+
+M.SESSION_EVENTS = { "window.open", "window.close", "window.move_to_workspace", "window.active", "monitor.added",
+  "monitor.removed", "monitor.layout_changed" }
+
+-- Subscribe or unsubscribe to match the `session` setting (at load and on reload_config).
+function M.sync_session()
+  M.session_state.debounce_ms = M.settings.session_debounce_s * 1000
+  local on = M.settings.session == "on"
+  if on == (#M.session_subs > 0) then return end
+  for _, sub in ipairs(M.session_subs) do pcall(sub.remove, sub) end
+  M.session_subs = {}
+  if not on then arm_session(nil); return end
+  for _, event in ipairs(M.SESSION_EVENTS) do
+    local sub = hl.on(event, function()
+      local handled, e = pcall(function() _G.omaplace._m.on_session_event(event) end)
+      if not handled then log(event .. " session handler failed: " .. tostring(e)) end
+    end)
+    if sub then M.session_subs[#M.session_subs + 1] = sub end
+  end
+end
+
 -- _m is internal: the next load of this file reads them (see above).
 _G.omaplace = { version = M.version, reload_config = M.reload_config, status = M.status, open = M.open,
-  open_file = M.open_file, capture = M.capture, _m = M, _rebuild_soon = rebuild_soon }
+  open_file = M.open_file, capture = M.capture, session_save_now = M.session_save_now, sessions = M.sessions,
+  _m = M, _rebuild_soon = rebuild_soon }
 
 ensure_dir()
+make_dir(state_dir())
 interrupt_stale(old_m)
 
-local ok, err = pcall(function() load_config(); assert(M.rebuild()) end)
+local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()) end)
 if not ok then log("load failed: " .. tostring(err)) end
 
 -- Only rules with an empty monitor follow focus, so a focus change rebuilds only when such a rule exists.

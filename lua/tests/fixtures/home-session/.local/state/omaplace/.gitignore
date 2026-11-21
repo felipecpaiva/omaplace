@@ -1,0 +1,4 @@
+# files the session glue test writes while it runs
+*
+!.gitignore
+!.gitkeep
