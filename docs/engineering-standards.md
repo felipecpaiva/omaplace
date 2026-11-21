@@ -17,7 +17,7 @@ it meets all of them. Base: omahop's standards, plus Felipe's principles for Oma
    Unknown config keys are kept; bad values fall back and are reported.
 5. **Scalability.** Smooth with 100+ windows and several monitors. Work per event is bounded. Lists in the UI are
    `ListView`, not a `Repeater` of everything.
-6. **Privacy.** Never store or log titles, `/proc` arguments, URLs or folders the user did not type. Logs print classes and
+6. **Privacy.** Never store or log titles or URLs. Terminal folders and programs are captured only through `procinfo.sh` and `ArgFilter.js` (design D12). Logs print classes and
    scene names only. Fixtures are made up.
 
 ## Code standards per language

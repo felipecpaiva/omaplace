@@ -15,8 +15,9 @@ Evidence for every choice is in [research/](research/). Engineering rules are in
 | F2 | **Scenes.** Save the apps on one workspace of one monitor, with exact places and sizes. Open a scene in one step. | M2 |
 | F3 | **Session.** omaplace keeps a snapshot of all workspaces by itself. "Restore last session" opens it. | M3 |
 | F4 | **Monitor identity.** Rules, scenes and the session find their monitor again after a port change, a dock or an unplug. | M1, used by all |
+| F5 | **App memory.** An app opened by hand goes back to its remembered desktop, monitor and spot ("Slack: desktop 2, right three quarters, floating"). Setting `app_memory`: `scene` (default), `last_place`, `auto` | M2 (`scene`, `last_place`), M4 (`auto`) |
 
-What it never does: patch Omarchy, edit the user's Hyprland files, run on a timer, store window titles or command lines,
+What it never does: patch Omarchy, edit the user's Hyprland files, run on a timer, store window titles or unfiltered arguments,
 take default keys, or add a bar icon by default.
 
 Gap this fills (checked in source, `research/08`, `research/09`): no project has F1 with a monitor choice, and none
@@ -33,7 +34,7 @@ combines exact geometry with a port-proof monitor identity outside tmux windows.
    separate modules with one job each. Pure logic never calls Hyprland. Each file has one writer.
 5. **Flexibility and scale.** Behaviour is a setting with a safe default. Users extend the app strategy table without code.
    Works with 100+ windows and several monitors.
-6. **Privacy.** No titles, no `/proc` arguments, no URLs, no folders unless the user typed them.
+6. **Privacy.** No titles and no URLs. Terminal folders and program names are captured (D12) so terminals and agents reopen in place; arguments pass a secret filter first, and the settings window shows what was captured.
 
 ## 3. Where omaplace plugs into Omarchy
 
@@ -84,6 +85,8 @@ So the split follows the platform, not taste.
 | `~/.local/state/omaplace/session-<instance>.json` (one per Hyprland instance, overwritten in place, last 5 instances kept) | JSON | Lua glue | `Service.qml` | Session snapshots |
 | `$XDG_RUNTIME_DIR/omaplace/capture-<req>.json` | JSON | Lua glue | `Service.qml` | One capture answer |
 | `$XDG_RUNTIME_DIR/omaplace/status.json` | JSON | Lua glue | `Service.qml` | Progress of the current run |
+| `~/.local/state/omaplace/memory.lua` | Lua table literal (Lua reads its own file with `loadfile` in an empty environment) | Lua glue | Lua glue, `Service.qml` (display) | App memory per class |
+| `$XDG_RUNTIME_DIR/omaplace/moves.json` | JSON | Lua glue | `Service.qml` | Moves between scene desktops (`auto` mode only) |
 | `$XDG_RUNTIME_DIR/omaplace/result-<req>.json` | JSON | `Service.qml` | `bin/omaplace` | Final answer of a slow request (save, open, restore) |
 
 Scenes are TOML (decision D2) because users keep them in dotfiles and edit them; only JS reads them, and JS hands Lua a
@@ -146,7 +149,7 @@ classDiagram
   }
   class rules_lua {
     <<pure>>
-    +build(cfg_rules, live, resolve, ws_id, suppressed) rule_specs
+    +build(cfg_rules, live, resolve, ws_id) rule_specs
   }
   class tickets_lua {
     <<pure>>
@@ -157,6 +160,15 @@ classDiagram
   class sessionpolicy_lua {
     <<pure>>
     +on_event(state, kind, now) action
+  }
+  class memory_lua {
+    <<pure>>
+    +update(mem, event, mode) mem
+    +lookup(mem, cls, live) place
+  }
+  class ArgFilter_js {
+    <<pure>>
+    +filter(argv) argv
   }
   class json_lua {
     <<pure>>
@@ -223,6 +235,7 @@ classDiagram
   omaplace_lua --> json_lua
   omaplace_lua --> place_lua
   omaplace_lua --> shellquote_lua
+  omaplace_lua --> memory_lua
   place_lua --> geometry_lua
   capture_lua --> geometry_lua
   omaplace_cli --> Service_qml : omarchy-shell shell call
@@ -232,6 +245,7 @@ classDiagram
   Service_qml --> AppResolve_js
   Service_qml --> Plan_js
   Service_qml --> LuaLiteral_js
+  Service_qml --> ArgFilter_js
   Service_qml ..> omaplace_lua : hyprctl eval (async)
   omaplace_lua ..> Service_qml : status.json, capture json
 ```
@@ -246,16 +260,19 @@ classDiagram
 | `lua/monitors.lua` | Fingerprint a monitor, resolve a fingerprint to a live monitor with a named fallback step | Read Omarchy state files |
 | `lua/slots.lua` | The only code that knows Omarchy's workspace model | Be called with a global id as if it were a slot |
 | `lua/capture.lua` | Turn live windows and monitors into a snapshot (class, rect fraction, left-to-right order, slot, flags) | Store titles, pids, addresses |
-| `lua/rules.lua` | Turn config rules plus live monitors into named rule specs (enabled or disabled); a class in `suppressed` gets its rule disabled | Call `hl.window_rule` itself |
-| `lua/shellquote.lua` | Turn a plan argv into one safely single-quoted command string for `hl.exec_cmd` (typed fields included) | Pass any string unquoted |
+| `lua/rules.lua` | Turn config rules plus live monitors into named rule specs (enabled or disabled) | Call `hl.window_rule` itself |
+| `lua/memory.lua` | App memory: update the remembered place of a class from a run, a close or a move (by `app_memory` mode); look up a place for a new window | Touch files or `hl` |
+| `lua/shellquote.lua` | Turn a plan argv into one safely single-quoted command string for `hl.exec_cmd` (captured and edited fields included) | Pass any string unquoted |
 | `lua/tickets.lua` | Match new windows to waiting slots by class, in order, with expiry | Use title, pid or address as identity |
 | `lua/sessionpolicy.lua` | Decide when to write a session snapshot (debounce, close-burst freeze) | Read the clock or write files |
 | `lua/json.lua` | Encode tables to JSON | Decode (not needed) |
 | `lua/place.lua` | Resize, then move, check the size, retry at most twice; leave fullscreen first; settle after a workspace move | Decide where a window goes |
 | `Service.qml` | IPC methods, run `hyprctl eval` as an async `Process` with argv, watch status and capture files, notifications | Parse or build data by hand (calls the JS modules) |
-| `js/SceneStore.js` | Read, write, migrate scenes.toml; merge a re-capture without losing typed fields | Know about Hyprland |
+| `js/SceneStore.js` | Read, write, migrate scenes.toml; merge a re-capture without losing fields the user edited | Know about Hyprland |
 | `js/ConfigIO.js` | Read and edit config.toml line by line, keep unknown keys | Rewrite the whole file |
 | `js/AppResolve.js` | Class plus desktop entry list plus strategy table to a launch recipe | Read `/proc` |
+| `js/ArgFilter.js` | Drop arguments that look secret (`--password`, `--token`, `KEY=value`, long random strings, URLs with credentials) | Keep anything it is unsure about |
+| `libexec/procinfo.sh` | Given a terminal pid, print JSON with the foreground program's folder and argv (`/proc`, read only) | Run anything; print anything else |
 | `js/Plan.js` | Scene or snapshot plus launch recipes to the plan Lua runs | Know file paths |
 | `js/LuaLiteral.js` | Safe Lua table literal (escapes every string) | Emit code other than one table |
 | `bin/omaplace` | Map CLI words to IPC calls, print results, set exit codes | Hold logic |
@@ -316,8 +333,8 @@ class = "org.example.Editor" # initialClass, the match key
 rect = "0 0 0.5 1"           # x y w h fractions of the usable area (used on floating workspaces)
 order = 1                    # left-to-right rank (used on tiled and scrolling workspaces)
 floating = true
-launch = ""                  # typed by the user only
-folder = ""                  # typed by the user only
+launch = ""                  # captured program after ArgFilter, or typed
+folder = "~/code/demo"       # captured from the terminal (D12); shown in settings
 ```
 
 ### 5.4 Plan (JS to Lua, as one Lua table literal)
@@ -367,10 +384,10 @@ Run states: `running`, `done`, `partial`, `interrupted` (Lua reloaded mid-run).
 |---|---|---|
 | `desktop` (default) | Class maps to a desktop entry (omahop's lookup chain: id, StartupWMClass, lower case, last part of a reverse DNS id) | `uwsm-app -- <id>.desktop` |
 | `webapp` | Class `chrome-*-Default` and a matching web app desktop entry | the entry id through `uwsm-app --` |
-| `terminal` | A terminal class; `folder` typed | `uwsm-app -- xdg-terminal-exec --dir=<folder>` |
+| `terminal` | A terminal class; `folder` and foreground program captured (D12) | `uwsm-app -- xdg-terminal-exec --dir=<folder> <program argv>` |
 | `tui` | Class `org.omarchy.<cmd>` | `omarchy-launch-tui <cmd>` |
 | `place_only` | Browsers and Electron apps that restore their own windows (default list: chromium, google-chrome, firefox, code, obsidian, slack, spotify) | none |
-| `command` | User typed `launch` | the typed argv through `uwsm-app --` |
+| `command` | A `launch` the user typed or edited | that argv through `uwsm-app --` |
 
 Users add `[strategy.<name>]` sections in config.toml (`match = "class pattern"`, `use = "<strategy>"`). Unknown classes with
 no entry are `skip` and listed in the result, never guessed.
@@ -410,7 +427,8 @@ sequenceDiagram
   G->>G: capture.snapshot(...) for the focused workspace
   G-->>S: writes $XDG_RUNTIME_DIR/omaplace/capture-q1.json
   S->>S: AppResolve per class (DesktopEntries)
-  S->>S: SceneStore.mergeCapture(old, capture), keep typed fields
+  S->>S: for terminal windows: procinfo.sh pid (async Process), ArgFilter on argv
+  S->>S: SceneStore.mergeCapture(old, capture), keep fields the user edited
   S->>S: write scenes.toml (.bak first)
   S-->>CLI: ok, 4 saved, 1 skipped (no app)
 ```
@@ -432,7 +450,6 @@ sequenceDiagram
     G->>P: to_workspace, then put(rect) after 1.1 s settle
   end
   G->>T: tickets.new(remaining windows, now, expiry)
-  G->>H: rebuild rules with suppressed = classes that hold a live ticket
   loop floating target: one launch per 150 ms tick. Tiled or scrolling target: next window only after the previous is claimed or expired
     G->>H: hl.exec_cmd(launch argv)
   end
@@ -442,14 +459,25 @@ sequenceDiagram
   G->>P: to_workspace (if needed), put(rect), tag omaplace-slot
   G->>G: write status.json
   G->>T: tickets.expire on each tick until empty
-  G->>H: rebuild rules with suppressed = classes still waiting (empty at the end)
+  G->>G: memory.update for each placed class (mode scene)
   G-->>S: status.json state done or partial
   S->>S: omarchy-notification-send summary
 ```
 
-**Rules vs runs (F1 vs F2).** A run wins over a rule. While a ticket for class X is live, the placement rule for X is
-disabled (`rules.build` gets X in `suppressed`), so the new window opens where Hyprland would put it and the run claims it.
-When the ticket is claimed or expires, the rule is enabled again. Windows that are only moved are not affected by rules.
+**Rules vs scenes (D9, Felipe).** A rule wins, like macOS "Assign to desktop". An app in the scene that has a rule opens
+(or is moved) on the rule's desktop and monitor, and the focus follows it; every other app goes to the scene's target. If
+several apps have rules on different desktops, the focus ends on the last one placed. The run still claims the window by
+ticket, so on a floating desktop it also gets the scene's rect there.
+
+**App memory (F5).** A new window that no run claims is checked against `memory.lookup`. It is placed only if it is the
+first window of its class (so a browser's second window is left alone), not modal, and not on a special workspace. A rule's
+desktop beats the memory's desktop; the memory's rect is used when the desktop is the same and floating.
+
+| `app_memory` | Memory updated when |
+|---|---|
+| `scene` (default) | a run places the app |
+| `last_place` | also when the app's last window closes or moves to another desktop |
+| `auto` (M4) | as `last_place`, and a move between two desktops that each show an opened scene moves the app from one scene to the other in `scenes.toml` (the service does the write, Lua only reports the move) |
 
 ### 6.4 Session snapshot (F3)
 
@@ -531,20 +559,21 @@ Placed windows get `omaplace-slot=<run>/<n>`. It stops a window being claimed tw
 
 ### 7.5 Settings (config.toml, top level)
 
-| Key | Default | Unconfirmed? |
+| Key | Default | Note |
 |---|---|---|
 | `schema` | 1 | |
-| `missing_monitor_scene` | `focused` | yes |
-| `missing_monitor_rule` | `skip` | yes |
-| `existing_default` | `move` | yes |
+| `missing_monitor_scene` | `focused` | |
+| `missing_monitor_rule` | `skip` | |
+| `existing_default` | `move` | D10 |
 | `expiry_seconds` | 20 | |
 | `settle_ms` | 1100 | |
 | `launch_tick_ms` | 150 | |
-| `session` | `on` | yes (session in v1 at all) |
+| `session` | `on` | D15 |
 | `session_debounce_s` | 15 | |
 | `session_keep` | 5 (Hyprland instances, not writes) | |
 | `request_timeout_s` | 60 | |
-| `restore_at_login` | `off` | yes |
+| `restore_at_login` | `off` | later: `ask`, `auto` |
+| `app_memory` | `scene` | |
 | `tiled_order` | `true` (on tiled and scrolling workspaces, open or move windows one at a time in saved order) | |
 | `ignore` | `""` | |
 
@@ -573,14 +602,15 @@ Any work package that adds per-event work records a measurement in `docs/batch-l
 | D6 | Rules set the workspace only; rects are dispatched after open | decided |
 | D7 | Saves are event driven with a debounce and a close-burst freeze; no periodic timer (supersedes `autosave_minutes` in 06) | decided |
 | D8 | Rules rebuild on monitor events; scenes and sessions resolve monitors only when opened | decided |
-| D9 | Scene opens on the current workspace and monitor by default; home is opt-in | default, unconfirmed |
-| D10 | Already-open apps are moved, missing ones launched (`existing = move`) | default, unconfirmed |
-| D11 | One `scenes.toml` for all scenes | default, unconfirmed |
-| D12 | Terminal folders and launch lines are typed by the user only | default, unconfirmed |
+| D9 | Scene opens on the current desktop and monitor; an app with a rule goes to the rule's desktop and the focus follows it (last one wins) | decided (Felipe) |
+| D10 | Already-open apps are moved, missing ones launched (`existing = move`) | decided (Felipe) |
+| D11 | One `scenes.toml` for all scenes | decided (Felipe) |
+| D12 | Terminal folders and foreground programs are captured automatically (agents and editors reopen in their folder), arguments through `ArgFilter`, shown in settings, warning that `scenes.toml` may land in dotfiles | decided (Felipe) |
 | D13 | Floating workspaces: exact rects. Tiled and scrolling workspaces: no forced rects; restore the apps and keep their left-to-right order by opening or moving them one at a time in saved order | decided (Felipe, 2026-11-21) |
-| D14 | Soft link to omagnet (`fit_shadow`, slot tag) | default, unconfirmed |
+| D14 | Soft link to omagnet (`fit_shadow`, slot tag) | decided (Felipe) |
 | D15 | Session snapshot and manual restore in this plan as M3; restore at login off | decided (Felipe, 2026-11-21) |
-| D16 | Private now; code written public-safe (scrub test from day one) | default, unconfirmed |
+| D16 | Private now; code written public-safe (scrub test from day one) | decided (Felipe) |
+| D17 | App memory (F5) with setting `app_memory` = `scene` (default) / `last_place` / `auto` | decided (Felipe) |
 
 ## 10. Spikes (live checks, approved by Felipe 2026-11-21 on the condition that each is asked for right before it runs; one harmless window, no input events)
 
@@ -606,28 +636,30 @@ parallel packages never touch the same doc). `tests/run-all.sh` finds tests by g
 |---|---|---|---|---|
 | WP0 | Scaffold: `manifest.json` (id `io.github.felipecpaiva.omaplace`, kinds `service` and `panel`), stub `Service.qml` and `SettingsPanel.qml` that load and do nothing (the validator rejects a kind without its file), `tests/run-all.sh`, `tests/scrub.sh`, README with install, the `dofile` line and removal | those files | run-all lists each suite and SKIPs; scrub passes; `omarchy-plugin-validate` passes on the folder if available | none |
 | WP1 | Lua pure core: `config.lua`, `geometry.lua` (vendored, header names the omagnet commit), `monitors.lua`, `slots.lua`, `json.lua`, `shellquote.lua`, `lua/tests/fake_hl.lua`, `lua/tests/fixtures/geometry-golden.lua` plus `tools/gen-geometry-golden.sh` (generates the golden vectors from a local omagnet checkout; the committed vectors are what the test uses, so builders never need `../omagnet`) | those + `lua/tests/test_*.lua` for them | unit tests; geometry against the golden vectors; `shellquote` with quotes, spaces and newlines | WP0 |
-| WP2 | F1 rules: `rules.lua` (with `suppressed`), and creates `lua/omaplace.lua` with load, `reload_config`, monitor debounce | `lua/rules.lua`, `lua/omaplace.lua` | unit tests for `rules.build`; fake-`hl`: rules created, replaced in place by name, disabled when the monitor is gone, disabled while suppressed | WP1 |
-| WP3 | JS pure: `ConfigIO.js`, `SceneStore.js`, `AppResolve.js`, `Plan.js`, `LuaLiteral.js` in `js/` | those + `tests/*.test.mjs` + `tests/fixtures/` | Node tests; ConfigIO and Lua `config.lua` parse the same fixtures to the same values (the Lua side of that test is added in WP3 as `lua/tests/test_config_crosscheck.lua`, reading the shared fixtures) | WP0 (parallel with WP1) |
-| WP4 | F2 engine: `capture.lua`, `tickets.lua`, `place.lua`; adds `open`, `capture`, status writing and rule suppression to `lua/omaplace.lua` | `lua/capture.lua`, `lua/tickets.lua`, `lua/place.lua`; next editor of `lua/omaplace.lua` | unit tests; fake-`hl` runs: move mode, launch mode, expiry, busy, interrupted by reload, rule suppressed and restored | WP1, WP2 merged |
-| WP5 | Service and CLI: fills `Service.qml` (IPC methods, async `Process`, file watch, results, notifications), `bin/omaplace` | next editor of `Service.qml`; owns `bin/omaplace`, `tests/cli.test.sh` | shellcheck; CLI exit codes against a fake `omarchy-shell` script; live check after S1 and S5 | WP3, WP4 |
+| WP2 | F1 rules: `rules.lua`, and creates `lua/omaplace.lua` with load, `reload_config`, monitor debounce | `lua/rules.lua`, `lua/omaplace.lua` | unit tests for `rules.build`; fake-`hl`: rules created, replaced in place by name, disabled when the monitor is gone | WP1 |
+| WP3 | JS pure: `ConfigIO.js`, `SceneStore.js`, `AppResolve.js`, `ArgFilter.js`, `Plan.js`, `LuaLiteral.js` in `js/` | those + `tests/*.test.mjs` + `tests/fixtures/` | Node tests; ConfigIO and Lua `config.lua` parse the same fixtures to the same values (the Lua side of that test is added in WP3 as `lua/tests/test_config_crosscheck.lua`, reading the shared fixtures) | WP0 (parallel with WP1) |
+| WP4 | F2 engine: `capture.lua`, `tickets.lua`, `place.lua`; adds `open`, `capture`, status writing and rule-wins placement with focus follow to `lua/omaplace.lua` | `lua/capture.lua`, `lua/tickets.lua`, `lua/place.lua`; next editor of `lua/omaplace.lua` | unit tests; fake-`hl` runs: move mode, launch mode, expiry, busy, interrupted by reload, app with a rule goes to the rule's desktop and focus follows the last one | WP1, WP2 merged |
+| WP5 | Service and CLI: fills `Service.qml` (IPC methods, async `Process`, file watch, results, notifications, terminal capture), `bin/omaplace`, `libexec/procinfo.sh` | next editor of `Service.qml`; owns `bin/omaplace`, `libexec/procinfo.sh`, `tests/cli.test.sh`, `tests/procinfo.test.sh` | shellcheck; CLI exit codes against a fake `omarchy-shell` script; live check after S1 and S5 | WP3, WP4 |
 | WP6 | Settings window: fills `SettingsPanel.qml`, `pages/*.qml`, `SceneRow.qml`, launcher `.desktop`; next editor of `manifest.json` (launcher field only) | those | qmllint; hand checks | WP5 |
 | WP7 | F3 session: `sessionpolicy.lua`; session part of `lua/omaplace.lua`; `restore` wiring in `Service.qml` | `lua/sessionpolicy.lua`; next editor of `lua/omaplace.lua` and `Service.qml` | unit tests for burst freeze and debounce; fake-`hl`: one file per instance, previous instance chosen, old instances pruned | WP4, WP5 (parallel with WP6: no shared files) |
+| WP9 | F5 app memory, modes `scene` and `last_place`: `memory.lua`; memory part of `lua/omaplace.lua` | `lua/memory.lua`; next editor of `lua/omaplace.lua` | unit tests per mode; fake-`hl`: first window placed, second window left alone, rule desktop beats memory | WP4 |
+| WP10 | F5 `auto` mode: `moves.json` from Lua, scene membership update in `Service.qml` (M4) | next editor of `lua/omaplace.lua` and `Service.qml` | fake-`hl` move report; Node test of the scene move | WP7, WP8, WP9 |
 | WP8 | Menu row with consent and backup; final README | `js/MenuExt.js` and its test; next editor of `Service.qml` and `SettingsPanel.qml` (one button); final editor of README | Node test on a fixture jsonc; S6 | WP6, WP7 |
 
 Order of editors for shared files:
 
 | File | Created by | Then edited by, in order |
 |---|---|---|
-| `lua/omaplace.lua` | WP2 | WP4, WP7 |
-| `Service.qml` | WP0 (stub) | WP5, WP7, WP8 |
+| `lua/omaplace.lua` | WP2 | WP4, WP7, WP9, WP10 |
+| `Service.qml` | WP0 (stub) | WP5, WP7, WP8, WP10 |
 | `SettingsPanel.qml` | WP0 (stub) | WP6, WP8 |
 | `manifest.json` | WP0 | WP6 |
 | `README.md` | WP0 | WP8 |
 
-Order: WP0; then WP1 and WP3 in parallel; WP2; WP4; WP5; then WP6 and WP7 in parallel; WP8.
+Order: WP0; then WP1 and WP3 in parallel; WP2; WP4; WP5; then WP6 and WP7 in parallel (WP9 after WP7, because both edit `lua/omaplace.lua`); WP8; WP10.
 
 Milestones: **M1** = WP0, WP1, WP2 (rules work from config.toml). **M2** = WP3 to WP6 (scenes). **M3** = WP7 (session).
-**M4** = WP8 and release work.
+**M2** also includes WP9 (app memory) once WP7 has released `lua/omaplace.lua`. **M4** = WP8, WP10 and release work.
 
 ## 12. Where this supersedes research
 
@@ -636,6 +668,8 @@ Milestones: **M1** = WP0, WP1, WP2 (rules work from config.toml). **M2** = WP3 t
 - `research/04` summary line "class plus a launch token": replaced by D3 (the token is lost through `uwsm-app`).
 - `research/05` "never react to dropouts live" vs "re-resolve on every add": rules rebuild on events, scenes resolve at open (D8).
 - `research/07` suggested JSON scenes: replaced by D2 (JS-only reader, user-editable TOML).
+- `research/06` "folders and launch lines typed only": replaced by D12 (captured, filtered, shown).
+- `research/06` "home is opt-in, current desktop": extended by D9 (rules win, focus follows).
 
 ## 13. Risks
 
