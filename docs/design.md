@@ -561,7 +561,7 @@ through `monitors.resolve` with policy `focused`. Restore at login is a later se
 | `status()` | table | Same as status.json |
 | `version` | string | For the service to check compatibility |
 
-### 7.2 Service IPC (`omarchy-shell shell call omaplace <method> ...`)
+### 7.2 Service IPC (`omarchy-shell io.github.felipecpaiva.omaplace <method> ...`)
 
 Form (S5, checked 2026-11-21): `Service.qml` declares its own `IpcHandler { target: "io.github.felipecpaiva.omaplace" }`
 with typed functions (`function save(name: string): string`), the same way the Spaces plugin does. The CLI calls
