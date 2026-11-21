@@ -46,6 +46,12 @@ M.session_subs = {}
 M.memory_subs = {}
 M.memory_moved = {} -- addresses moved to another workspace, read when the memory debounce fires
 M.memory_own = {} -- addresses memory itself just moved: their one move event is not a user's move
+-- auto mode: the workspace each window was last seen on, the workspace a moved window came from, and the pending
+-- events of moves.json (kept across a reload so the file is not reset)
+M.last_ws = old_m and type(old_m.last_ws) == "table" and old_m.last_ws or {}
+M.auto_from = {}
+M.moves = old_m and type(old_m.moves) == "table" and old_m.moves or {}
+M.MAX_MOVES = 50
 -- a freeze survives a reload of this file (a close-all can come with one)
 M.session_state = old_m and type(old_m.session_state) == "table" and old_m.session_state or Policy.new()
 
@@ -372,8 +378,10 @@ local function conclude(run)
           p.kind, p.class, p.context = "placed", s.class, s.context ~= "" and s.context or nil
           if info.rect and p.floating then p.rect = info.rect end -- the scene's own fractions, not a rounded read back
           changed = Memory.update(M.memory, p, M.settings.app_memory, os.time()) or changed
+          if w.workspace and M.settings.app_memory == "auto" then M.last_ws[w.address] = w.workspace.id end
         end
       end
+      if run.scene and placed > 0 and Memory.bind(M.memory, run.scene_ws, run.scene, run.apps) then changed = true end
       if changed then save_memory() end
     end)
     if not ok_m then log("memory update failed: " .. tostring(err_m)) end
@@ -578,6 +586,15 @@ local function start_run(plan)
   })
   local run = { id = plan.run, live = true, state = "running", book = book, info = {}, t0 = now, wall0 = os.time(),
     pending = 0, gen = 0, layout = layout, focus_ws = main and main.ws }
+  -- the scene this run opens and the workspace it opens it on, bound when the run ends (auto app memory)
+  if type(plan.scene) == "string" and main then
+    run.scene, run.scene_ws, run.apps = plan.scene, main.ws, {}
+    for _, w in ipairs(plan.windows) do
+      if type(w) == "table" and type(w.class) == "string" then -- plain table: a plan window
+        run.apps[#run.apps + 1] = Memory.key(w.class, type(w.context) == "string" and w.context or "")
+      end
+    end
+  end
   for i, w in ipairs(plan.windows) do
     local t = type(w) == "table" and target_of(w) or nil -- plain table: a plan window
     run.info[i] = { target = t, launch = w.launch, rect = valid_rect(w.rect),
@@ -701,6 +718,93 @@ local function place_from_memory(w)
 end
 M.place_from_memory = place_from_memory
 
+-- ---- auto mode: a window moved from one bound workspace to another (design 6.3, `auto`)
+
+-- Left-to-right rank of `w` among the windows on its workspace (ties by y, then address). Classes in `ignore` do not count.
+local function rank_on(w)
+  local ignore = Capture.ignore_set(M.settings.ignore)
+  local function xy(x)
+    local at = x.at or {}
+    return tonumber(at.x) or 0, tonumber(at.y) or 0
+  end
+  local wx, wy = xy(w)
+  local rank = 1
+  for _, x in ipairs(hl.get_windows()) do
+    local ws = x.workspace
+    if ws and ws.id == w.workspace.id and x.address ~= w.address and not ignore[(x.initial_class or ""):lower()] then
+      local xx, xyv = xy(x)
+      if xx < wx or (xx == wx and (xyv < wy or (xyv == wy and tostring(x.address) < tostring(w.address)))) then
+        rank = rank + 1
+      end
+    end
+  end
+  return rank
+end
+
+local function drop_first(list, key)
+  for i, k in ipairs(list) do
+    if k == key then table.remove(list, i); return true end
+  end
+  return false
+end
+
+local function push_move(ev)
+  M.moves[#M.moves + 1] = ev
+  while #M.moves > M.MAX_MOVES do table.remove(M.moves, 1) end
+  local text, err = Json.encode(M.moves)
+  if not text then log("moves encode failed: " .. tostring(err)); return end
+  write_atomic("moves.json", text .. "\n")
+end
+
+-- Report the move of `w` (now on its new workspace) when it left a bound workspace for another bound one. `from` is the
+-- workspace it was last seen on; when that is unknown, the one other bound workspace that holds the app. Returns true
+-- when the bound apps changed (the caller saves). Never writes a title.
+local function report_move(w, from)
+  local to = w.workspace and math.tointeger(w.workspace.id)
+  local cls = w.initial_class or ""
+  if not to or to < 1 or cls == "" then return false end
+  local ctx = Capture.context_of(w) or ""
+  local key = Memory.key(cls, ctx)
+  local bt = Memory.bound(M.memory, to)
+  if not bt then return false end
+  local bf = from and Memory.bound(M.memory, from)
+  if not from then
+    local found, count = nil, 0
+    for id, b in pairs(M.memory.bound or {}) do
+      if id ~= tostring(to) and b.scene ~= bt.scene then
+        for _, k in ipairs(b.apps) do
+          if k == key then found, count, from = b, count + 1, tonumber(id); break end
+        end
+      end
+    end
+    bf = count == 1 and found or nil
+  end
+  if not bf or from == to or bf.scene == bt.scene or not drop_first(bf.apps, key) then return false end
+  local has = false
+  for _, k in ipairs(bt.apps) do has = has or k == key end
+  if not has then bt.apps[#bt.apps + 1] = key end
+  local p = place_of(w)
+  if p then
+    push_move({ class = cls, context = ctx, from_scene = bf.scene, to_scene = bt.scene, rect = p.rect,
+      floating = p.floating, order = rank_on(w), at = M.now_ms() })
+  end
+  return true
+end
+
+-- A workspace with no window left is not a scene any more.
+local function unbind_empty()
+  local full = {}
+  for _, x in ipairs(hl.get_windows()) do
+    if x.workspace and x.workspace.id then full[tostring(x.workspace.id)] = true end
+  end
+  local drop = {}
+  for id in pairs(M.memory.bound or {}) do
+    if not full[id] then drop[#drop + 1] = id end
+  end
+  for _, id in ipairs(drop) do Memory.unbind(M.memory, id) end
+  return #drop > 0
+end
+
 -- One debounce for close and move (last_place, auto): a close is read at once (the window is gone later), a move
 -- when the timer fires (after Omarchy re-arranged it). One save per burst.
 local function arm_memory_save()
@@ -714,10 +818,19 @@ local function arm_memory_save()
     M.memory_dirty = false
     local moved = M.memory_moved
     M.memory_moved = {}
+    local from_of = M.auto_from
+    M.auto_from = {}
     for address in pairs(moved) do
       local w = Place.find(address)
-      if w then changed = remember("moved", w) or changed end
+      if w then
+        changed = remember("moved", w) or changed
+        if M.settings.app_memory == "auto" then
+          local ok, did = pcall(report_move, w, from_of[address])
+          if ok then changed = did or changed else log("move report failed: " .. tostring(did)) end
+        end
+      end
     end
+    if M.settings.app_memory == "auto" then changed = unbind_empty() or changed end
     if changed then save_memory() end
   end)
 end
@@ -725,13 +838,22 @@ end
 function M.on_memory_event(event, w)
   local tw = type(w)
   if not memory_on() or (tw ~= "table" and tw ~= "userdata") then return end
+  local auto = M.settings.app_memory == "auto"
+  local from
   if event == "window.close" then
-    if w.address then M.memory_own[w.address] = nil end
+    if w.address then M.memory_own[w.address] = nil; M.last_ws[w.address] = nil end
     if remember("closed", w) then M.memory_dirty = true; arm_memory_save() end
-  elseif w.address and M.memory_own[w.address] then
+    if auto and next(M.memory.bound or {}) then arm_memory_save() end -- the workspace may be empty now
+    return
+  end
+  if auto and w.address and w.workspace then -- where it was before this move, and where it is now
+    from, M.last_ws[w.address] = M.last_ws[w.address], w.workspace.id
+  end
+  if w.address and M.memory_own[w.address] then
     M.memory_own[w.address] = nil
   elseif not (M.run and M.run.live) and w.address then -- a run's own moves are recorded when it ends
     M.memory_moved[w.address] = true
+    if from then M.auto_from[w.address] = M.auto_from[w.address] or from end
     arm_memory_save()
   end
 end
@@ -758,6 +880,7 @@ function M.on_window_open(w)
   -- Hyprland hands windows over as userdata (HL.Window), the tests as tables: accept both, nothing else.
   local tw = type(w)
   if tw ~= "table" and tw ~= "userdata" then return end
+  if M.settings.app_memory == "auto" and w.address and w.workspace then M.last_ws[w.address] = w.workspace.id end
   if not (run and run.live) then return place_from_memory(w) end
   local mine = M.SLOT_PREFIX .. run.id .. "/"
   for _, t in ipairs(Capture.tags_of(w)) do

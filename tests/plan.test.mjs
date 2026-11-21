@@ -93,3 +93,9 @@ test("fromSession keeps monitor and slot per window, ordered by monitor, slot, o
   assert.deepEqual(p.windows[0].launch, ["uwsm-app", "--", "org.example.Editor.desktop"])
   assert.doesNotThrow(() => encode(p))
 })
+
+test("fromScene passes an optional scene name through, and only then", () => {
+  assert.equal(P.fromScene(scene, launches, target, rules).scene, undefined)
+  assert.equal(P.fromScene(scene, launches, { ...target, scene: "work" }, rules).scene, "work")
+  assert.equal(P.fromScene(scene, launches, { ...target, scene: 5 }, rules).scene, undefined)
+})

@@ -30,7 +30,7 @@ function modeFields(win, launch) {
   return win
 }
 
-// target: { run, fp, slot, layout?, expiry_s? }. fp is the monitor fingerprint to open on, slot 0 is the current workspace.
+// target: { run, fp, slot, layout?, expiry_s?, scene? }. `scene` is the scene name, carried to the plan for auto app memory. fp is the monitor fingerprint to open on, slot 0 is the current workspace.
 // Windows are sorted by `order` (stable) because tiled and scrolling targets open them one at a time in that order.
 function fromScene(scene, launches, target, rules) {
   const t = target || {}
@@ -44,7 +44,7 @@ function fromScene(scene, launches, target, rules) {
     if (rule) win.desktop = { monitor: rule.monitor, slot: rule.slot, follow: rule.follow }
     return win
   })
-  return {
+  const plan = {
     run: needRun(t.run),
     target: { fp: t.fp || {}, slot: t.slot || 0 },
     existing: scene.existing === "new" ? "new" : "move",
@@ -52,6 +52,8 @@ function fromScene(scene, launches, target, rules) {
     layout: layoutOf(t.layout),
     windows
   }
+  if (typeof t.scene === "string" && t.scene !== "") plan.scene = t.scene
+  return plan
 }
 
 // snapshot: the session snapshot of design 5.5. Each window keeps its own monitor index and slot; Lua resolves them.
