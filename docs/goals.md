@@ -78,21 +78,19 @@ Menu entry with consent (WP8), `app_memory = auto` (WP10), restore at login (`as
 - No window titles, URLs or secrets stored or logged; scrub test passes.
 - Live checks only after asking Felipe right before each one.
 
-## Today (2026-11-21): M1, placement rules
+## Today (2026-11-21): up to WP5 (Felipe chose option B)
 
-Target: by the end of today, a rule in `config.toml` puts a test app on the right desktop, proven by tests and one live
-check.
+Target: by the end of today, `omaplace save work` and `omaplace open work` work from the command line, rules work from
+`config.toml`, all proven by tests, and the live checks Felipe approves at the moment pass.
 
-| Step | What | Who | Proof |
+| Step | Work packages | Proof | Checkpoint with Felipe |
 |---|---|---|---|
-| 1 | WP0 scaffold: manifest, stubs, test runner, scrub, README with install and removal | builder agent | `bash tests/run-all.sh` and `bash tests/scrub.sh` pass |
-| 2 | WP1 Lua pure core (config, geometry with golden vectors, monitors, slots, json, shellquote, fake Hyprland) | builder agent | unit tests pass |
-| 2b | WP3 JS pure core, in parallel with WP1 | builder agent | Node tests pass, config cross-check with Lua passes |
-| 3 | WP2 rules and the first `omaplace.lua` | builder agent | fake-Hyprland tests: rule created, replaced by name, disabled when the monitor is gone |
-| 4 | Review of every package against the standards | separate reviewer agent | review notes in `docs/batch-log/` |
-| 5 | Live check: Felipe adds the `dofile` line, one rule, opens one test app | Felipe, with Claude watching | M1 checks 1, 4 and 5 pass on this machine |
+| 1 | WP0 scaffold | `tests/run-all.sh`, `tests/scrub.sh`, `omarchy-plugin-validate` pass | look at the repo shape |
+| 2 | WP1 Lua core and WP3 JS core, in parallel | unit tests, config cross-check, geometry golden vectors | none |
+| 3 | WP2 placement rules | fake-Hyprland tests | live: add the `dofile` line, one rule, open a test app (M1 checks 1, 4, 5) |
+| 4 | WP4 scene engine | fake-Hyprland tests | live spikes S2, S3, S4, S8, S9, S10, each asked first |
+| 5 | WP5 service and CLI | CLI tests with a fake shell | live spikes S1, S5, then save and open one real scene |
 
-Not today: M1 checks 2 and 3 (need a second monitor), M2 and later.
-
-Checkpoints with Felipe: after step 1 (shape of the repo), after step 3 (tests green, before anything touches the live
-desktop), and at step 5.
+Every package: built by a builder agent in its own git worktree, checked by a separate reviewer agent against
+`engineering-standards.md`, then merged by Claude. Not today: WP6 to WP10, M1 checks 2 and 3 (need a second monitor).
+Missing linters today: shellcheck, luacheck, stylua (logged as SKIP until installed).

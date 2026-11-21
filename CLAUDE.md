@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Private repo. Design phase: `docs/design.md` is the source of truth (draft for review). No code until Felipe approves it.
+Private repo. Build phase (design approved 2026-11-21): `docs/design.md` is the source of truth, `docs/goals.md` the expectations.
 
 - Read `docs/design.md` and `docs/engineering-standards.md` before any work. Work packages own only their listed files.
 - Window titles, browser tabs and app arguments can hold private text. Never commit or log real ones. Use made-up fixtures.
