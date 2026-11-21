@@ -832,6 +832,7 @@ promised never to write Omarchy's state (section 3). Options:
 | `_G.omaplace.desktops()` | Lua | service (reply file, `LuaCall`) | `{ monitors = { { identity, name, focused, slots = { { slot, workspace } } } } }` for slots 1..10 via `slots.lua`; the service and the Desktops page use it to find a plan's workspace id |
 | `$XDG_RUNTIME_DIR/omaplace/plan-moves.json` | Lua, atomic, last 20 | service (FileView, read on change) | `{ "seq": n, "moves": [ { "id": n, "scene", "window": i, "class", "context", "kind": "desktop" or "zone", "to": { "identity", "slot", "rect": [x,y,w,h] or null, "floating" } } ] }` |
 | `$XDG_RUNTIME_DIR/omaplace/login.json` | Lua, once per `HYPRLAND_INSTANCE_SIGNATURE`, only if some plan has `open_at_login` | service | `{ "instance": sig, "plans": [ scene names ] }`; the service keeps `login-done-<sig>` in the runtime folder so a shell restart never opens them twice |
+| Notification "Update plan" | Lua (async `hl.exec_cmd`, arguments shell-quoted, class and scene name only) right after it writes the move; the service does not watch `plan-moves.json` (a watch can miss a rename) | the user |
 | CLI `omaplace plan-update <move id>` | the "Update plan" notification action | service IPC `planUpdate(id)` | writes the move's `to` into the scene: `kind = desktop` sets `home_monitor`/`home_slot` of a single-window plan or, for many windows, moves the window to the plan of the target desktop when one exists, else reports `not_possible`; `kind = zone` sets the window's `zone` to the zone whose rect contains the window's centre, else switches the plan to `free` only if the user confirms (not in WP12: report `not_possible`) |
 
 Lua rules (WP12a): new window order = run ticket > user rule (D9) > plan > app memory. A plan snaps only the first
@@ -850,8 +851,9 @@ for any scene) = 1) find the workspace with `desktops()`, 2) if the plan's `mode
 command exists, else, only when the run was started by the user, focus that workspace and run
 `omarchy-hyprland-workspace-layout-toggle` at most 2 times, checking `current` after each; at login without the set
 command, skip the switch and say so in the summary, 3) open the scene with the existing flow (the plan's home desktop is
-the target). All commands through async `Process`. Notifications: one per move, `omarchy-notification-send` with
-`--action "Update plan" omaplace plan-update <id>`; never for own moves (Lua does not report them).
+the target). All commands through async `Process`. Move notifications are sent by Lua (see the table); the service only reads
+`plan-moves.json` inside `planUpdate(id)`. New interfaces: IPC `openPlan(name)`, `planUpdate(id)`; CLI
+`omaplace plan-update <id>` (exit 7 `not_possible`); results may carry `note` (for example "layout not switched").
 
 ### 14.5 Spikes
 
