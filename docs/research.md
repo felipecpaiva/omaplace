@@ -37,10 +37,11 @@ Measured with: GraphQL search `repo:omacom/omarchy sort:top` (top 1000 discussio
 - Windows appear late (slow apps), so placing them is a race.
 - Private text: window titles and app arguments can hold private data.
 
-## Not checked yet ("nobody offers this")
+## Correction: others already offer this
 
-There is no first-party Omarchy answer. General Hyprland session tools may already exist. The deep dive
-must list them, check how they work and how well, before we design anything.
+"Nobody offers this" was wrong. Three core PRs (#18858, #18092, #10353) and many marketplace plugins
+(omasession, omarchy-sessions, omarchy-scenes, and one already named `omascenes`) exist. Our angle is the
+gap they leave. See [research/00-summary.md](research/00-summary.md).
 
 ## Open questions for the deep dive
 
