@@ -49,7 +49,22 @@ for _, t in ipairs({ 0, 100, 200 }) do P.on_event(s, "window.close", t) end
 r = P.on_event(s, "window.active", 300)
 eq(r.action, "schedule", "event in a freeze still schedules")
 eq(r.at, 60200, "moved to the end of the freeze")
+P.fired(s) -- the write happened: a new burst starts
 eq(P.on_event(s, "window.open", 50000).at, 65000, "past the freeze: plain debounce")
+
+-- the wait is capped: a write is owed at most 2 x debounce after the first event of a burst
+s = P.new(15000)
+eq(P.on_event(s, "window.active", 0).at, 15000, "first event")
+eq(P.on_event(s, "window.active", 10000).at, 25000, "second event still moves it")
+eq(P.on_event(s, "window.active", 20000).at, 30000, "third is capped at first + 30 s")
+eq(P.on_event(s, "window.active", 29000).at, 30000, "and stays capped")
+P.fired(s)
+eq(P.on_event(s, "window.active", 31000).at, 46000, "after a write the next burst starts fresh")
+-- the freeze still wins over the cap
+s = P.new(15000)
+P.on_event(s, "window.active", 0)
+for _, t in ipairs({ 100, 200, 300 }) do P.on_event(s, "window.close", t) end
+eq(P.on_event(s, "window.active", 400).at, 60300, "freeze end, not the cap")
 
 -- a write armed before the burst is caught by the fire-time check
 s = P.new(15000)

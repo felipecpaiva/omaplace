@@ -66,12 +66,17 @@ function M.new()
       ms, fn = type(opts) == "table" and opts.timeout or 0, ms
     end
     fake.next_timer = fake.next_timer + 1
-    local t = { id = fake.next_timer, due = fake.now + ms, fn = fn, live = true }
+    local t = { id = fake.next_timer, due = fake.now + ms, ms = ms, fn = fn, live = true }
     fake.timers[#fake.timers + 1] = t
     -- Hyprland's HL.Timer has set_enabled and is_enabled (method calls); cancel() is kept for older tests.
     return {
       cancel = function() t.live = false end,
-      set_enabled = function(_, on) t.live = on == true and t.live end,
+      -- like Hyprland's: enabling starts the countdown again, from now, with the last timeout
+      set_enabled = function(_, on)
+        t.live = on == true
+        if t.live then t.due = fake.now + t.ms end
+      end,
+      set_timeout = function(_, new_ms) t.ms = new_ms end,
       is_enabled = function() return t.live end,
     }
   end

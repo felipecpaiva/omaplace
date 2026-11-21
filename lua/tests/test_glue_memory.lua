@@ -294,6 +294,35 @@ eq(Memory.lookup(read_memory(), "org.example.Late"), nil, "off: a run is not rem
 M.settings.app_memory = "scene"
 fake.windows = {}
 
+-- a window that closes without workspace or monitor still records, from its last known place (robustness: checked
+-- live, a real close carries both)
+do
+  local m2 = _G.omaplace._m
+  m2.settings.app_memory = "last_place"
+  m2.sync_memory()
+  reset()
+  local ghost = new_window("org.example.Ghost", 9)
+  fake.emit("window.open", ghost)
+  ghost.workspace = { id = 12 }
+  fake.emit("window.move_to_workspace", ghost) -- no advance: only the fallback can know desktop 12 at the close
+  for i, x in ipairs(fake.windows) do
+    if x == ghost then table.remove(fake.windows, i) end
+  end
+  ghost.workspace, ghost.monitor = nil, nil
+  fake.emit("window.close", ghost)
+  fake.advance(2000)
+  local g = Memory.lookup(read_memory(), "org.example.Ghost")
+  eq(g and g.slot, 2, "closed with nil workspace and monitor: recorded from its last place (desktop 12 is slot 2)")
+  eq(m2.places[ghost.address], nil, "the address is forgotten after the close")
+  -- never seen, nothing known: nothing recorded, no failure
+  local unseen = { initial_class = "org.example.Unseen", class = "org.example.Unseen", address = "0xdead", tags = {} }
+  fake.emit("window.close", unseen)
+  eq(fake.pending_timers(), 0, "an unknown window with no place arms nothing")
+  eq(Memory.lookup(read_memory(), "org.example.Unseen"), nil, "and records nothing")
+  m2.settings.app_memory = "scene"
+  m2.sync_memory()
+end
+
 -- a reload keeps the memory and the subscriptions stay single
 load()
 eq(Memory.lookup(_G.omaplace._m.memory, "org.example.Term") ~= nil, true, "reload keeps memory not yet on disk")

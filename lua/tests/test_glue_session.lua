@@ -12,7 +12,7 @@ end
 local home = dir .. "/fixtures/home-session"
 local state = home .. "/.local/state/omaplace"
 local names = { "sessions.json" }
-for i = 1, 8 do names[#names + 1] = "session-inst" .. i .. ".json" end
+for i = 1, 9 do names[#names + 1] = "session-inst" .. i .. ".json" end
 local function clean()
   for _, n in ipairs(names) do os.remove(state .. "/" .. n); os.remove(state .. "/" .. n .. ".tmp") end
 end
@@ -121,6 +121,21 @@ eq(_G.omaplace.session_save_now(), true, "save now writes")
 eq(read("session-inst1.json") ~= nil, true, "file there at once")
 eq(fake.pending_timers(), 0, "save now disarms the pending write")
 
+-- focus keeps changing: still one timer, and the write comes 30 s after the first event (2 x debounce), not never
+os.remove(state .. "/session-inst1.json")
+fake.emit("window.active")
+local timers_made = #fake.timers
+fake.advance(10000)
+fake.emit("window.active")
+fake.advance(10000)
+fake.emit("window.active")
+eq(read("session-inst1.json"), nil, "not yet at 20 s")
+fake.advance(10000)
+eq(read("session-inst1.json") ~= nil, true, "written at 30 s although events never paused 15 s")
+eq(#fake.timers, timers_made, "the one timer was re-armed, none created")
+fake.advance(15000)
+_G.omaplace.session_save_now() -- leaves instance 1's file for the prune checks below
+
 -- a second instance (a new boot) writes its own file and goes first in the index
 local first = read("session-inst1.json")
 for i = 2, 7 do
@@ -149,6 +164,18 @@ eq(read("session-inst6.json"), inst6, "instance 6 file untouched")
 -- a reload leaves one session handler per event
 load()
 eq(count("window.close"), 1, "no double register")
+
+-- the previous login's session is never pruned, even with a keep that is too small
+sig = "inst9"
+load()
+_G.omaplace._m.settings.session_keep = 1
+_G.omaplace.session_save_now()
+idx = _G.omaplace.sessions()
+eq(idx[1].instance, "inst9", "new login first")
+eq(idx[2] and idx[2].instance, "inst7", "previous login kept")
+eq(#idx, 2, "the rest pruned")
+eq(read("session-inst7.json") ~= nil, true, "previous login file kept")
+eq(read("session-inst6.json"), nil, "older file pruned")
 
 -- an odd signature is made safe for a file name
 sig = "a/../b c"

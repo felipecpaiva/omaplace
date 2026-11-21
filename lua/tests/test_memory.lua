@@ -119,4 +119,15 @@ eq(Memory.lookup(mixed, "b.B"), nil, "bad slot dropped")
 eq(Memory.lookup(mixed, "x.X"), nil, "key that does not match its class dropped")
 eq(mixed.seq, 3, "seq from the entries")
 
+-- an endless loop in the file is refused by the instruction budget, and the hook is gone afterwards
+do
+  local t0 = os.clock()
+  local mem, err = Memory.decode("while true do end")
+  eq(mem, nil, "endless loop refused")
+  eq(err, "not a memory table", "refused as unusable")
+  eq(debug.gethook(), nil, "budget hook removed")
+  eq(os.clock() - t0 < 5, true, "refused quickly")
+  eq(Memory.decode("local n = 0 for i = 1, 100 do n = n + i end return { apps = {} }") ~= nil, true, "a small loop is fine")
+end
+
 print(string.format("test_memory: %d checks ok", checks))

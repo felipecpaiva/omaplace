@@ -14,8 +14,16 @@ end
 -- Checked again when the timer fires: a timer armed before a burst must not write inside the freeze.
 function M.frozen(state, now) return now < state.frozen_until end
 
--- A time to write at, moved past the freeze when it falls inside it.
-local function schedule(state, at)
+-- The write is owed at most MAX_WAIT_FACTOR x debounce after the first event of a burst, even if events keep coming.
+M.MAX_WAIT_FACTOR = 2
+
+-- The glue calls this when it writes (or gives up), so the next event starts a new burst.
+function M.fired(state) state.first_at = nil end
+
+-- A time to write at, capped by the burst's first event, then moved past the freeze when it falls inside it.
+local function schedule(state, now, at)
+  state.first_at = state.first_at or now
+  at = math.min(at, state.first_at + M.MAX_WAIT_FACTOR * state.debounce_ms)
   if at < state.frozen_until then at = state.frozen_until end
   return { action = "schedule", at = at }
 end
@@ -37,7 +45,7 @@ function M.on_event(state, kind, now)
       return { action = "freeze", until_ms = state.frozen_until }
     end
   end
-  return schedule(state, now + state.debounce_ms)
+  return schedule(state, now, now + state.debounce_ms)
 end
 
 return M

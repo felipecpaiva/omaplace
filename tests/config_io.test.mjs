@@ -93,3 +93,10 @@ test("unknown lines and sections survive writes", () => {
   assert.match(out, /\[theme\]\naccent = "#fff"/)
   assert.equal(C.parse(out).extra["theme.accent"], "#fff")
 })
+
+test("session_keep needs at least 2 (this login and the previous one)", () => {
+  const one = C.parse("session_keep = 1\n")
+  assert.equal(one.settings.session_keep, 5)
+  assert.equal(one.warnings.length, 1)
+  assert.equal(C.parse("session_keep = 2\n").settings.session_keep, 2)
+})

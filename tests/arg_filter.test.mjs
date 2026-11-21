@@ -51,3 +51,30 @@ test("long but ordinary words, paths and class names stay", () => {
 test("bad input is an empty list", () => {
   assert.deepEqual(filter(undefined), { argv: [], dropped: 0 })
 })
+
+test("short secret flags drop with their value", () => {
+  assert.deepEqual(filter(["redis-cli", "-a", "pw"]), { argv: ["redis-cli"], dropped: 2 })
+  assert.deepEqual(filter(["mysql", "-pPASS", "-h", "db"]), { argv: ["mysql", "-h", "db"], dropped: 1 })
+  assert.deepEqual(filter(["sshpass", "-p", "pw", "ssh", "host"]), { argv: ["sshpass", "ssh", "host"], dropped: 2 })
+  assert.deepEqual(filter(["curl", "-u", "user:pw", "https://example.test"]), { argv: ["curl", "https://example.test"], dropped: 2 })
+  assert.deepEqual(filter(["tool", "--user", "bob", "--pass", "x", "--auth", "y"]), { argv: ["tool"], dropped: 6 })
+})
+
+test("-p with a purely numeric value is a port and stays", () => {
+  const argv = ["serve", "-p", "8080"]
+  assert.deepEqual(filter(argv), { argv, dropped: 0 })
+  assert.deepEqual(filter(["serve", "-p8080"]).dropped, 0)
+})
+
+test("authorization headers drop, with their -H", () => {
+  assert.deepEqual(filter(["curl", "-H", "Authorization: Bearer x", "https://example.test"]), { argv: ["curl", "https://example.test"], dropped: 2 })
+  assert.deepEqual(filter(["curl", "--header", "AUTHORIZATION: Basic abc", "u"]).dropped, 2)
+  assert.deepEqual(filter(["curl", "-H", "Accept: text/html", "u"]).dropped, 0)
+  assert.equal(filter(["tool", "BEARER-thing"]).dropped, 1)
+})
+
+test("user:pass pairs and user:pass@host drop, ports and notes.md stay", () => {
+  assert.equal(filter(["tool", "bob:hunter2"]).dropped, 1)
+  assert.equal(filter(["scp", "bob:hunter2" + "@" + "example.test:/x"]).dropped, 1)
+  assert.deepEqual(filter(["nvim", "notes.md", "localhost:8080"]), { argv: ["nvim", "notes.md", "localhost:8080"], dropped: 0 })
+})

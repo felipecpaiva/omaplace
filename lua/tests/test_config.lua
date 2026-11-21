@@ -71,6 +71,14 @@ do
   eq(C.load("expiry_seconds = 600\nsession_keep = 50\n").settings.session_keep, 50, "the max itself is fine")
 end
 
+-- session_keep needs 2: one slot for this login, one for the previous login
+do
+  local c = C.load("session_keep = 1\n")
+  eq(c.settings.session_keep, 5, "keep 1 is refused")
+  eq(#c.warnings, 1, "with a warning")
+  eq(C.load("session_keep = 2\n").settings.session_keep, 2, "keep 2 is fine")
+end
+
 -- a second quoted value is unreadable, so the line is ignored with a warning
 do
   local c = C.load('[rule.a]\nslot = 2\napp = "a" "b"\n')

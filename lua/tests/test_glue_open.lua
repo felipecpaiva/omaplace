@@ -12,7 +12,7 @@ end
 -- The runtime folder is a fixture in the repo (its .gitignore keeps what the test writes out of git).
 local runtime = dir .. "/fixtures/runtime"
 local written = { "capture-q1.json", "capture-q2.json", "status.json", "status.json.tmp", "plan-r11.lua", "plan-bad.lua",
-  "plan-evil.lua", "plan-num.lua", "plan-bin.lua", "plan-big.lua" }
+  "plan-evil.lua", "plan-num.lua", "plan-bin.lua", "plan-big.lua", "plan-loop.lua" }
 local function clean()
   for _, name in ipairs(written) do os.remove(runtime .. "/omaplace/" .. name) end
 end
@@ -460,6 +460,9 @@ eq(select(2, _G.omaplace.open_file("/etc/hostname")), "bad_path", "only plan fil
 eq(select(2, _G.omaplace.open_file(runtime .. "/omaplace/../omaplace/plan-r11.lua")), "bad_path", "no dot dot")
 
 -- a plan file over 1 MB is refused
+local loop = plan_file("plan-loop.lua", "while true do end")
+eq(select(2, _G.omaplace.open_file(loop)), "bad_plan", "endless loop plan refused")
+eq(debug.gethook(), nil, "budget hook removed after a plan")
 local big = plan_file("plan-big.lua", "return { run = 'big', windows = {} } -- " .. string.rep("x", 1048577))
 eq(select(2, _G.omaplace.open_file(big)), "bad_plan", "plan over 1 MB")
 

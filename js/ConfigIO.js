@@ -17,7 +17,7 @@ const SETTING_SPECS = {
   launch_tick_ms: { type: "int", min: 10, max: 5000, def: 150 },
   session: { type: "enum", values: ["on", "off"], def: "on" },
   session_debounce_s: { type: "int", min: 1, max: 3600, def: 15 },
-  session_keep: { type: "int", min: 1, max: 50, def: 5 },
+  session_keep: { type: "int", min: 2, max: 50, def: 5 },
   request_timeout_s: { type: "int", min: 1, max: 600, def: 60 },
   restore_at_login: { type: "enum", values: ["off", "ask", "auto"], def: "off" },
   app_memory: { type: "enum", values: ["scene", "last_place", "auto", "off"], def: "scene" },

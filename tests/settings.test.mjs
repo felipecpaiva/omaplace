@@ -26,7 +26,7 @@ test("settingChange: numbers within the config limits", () => {
   assert.deepEqual(S.settingChange(specs, "settle_ms", 900), { ok: true, value: 900 })
   assert.deepEqual(S.settingChange(specs, "settle_ms", "900"), { ok: true, value: 900 })
   assert.equal(S.settingChange(specs, "settle_ms", 10001).ok, false)
-  assert.match(S.settingChange(specs, "session_keep", 0).why, /from 1 to 50/)
+  assert.match(S.settingChange(specs, "session_keep", 0).why, /from 2 to 50/)
   assert.equal(S.settingChange(specs, "expiry_seconds", "2.5").ok, false)
   assert.equal(S.settingChange(specs, "expiry_seconds", "ten").ok, false)
 })

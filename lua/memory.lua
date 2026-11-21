@@ -174,6 +174,18 @@ function M.encode(mem)
   return "return " .. text .. "\n"
 end
 
+-- Run a loaded chunk with an instruction budget, so a file with an endless loop is refused. The hook is removed
+-- afterwards. Returns pcall's results.
+M.MAX_INSTRUCTIONS = 1000000
+function M.run_limited(chunk)
+  if not debug or not debug.sethook then return pcall(chunk) end
+  local prev_hook, prev_mask, prev_count = debug.gethook()
+  debug.sethook(function() error("instruction budget used up", 0) end, "", M.MAX_INSTRUCTIONS)
+  local res = table.pack(pcall(chunk))
+  debug.sethook(prev_hook, prev_mask or "", prev_count or 0)
+  return table.unpack(res, 1, res.n)
+end
+
 -- Text back to memory, loaded as text only in an empty environment. Bad entries are dropped. nil and an error when
 -- the text cannot be used at all (the message never quotes the text).
 function M.decode(text)
@@ -181,7 +193,7 @@ function M.decode(text)
   if #text > M.MAX_TEXT then return nil, "too big" end
   local chunk = load(text, "memory", "t", {})
   if not chunk then return nil, "does not parse" end
-  local ok, t = pcall(chunk)
+  local ok, t = M.run_limited(chunk)
   if not ok or type(t) ~= "table" or type(t.apps) ~= "table" then return nil, "not a memory table" end
   local mem = M.new()
   for k, e in pairs(t.apps) do

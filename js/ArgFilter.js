@@ -35,7 +35,16 @@ function valueLooksSecret(v) {
   return SECRET_PREFIX.test(v) || URL_WITH_PASSWORD.test(v) || looksRandom(v)
 }
 
+// user:pass@host, and a bare user:pass pair (a purely numeric value is a port, so it stays).
+const USER_PASS_AT = /[^\s\/@:]+:[^\s\/@]+@/
+const BARE_PAIR = /^[A-Za-z0-9._-]+:(?!\d+$)[^\s:\/]+$/
+const AUTH_WORD = /authorization|bearer/i
+const VALUE_FLAGS = /^(-[apu]|--user|--pass|--auth)$/
+const JOINED_FLAG = /^-[apu](?![-=])./
+
 function secretArg(a) {
+  if (AUTH_WORD.test(a) || USER_PASS_AT.test(a) || BARE_PAIR.test(a)) return true
+  if (JOINED_FLAG.test(a) && !/^-[apu]\d+$/.test(a)) return true // -pPASS; -p8080 is a port
   if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(a)) return true // NAME=value environment assignment
   if (valueLooksSecret(a)) return true
   const eq = a.indexOf("=")
@@ -52,6 +61,15 @@ function filter(argv) {
   const list = Array.isArray(argv) ? argv.map(String) : []
   for (let i = 0; i < list.length; i++) {
     const a = list[i]
+    const next0 = list[i + 1]
+    if ((a === "-H" || a === "--header") && next0 !== undefined && AUTH_WORD.test(next0)) { dropped += 2; i++; continue }
+    // `-p 8080` is a port and stays; any other value after -a -p -u --user --pass --auth goes with its flag
+    if (VALUE_FLAGS.test(a)) {
+      if (a === "-p" && next0 !== undefined && /^\d+$/.test(next0)) { out.push(a); out.push(next0); i++; continue }
+      dropped++
+      if (next0 !== undefined && next0.charAt(0) !== "-") { dropped++; i++ }
+      continue
+    }
     if (a.charAt(0) === "-" && a.indexOf("=") === -1 && isSecretFlagName(a)) {
       dropped++
       const next = list[i + 1]

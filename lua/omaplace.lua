@@ -48,21 +48,24 @@ M.memory_moved = {} -- addresses moved to another workspace, read when the memor
 M.memory_own = {} -- addresses memory itself just moved: their one move event is not a user's move
 -- auto mode: the workspace each window was last seen on, the workspace a moved window came from, and the pending
 -- events of moves.json (kept across a reload so the file is not reset)
+M.places = old_m and type(old_m.places) == "table" and old_m.places or {} -- address -> last place, for a close that arrives without workspace or monitor
 M.last_ws = old_m and type(old_m.last_ws) == "table" and old_m.last_ws or {}
 M.auto_from = {}
 M.moves = old_m and type(old_m.moves) == "table" and old_m.moves or {}
 M.MAX_MOVES = 50
 -- a freeze survives a reload of this file (a close-all can come with one)
 M.session_state = old_m and type(old_m.session_state) == "table" and old_m.session_state or Policy.new()
+M.session_state.first_at = nil -- the old timer is switched off by a reload: no write is owed
 
 local function log(text) print("omaplace: " .. tostring(text)) end
 
 local function config_path() return (os.getenv("HOME") or "") .. "/.config/omaplace/config.toml" end
 
-local function read_file(path)
+-- max (bytes): read at most max + 1, so a huge file is noticed without being loaded whole.
+local function read_file(path, max)
   local f = io.open(path, "r")
   if not f then return nil end
-  local text = f:read("a")
+  local text = f:read(max and (max + 1) or "a")
   f:close()
   return text
 end
@@ -226,7 +229,7 @@ local function memory_on() return M.memory ~= nil and M.settings.app_memory ~= "
 
 local function load_memory()
   local d = state_dir()
-  local text = d and read_file(d .. "/memory.lua")
+  local text = d and read_file(d .. "/memory.lua", Memory.MAX_TEXT)
   if not text then log("app memory: no memory.lua yet, starting empty"); return Memory.new() end
   local mem, err = Memory.decode(text)
   if not mem then log("app memory: memory.lua not used (" .. tostring(err) .. "), starting empty"); return Memory.new() end
@@ -265,8 +268,19 @@ local function others_of(class, address)
   return n
 end
 
+-- Keep the window's latest place by address (only while memory records, removed on close).
+local function track(w)
+  if #M.memory_subs == 0 or not w.address then return end
+  local p = place_of(w)
+  if p then M.places[w.address] = p end
+end
+
 local function remember(kind, w)
   local p = place_of(w)
+  if not p and kind == "closed" and w.address and M.places[w.address] then
+    p = {}
+    for k, v in pairs(M.places[w.address]) do p[k] = v end
+  end
   if not p then return false end
   p.kind, p.others = kind, others_of(p.class, w.address)
   return Memory.update(M.memory, p, M.settings.app_memory, os.time())
@@ -378,10 +392,12 @@ local function conclude(run)
           p.kind, p.class, p.context = "placed", s.class, s.context ~= "" and s.context or nil
           if info.rect and p.floating then p.rect = info.rect end -- the scene's own fractions, not a rounded read back
           changed = Memory.update(M.memory, p, M.settings.app_memory, os.time()) or changed
+          track(w)
           if w.workspace and M.settings.app_memory == "auto" then M.last_ws[w.address] = w.workspace.id end
         end
       end
-      if run.scene and placed > 0 and Memory.bind(M.memory, run.scene_ws, run.scene, run.apps) then changed = true end
+      -- a binding lives only while its workspace has windows, and only auto mode removes it again
+      if run.scene and placed > 0 and M.settings.app_memory == "auto" and Memory.bind(M.memory, run.scene_ws, run.scene, run.apps) then changed = true end
       if changed then save_memory() end
     end)
     if not ok_m then log("memory update failed: " .. tostring(err_m)) end
@@ -660,13 +676,13 @@ function M.open_file(path)
     or not path:match("%.lua$") then
     return nil, "bad_path"
   end
-  local text = read_file(path)
+  local text = read_file(path, 1048576)
   if not text then return nil, "no_file" end
   if #text > 1048576 then log("plan file is over 1 MB"); return nil, "bad_plan" end
   local chunk = load(text, "plan", "t", {})
   -- the message can quote plan text (folders, arguments), so it is never logged
   if not chunk then log("plan file does not parse"); return nil, "bad_plan" end
-  local ok, plan = pcall(chunk)
+  local ok, plan = Memory.run_limited(chunk)
   if not ok then log("plan file failed to run"); return nil, "bad_plan" end
   if type(plan) ~= "table" then return nil, "bad_plan" end
   return M.open(plan)
@@ -830,7 +846,7 @@ local function arm_memory_save()
         end
       end
     end
-    if M.settings.app_memory == "auto" then changed = unbind_empty() or changed end
+    changed = unbind_empty() or changed
     if changed then save_memory() end
   end)
 end
@@ -843,9 +859,11 @@ function M.on_memory_event(event, w)
   if event == "window.close" then
     if w.address then M.memory_own[w.address] = nil; M.last_ws[w.address] = nil end
     if remember("closed", w) then M.memory_dirty = true; arm_memory_save() end
-    if auto and next(M.memory.bound or {}) then arm_memory_save() end -- the workspace may be empty now
+    if w.address then M.places[w.address] = nil end
+    if next(M.memory.bound or {}) then arm_memory_save() end -- the workspace may be empty now
     return
   end
+  track(w)
   if auto and w.address and w.workspace then -- where it was before this move, and where it is now
     from, M.last_ws[w.address] = M.last_ws[w.address], w.workspace.id
   end
@@ -881,6 +899,7 @@ function M.on_window_open(w)
   local tw = type(w)
   if tw ~= "table" and tw ~= "userdata" then return end
   if M.settings.app_memory == "auto" and w.address and w.workspace then M.last_ws[w.address] = w.workspace.id end
+  track(w)
   if not (run and run.live) then return place_from_memory(w) end
   local mine = M.SLOT_PREFIX .. run.id .. "/"
   for _, t in ipairs(Capture.tags_of(w)) do
@@ -951,9 +970,15 @@ function M.session_save()
   local ok_w, werr = write_in(d, "session-" .. inst .. ".json", text .. "\n")
   if not ok_w then return nil, werr end
   local list = { { instance = inst, saved_at = snap.saved_at } }
-  for _, e in ipairs(read_index(d)) do
+  local index = read_index(d)
+  -- the newest other instance (the previous login) is never pruned, whatever session_keep says
+  local newest
+  for _, e in ipairs(index) do
+    if e.instance ~= inst and (not newest or e.saved_at > newest.saved_at) then newest = e end
+  end
+  for _, e in ipairs(index) do
     if e.instance ~= inst then
-      if #list < M.settings.session_keep then
+      if e == newest or #list < M.settings.session_keep then
         list[#list + 1] = e
       else
         os.remove(d .. "/session-" .. e.instance .. ".json")
@@ -963,21 +988,37 @@ function M.session_save()
   return write_in(d, "sessions.json", Json.encode(list) .. "\n")
 end
 
--- One debounce timer at most: arming switches the old one off and bumps the generation. at = nil only disarms.
-local function arm_session(at, now)
-  M.session_gen = (M.session_gen or 0) + 1
-  local gen = M.session_gen
-  if M.session_timer then pcall(M.session_timer.set_enabled, M.session_timer, false) end
-  M.session_timer = nil
-  if not at then return end
-  M.session_timer = later(at - now, function()
-    if gen ~= M.session_gen then return end
-    M.session_timer = nil
+-- ONE debounce timer for the whole session: made on first use, then re-armed with set_timeout and set_enabled.
+-- at = nil only disarms. session_at is the time the write is owed, so an early wake-up just re-arms.
+local arm_session
+local function on_session_timer()
+  local ok_t, err_t = pcall(function()
+    if not M.session_at then return end
     local t = M.now_ms()
+    if t < M.session_at then return arm_session(M.session_at, t) end
+    M.session_at = nil
     if Policy.frozen(M.session_state, t) then return arm_session(M.session_state.frozen_until, t) end
+    Policy.fired(M.session_state)
     local ok_s, err = M.session_save()
     if not ok_s and err ~= "empty" then log("session save failed: " .. tostring(err)) end
   end)
+  if not ok_t then log("timer failed: " .. tostring(err_t)) end
+end
+
+function arm_session(at, now)
+  if not at then
+    M.session_at = nil
+    if M.session_timer then pcall(M.session_timer.set_enabled, M.session_timer, false) end
+    return
+  end
+  M.session_at = at
+  local ms = math.max(1, math.floor(at - now))
+  if M.session_timer then
+    pcall(M.session_timer.set_timeout, M.session_timer, ms)
+    pcall(M.session_timer.set_enabled, M.session_timer, true)
+  else
+    M.session_timer = hl.timer(on_session_timer, { type = "oneshot", timeout = ms })
+  end
 end
 
 function M.on_session_event(kind)
@@ -985,7 +1026,7 @@ function M.on_session_event(kind)
   local r = Policy.on_event(M.session_state, kind, now)
   if r.action == "schedule" then
     arm_session(r.at, now)
-  elseif r.action == "freeze" and M.session_timer then
+  elseif r.action == "freeze" and M.session_at then
     arm_session(r.until_ms, now) -- a pending write moves to the end of the freeze
   end
 end
@@ -994,6 +1035,7 @@ end
 function M.session_save_now()
   if Policy.frozen(M.session_state, M.now_ms()) then return nil, "frozen" end
   arm_session(nil)
+  Policy.fired(M.session_state)
   return M.session_save()
 end
 

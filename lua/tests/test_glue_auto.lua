@@ -245,6 +245,27 @@ M.sync_memory()
 eq(#fake.handlers["window.move_to_workspace"], 0, "scene: unsubscribed")
 eq(fake.pending_timers(), 0, "idle at the end")
 
+-- last_place does not bind a run's scene (only auto does); a binding left over goes when its desktop empties
+M.settings.app_memory = "last_place"
+M.sync_memory()
+fake.windows = {}
+M.memory.bound = {}
+run("a9", "solo", 5, {
+  { class = "org.example.Chat", order = 1, rect = { 0.5, 0, 0.5, 1 }, mode = "launch", launch = { "chat" } } })
+fake.advance(300)
+local solo = new_window("org.example.Chat", 3)
+fake.emit("window.open", solo)
+fake.advance(2000)
+eq(_G.omaplace.status().state, "done", "run a9 done")
+eq(next(M.memory.bound), nil, "last_place: the scene is not bound")
+Memory.bind(M.memory, 31, "stale", { "org.example.Chat" })
+close(solo)
+fake.advance(2000)
+eq(next(M.memory.bound), nil, "last_place: a binding of an empty desktop expires")
+eq(next(Memory.bound(read_memory(), 31) or {}), nil, "and is gone from the file")
+M.settings.app_memory = "scene"
+M.sync_memory()
+
 clean()
 print = real_print
 os.getenv = real_getenv
