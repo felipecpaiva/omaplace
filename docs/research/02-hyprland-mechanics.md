@@ -5,8 +5,8 @@ brief said 0.57; the installed version is 0.56.2, and 0.57.2 is already released
 
 Evidence labels: **[tested]** read-only live check here, **[source]** Hyprland or Omarchy source read,
 **[docs]** wiki.hypr.land (raw wiki repo, `main` branch), **[search]** GitHub release notes.
-Reused, not repeated: [omagnet hyprland-capabilities](../../../omagnet/docs/research/hyprland-capabilities.md),
-[omagnet gotchas](../../../omagnet/docs/gotchas.md). Titles and classes below are made up.
+Reused, not repeated: [omagnet hyprland-capabilities](https://github.com/felipecpaiva/omagnet/blob/main/docs/research/hyprland-capabilities.md),
+[omagnet gotchas](https://github.com/felipecpaiva/omagnet/blob/main/docs/gotchas.md). Titles and classes below are made up.
 
 ## Summary
 

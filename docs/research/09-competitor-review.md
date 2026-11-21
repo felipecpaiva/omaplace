@@ -260,7 +260,7 @@ Best base: **none, build.** No project is a natural home for F1 plus F4: the per
 | Need | Seam | Evidence |
 |---|---|---|
 | Install, enable, remove | A third-party plugin repo, manifest at root, installed by `omarchy plugin add` | [docs] manual/32-shell-plugins.md:34-59 |
-| Hyprland rules and placement code | One Lua module inside the plugin folder, loaded by a single `pcall(dofile, ...)` line the user adds by hand, exactly as omagnet and omahop do. Never write `hyprland.lua` ourselves | [source] /home/felipe/Work/omahop/README.md:93-99, /home/felipe/Work/omagnet/README.md:68-74 |
+| Hyprland rules and placement code | One Lua module inside the plugin folder, loaded by a single `pcall(dofile, ...)` line the user adds by hand, exactly as omagnet and omahop do. Never write `hyprland.lua` ourselves | [source] omahop README (Install), omagnet README (Install) |
 | Live rule changes | Named `hl.window_rule` handles retired and replaced in place (app-homes' pattern), driven from our own Lua, not from QML shelling out | [source] app-homes Model.js:529-540 |
 | Menu entry | One marked row in `~/.config/omarchy/extensions/omarchy-menu.jsonc`, only when the user asks | [docs] ~/omarchy manual/31-dotfiles.md:52, docs/menu.md:6 |
 | Shell UI and IPC | A shell plugin service plus `omarchy-shell` IPC calls | [docs] ~/omarchy docs/omarchy-shell.md:7, :104-134 |

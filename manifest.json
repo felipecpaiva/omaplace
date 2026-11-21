@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.felipecpaiva.omaplace",
   "name": "omaplace",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "author": "Felipe Paiva",
   "description": "App placement rules, scenes and session restore for Omarchy, with monitors it recognizes again. Adds nothing to the bar and no keys. Open the settings from the launcher or with: omarchy-shell shell toggle io.github.felipecpaiva.omaplace",
   "license": "MIT",

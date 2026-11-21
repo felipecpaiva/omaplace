@@ -26,9 +26,9 @@ Tags: [tested] ran on this machine, [source] read in code, [docs] read in docs, 
 
 ## 1. What Hyprland gives
 
-[tested] `hyprctl -j monitors` on the Z13 (serial masked, none reported):
+[tested] `hyprctl -j monitors` on a laptop (serial masked, none reported):
 
-- `id` 0, `name` `eDP-1`, `description` `Tianma Microelectronics Ltd. TL134ADXP03`, `make`, `model`, `serial` is the empty string.
+- `id` 0, `name` `eDP-1`, `description` `<panel maker> <panel model>`, `make`, `model`, `serial` is the empty string.
 - `width` 2560, `height` 1600, `scale` 1.6, `x` 0, `y` 0, `transform` 0, `reserved` [0,25,0,0].
 
 | Field | Stable? | Notes |
@@ -36,7 +36,7 @@ Tags: [tested] ran on this machine, [source] read in code, [docs] read in docs, 
 | `name` (connector) | No | Changes with port. A dock renames connectors between plugs [source: Omarchy comment in monitor-workspaces.lua] |
 | `id` | No | Hyprland gives a free id to whichever display turns up next [source: same file] |
 | `description` | Mostly | Built from EDID make, model and serial when present. Same text across ports. Twins give the same text. Laptop panels have no serial in it [tested] |
-| `make`, `model` | Yes | EDID strings. Some panels give junk: another monitor here shows `Invalid Vendor Codename - RTK 0x2555 0x<serial>` [tested, state file, serial masked] |
+| `make`, `model` | Yes | EDID strings. Some panels give junk: another monitor here shows `Invalid Vendor Codename - <code> <hex id> 0x<serial>` [tested, state file, serial masked] |
 | `serial` | When present | Often empty (tested here) or a repeated placeholder on cheap panels [memory] |
 | size, scale, transform, x, y | No | The user can change them in the display panel |
 
@@ -51,7 +51,7 @@ EDID serial gaps [memory, widely reported]: some monitors report no serial, some
 | kanshi | Output by name, `make model serial` string, or `*` | A profile applies only if all listed outputs are present | [docs, memory] Profile-level matching, no partial fallback |
 | shikane | Search by model, vendor, serial, name, or regex | Profiles tried in order | [memory] Same idea as kanshi |
 | nwg-displays | Writes `monitors.conf` by connector name | None | [memory] Fragile on docks |
-| hyprmoncfg (Z13 plugin, off) | Profiles of monitor rules | Our notes only say it is off [docs: omarchy-z13-tweaks.md line 305] | Not researched further, not needed |
+| hyprmoncfg (Omarchy plugin) | Profiles of monitor rules | Not studied | Not researched further, not needed |
 | macOS | Display UUID from EDID vendor, product, serial | Remembers arrangement per set of displays | [memory] Windows are moved to the main display when their display is gone, and come back when it returns |
 | Windows | Monitor device path from EDID, remembers per monitor set | Windows go to the primary display | [memory] Remembers positions per topology |
 
@@ -130,7 +130,7 @@ Monitor dropout while a scene is open: Omarchy and Hyprland move windows themsel
 1. Exact slot to id function in `monitor-workspaces.lua` (read past line 150). Does a public Lua function exist, or only the state file?
 2. Discussion #17647 content. Is a fix planned for dropout renumbering (#16328)?
 3. Do twin monitors with no serial keep the same `#N` after a reboot? Omarchy assigns it by order of appearance, so the order may flip.
-4. Does the laptop description change between the Z13 and the X1C for the same model? Different laptops mean a different identity, so a scene from one laptop falls to the "internal" rule on the other. Is that what we want, or should "internal" be saved as a role instead of an identity?
+4. Does the laptop description change between two laptops of different models? Different laptops mean a different identity, so a scene from one laptop falls to the "internal" rule on the other. Is that what we want, or should "internal" be saved as a role instead of an identity?
 5. Hyprland 0.57 `monitor added` and `monitor removed` events: do they fire during a brief dropout, and in what order? Needed for the login wait. Not tested.
 6. Should the dock overlay be subtracted by default? Decide with the omagnet answer.
 7. Fraction rounding with app minimum sizes: clamp to the work area only, or also shift the window to fit?

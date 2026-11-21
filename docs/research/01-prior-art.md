@@ -13,8 +13,8 @@ Evidence tags on every claim:
   live query (Hyprland 0.56.2, matches what the other projects test on).
 
 Earlier research reused, not repeated: snapping tools and Magnet/Moom/FancyZones zones are in
-`../../omagnet/docs/research/existing-solutions.md` (sections 1, 3, 4). Alt+Tab and overview plugins are in
-`../../omahop/docs/research/competitors-overviews.md`. This doc adds only session and scene restore.
+omagnet's `docs/research/existing-solutions.md` (https://github.com/felipecpaiva/omagnet) (sections 1, 3, 4). Alt+Tab and overview plugins are in
+omahop's `docs/research/competitors-overviews.md` (https://github.com/felipecpaiva/omahop). This doc adds only session and scene restore.
 
 ## Summary
 

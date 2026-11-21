@@ -141,7 +141,7 @@ Race: slow apps map late. Rules need `timeout` and `max_windows`. Hyprland offer
 - File names, folder names, vault names, tmux session names, URL query and fragment: only if a rule has an explicit `remember: true` flag, shown in the scene editor, stored in the scene file with user-only permissions (mode 600), never in logs, never in crash reports, never in public demos.
 - Logs: log class, desktop id and a count. Never log an argument list. If a debug log needs one, hash it.
 - Paths under home: store as `~/...`, not `/home/<user>/...`.
-- Tests: use made-up fixtures (`/home/test/projects/demo`, `chrome-example.com__-Default`).
+- Tests: use made-up fixtures (`~/projects/demo`, `chrome-example.com__-Default`).
 
 ## What this means for omaplace
 
