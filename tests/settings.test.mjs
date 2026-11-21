@@ -2,6 +2,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { load as loadLib } from "./js_load.mjs"
 
 const load = (file, names) => {
   const src = readFileSync(new URL("../js/" + file, import.meta.url), "utf8").replace(".pragma library", "")
@@ -10,7 +11,7 @@ const load = (file, names) => {
 const S = load("Settings.js", ["settingChange", "timingRows", "markEdited", "isEdited", "windowEdit", "profileDir", "profileOptions", "profilesFromLocalState",
   "monitorNames", "monitorChoices", "positionText", "sessionRows", "answerText", "KEEPABLE", "TIMING", "PANEL_KEYS"])
 const C = load("ConfigIO.js", ["parse", "SETTING_SPECS"])
-const Store = load("SceneStore.js", ["EDITABLE", "parse", "serialize", "mergeCapture"])
+const Store = loadLib("SceneStore.js")
 const specs = C.SETTING_SPECS
 
 test("KEEPABLE is SceneStore's EDITABLE list", () => {

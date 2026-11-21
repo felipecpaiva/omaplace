@@ -1,9 +1,9 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 
-const src = readFileSync(new URL("../js/SceneStore.js", import.meta.url), "utf8").replace(".pragma library", "")
-const S = new Function(src + "; return { parse, serialize, migrate, mergeCapture }")()
+import { load } from "./js_load.mjs"
+
+const S = load("SceneStore.js")
 
 const THREE = `schema = 1
 

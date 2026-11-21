@@ -60,3 +60,12 @@ test("a bad rect keeps the old one; an order past the end appends", () => {
   assert.deepEqual(r.doc.scenes.four.windows[2].rect, [0, 0, 1, 1])
   assert.equal(r.doc.scenes.four.windows[2].class, "org.example.Mail")
 })
+
+test("moves into or out of a plan scene are skipped and change nothing", () => {
+  const d = doc()
+  d.scenes.desk = { plan: true, layout: "columns:2", existing: "move", windows: [win("org.example.Planned", 1, { zone: 1 })] }
+  const r = apply(d, [ev({ to_scene: "desk" }), ev({ class: "org.example.Planned", from_scene: "desk", to_scene: "four" }), ev()])
+  assert.deepEqual(r.skipped.map((s) => [s.index, s.reason]), [[0, "plan scene"], [1, "plan scene"]])
+  assert.equal(r.applied, 1, "the move between two captured scenes still applies")
+  assert.deepEqual(r.doc.scenes.desk, d.scenes.desk)
+})

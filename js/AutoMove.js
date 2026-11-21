@@ -25,6 +25,7 @@ function one(doc, ev) {
   const to = doc.scenes[ev.to_scene]
   if (!from || !to) return "unknown scene"
   if (from === to) return "same scene"
+  if (from.plan === true || to.plan === true) return "plan scene" // plans change only on the Desktops page (D21)
   const at = findSlot(from, ev)
   if (at === -1) return findSlot(to, ev) === -1 ? "unknown slot" : "already applied"
   sortByOrder(from)
