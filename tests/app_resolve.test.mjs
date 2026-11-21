@@ -43,9 +43,9 @@ test("web app class chrome-abc-Default launches its entry", () => {
 
 test("terminal with a folder and a captured program", () => {
   const x = r("Alacritty", { folder: "~/code/demo", launch: "nvim 'my notes.md'", home: "/srv/example" })
-  assert.deepEqual(x.argv, ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/srv/example/code/demo", "nvim", "my notes.md"])
+  assert.deepEqual(x.argv, ["uwsm-app", "--", "alacritty", "--working-directory", "/srv/example/code/demo", "-e", "nvim", "my notes.md"])
   assert.equal(x.contextKind, "folder")
-  assert.deepEqual(r("kitty", {}).argv, ["uwsm-app", "--", "xdg-terminal-exec"])
+  assert.deepEqual(r("kitty", {}).argv, ["uwsm-app", "--", "kitty"])
 })
 
 test("tui class", () => {
@@ -120,4 +120,14 @@ test("VS Code's real window class resolves to the code IDE strategy (live S10)",
   const r = A.resolve("com.microsoft.VSCode", [], A.defaultStrategies(), { context: "~/code/demo", home: "/srv/example" })
   assert.equal(r.contextKind, "folder")
   assert.deepEqual(r.argv.slice(0, 3), ["uwsm-app", "--", "code"])
+})
+
+test("a terminal reopens as the same terminal, so its class matches the slot (live 2026-11-21)", () => {
+  const foot = A.resolve("foot", [], A.defaultStrategies(), { folder: "~/code/demo", home: "/srv/example" })
+  assert.deepEqual(foot.argv, ["uwsm-app", "--", "foot", "--working-directory=/srv/example/code/demo"])
+  const agent = A.resolve("foot", [], A.defaultStrategies(), { folder: "/srv/example/p", launch: "agent --resume" })
+  assert.deepEqual(agent.argv, ["uwsm-app", "--", "foot", "--working-directory=/srv/example/p", "agent", "--resume"])
+  const other = A.resolve("xterm", [], A.defaultStrategies(), { folder: "/srv/example/p" })
+  assert.deepEqual(other.argv, ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/srv/example/p"])
+  assert.equal(A.resolve("foot", [], A.defaultStrategies(), { folder: "-rf" }).mode, "skip")
 })

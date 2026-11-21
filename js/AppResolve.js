@@ -42,6 +42,18 @@ function defaultStrategies() {
   return t
 }
 
+// How each known terminal is started in a folder, and what goes before a program to run in it. Keys are lower-case classes.
+const TERMINALS = {
+  foot: { bin: "foot", dir: (f) => ["--working-directory=" + f], run: [] },
+  footclient: { bin: "footclient", dir: (f) => ["--working-directory=" + f], run: [] },
+  kitty: { bin: "kitty", dir: (f) => ["--directory", f], run: [] },
+  alacritty: { bin: "alacritty", dir: (f) => ["--working-directory", f], run: ["-e"] },
+  ghostty: { bin: "ghostty", dir: (f) => ["--working-directory=" + f], run: ["-e"] },
+  "com.mitchellh.ghostty": { bin: "ghostty", dir: (f) => ["--working-directory=" + f], run: ["-e"] },
+  "org.wezfurlong.wezterm": { bin: "wezterm", dir: (f) => ["start", "--cwd", f], run: ["--"] },
+  "org.gnome.terminal": { bin: "gnome-terminal", dir: (f) => ["--working-directory=" + f], run: ["--"] },
+}
+
 // User entries first, so they beat the defaults; a user entry with a default's name replaces it.
 function mergeStrategies(user) {
   const out = {}
@@ -126,9 +138,17 @@ function resolve(cls, entries, strategies, slot) {
 
   if (use === "terminal") {
     const folder = expandHome(String(s.folder || ""), s.home)
-    const tail = ["xdg-terminal-exec"]
-    if (folder !== "") tail.push("--dir=" + folder)
-    return launch(name, "folder", tail.concat(typed))
+    if (folder !== "" && !safeWord(folder)) return skip(name, "folder", "folder starts with a dash")
+    // Reopen the same terminal (its class must match the slot), with its own folder flag. xdg-terminal-exec would start
+    // the default terminal instead, whose class differs, so the slot would never be claimed (seen live 2026-11-21).
+    const t = TERMINALS[String(cls).toLowerCase()]
+    if (!t) {
+      const tail = ["xdg-terminal-exec"]
+      if (folder !== "") tail.push("--dir=" + folder)
+      return launch(name, "folder", tail.concat(typed))
+    }
+    const tail = [t.bin].concat(folder !== "" ? t.dir(folder) : [])
+    return launch(name, "folder", typed.length > 0 ? tail.concat(t.run, typed) : tail)
   }
 
   if (use === "context") {

@@ -59,6 +59,13 @@ end
 
 local function round4(v) return math.floor(v * 10000 + 0.5) / 10000 end
 
+-- Fractions stay inside the monitor: x, y in 0..1 and the size no larger than what is left.
+local function clamp_rect(f)
+  local function c(v) return math.max(0, math.min(1, v)) end
+  local x, y = c(f[1]), c(f[2])
+  return { round4(x), round4(y), round4(math.min(c(f[3]), 1 - x)), round4(math.min(c(f[4]), 1 - y)) }
+end
+
 -- snapshot(windows, monitors, opts)
 --   windows   hl.get_windows() items (initial_class, at, size, floating, fullscreen, workspace, monitor, tags, pid)
 --   monitors  hl.get_monitors() items
@@ -107,7 +114,7 @@ function M.snapshot(windows, monitors, opts)
         ws = ws_id, x = x, y = y,
         out = {
           class = cls, monitor = index[mon], slot = opts.slot_of and opts.slot_of(ws_id) or ws_id,
-          rect = { round4(f[1]), round4(f[2]), round4(f[3]), round4(f[4]) },
+          rect = clamp_rect(f), -- a tiled window's border can reach a pixel past the usable area (seen live)
           floating = w.floating == true or (opts.is_floating ~= nil and opts.is_floating(ws_id) == true),
           fullscreen = math.tointeger(w.fullscreen) or 0, minimized = minimized,
           context = M.context_of(w), pid = math.tointeger(w.pid),
@@ -134,5 +141,7 @@ function M.snapshot(windows, monitors, opts)
   return { schema = 1, kind = opts.kind or "capture", saved_at = opts.saved_at, mode = opts.mode,
     monitors = mons, windows = out }
 end
+
+
 
 return M

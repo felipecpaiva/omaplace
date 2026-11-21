@@ -91,4 +91,9 @@ eq(Capture.home_of({ tags = { "omarchy-minimized-from-13" } }), 13, "home tag")
 local set = Capture.ignore_set("a, B  c")
 eq(set.a and set.b and set.c, true, "ignore set")
 
+-- a window a pixel larger than the usable area (a tiled border, seen live) is saved inside 0..1
+local over = Capture.snapshot({ win("org.example.Big", 1, panel, -1, -1, 2003, 1002) }, { panel, ext }, opts)
+local r = over.windows[1].rect
+eq(r[1] >= 0 and r[2] >= 0 and r[1] + r[3] <= 1 and r[2] + r[4] <= 1, true, "rect clamped inside the monitor")
+
 print(string.format("test_capture: %d checks ok", checks))

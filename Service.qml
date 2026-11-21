@@ -378,8 +378,11 @@ Item {
     blockLoading: true
     printErrors: false
     watchChanges: root.watching
-    onFileChanged: { reload(); root.onStatus(text()) }
+    onFileChanged: root.onStatus(root.readNow(statusFile))
   }
+  // Lua replaces status.json by rename, which a file watch can miss, so a live request also reads it every 250 ms.
+  // Bounded: runs only while a request waits (root.watching), never while idle.
+  Timer { id: statusPoll; interval: 250; repeat: true; running: root.watching; onTriggered: root.onStatus(root.readNow(statusFile)) }
   FileView {
     id: planFile
     blockWrites: true
