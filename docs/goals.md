@@ -80,7 +80,9 @@ Done when:
 5. Tiled, full screen and free floating plans work the same way, and the preview matches what opens.
 6. Nothing starts at login unless "open at login" is ticked.
 
-Work packages: WP11, WP12, WP13. Open decision: D22 (how a desktop's mode is set).
+Work packages: WP11, WP12 (12a Lua, 12b service), WP13. D22 decided (option 1; upstream PR omacom/omarchy#19671, fallback toggle until it ships).
+
+Status 2026-11-21: WP11 to WP13 built, reviewed and merged; 46 suites pass. Not yet checked live: all 6 checks above, spikes S11 to S13, the Desktops page screenshot.
 
 ## Not goals (for now)
 
