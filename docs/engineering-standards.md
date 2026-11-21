@@ -30,22 +30,22 @@ it meets all of them. Base: omahop's standards, plus Felipe's principles for Oma
 | Bash (`bin/omaplace`, tests) | `#!/usr/bin/env bash`, `set -euo pipefail`, quote everything, no logic beyond argument mapping | `shellcheck` when installed |
 | Markdown | Plain words, commas and hyphens, never em or en dashes, no private data | `tests/scrub.sh` |
 
-A missing linter prints `SKIP <tool> not installed` in `tests/run-all.sh` and is listed in `docs/batch-log.md`. A skip is
+A missing linter prints `SKIP <tool> not installed` in `tests/run-all.sh` and is listed in `docs/batch-log/WP<n>.md`. A skip is
 visible debt, never a silent pass.
 
 ## Testing layers
 
 1. **Pure** Lua and JS modules: unit tests with made-up fixtures, including bad input.
 2. **Glue** with a fake `hl` and a fake `o.workspaces` (`lua/tests/fake_hl.lua`): events, rules, runs, expiry, reload.
-3. **Cross-checks**: config parsing in Lua and JS on the same fixtures; geometry against omagnet's copy.
+3. **Cross-checks**: config parsing in Lua and JS on the same fixtures; geometry against golden vectors generated from omagnet.
 4. **Live** only with Felipe's OK, one harmless window, no synthetic input, never a virtual monitor, never Omarchy's
    `./test/shell` or `./test/all`.
 
 ## Definition of done for a work package
 
-1. Only the files the package owns were changed (`design.md` section 11).
-2. Pure logic has unit tests; glue has fake-`hl` tests; user-visible parts have a line in `docs/validation-checklist.md`.
+1. Only the files the package owns, or is the named next editor of, were changed (`design.md` section 11).
+2. Pure logic has unit tests; glue has fake-`hl` tests; user-visible parts have a line in `docs/checklist/WP<n>.md`.
 3. Linters pass or are logged as SKIP.
 4. `bash tests/run-all.sh` and `bash tests/scrub.sh` pass.
 5. No new timer, process or file writer outside what `design.md` lists.
-6. The package is written in `docs/batch-log.md`: what changed, what was verified and how.
+6. The package is written in `docs/batch-log/WP<n>.md`: what changed, what was verified and how.
