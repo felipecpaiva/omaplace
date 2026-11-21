@@ -109,7 +109,7 @@ Algorithm that survives the above:
 2. On launch, for each slot make one "claim ticket": class, optional title regex, expiry (say 20 s), and the target rect.
 3. On `window.open` (rules are applied by then), find the first unexpired ticket whose class matches. If the title hint
    exists and the title is not yet set, keep the ticket and look again on `window.title` for a short time.
-4. Place by dispatchers (resize, then move after the 1 s settle) and mark the window with a tag `omascenes-slot=<id>` so it is
+4. Place by dispatchers (resize, then move after the 1 s settle) and mark the window with a tag `omaplace-slot=<id>` so it is
    never claimed twice and survives a Lua reload (omagnet used a tag the same way).
 5. Many windows of one app (browser, editor): N slots with the same class produce N tickets. The first N windows
    of that class take them in order. Tell the user that order, not content, decides. Browsers restore their own windows,
@@ -175,7 +175,7 @@ From GitHub release notes [search] and the wiki [docs]:
 - Omarchy 4.5: per-monitor blocks of ten workspaces keyed by make, model and serial, state in `~/.local/state/omarchy/monitor-workspaces` and `monitor-workspaces-merged`; mode per workspace in `~/.local/state/omarchy/workspace-layouts/<id>.lua`; open rule for floating workspaces; launches go through `uwsm-app`.
 - Window rule `move` and `size` accept expressions (`monitor_w*0.5`) only in rules, not in dispatchers (omagnet tested).
 
-## What this means for omascenes
+## What this means for omaplace
 
 1. **Do not build on exec rules.** They do not survive `uwsm-app`. Build on "spawn, then claim on `window.open`", with slot tickets and tags. Optionally add an exec-rule fast path only for apps launched directly, after a live test.
 2. **Permanent placement rules (feature 1) are a Lua `hl.window_rule` per class**, generated from a user file, with `workspace`, `monitor`, and optional `move`/`size`. Keep them named so they can be turned off. They must load after Omarchy's open rule.

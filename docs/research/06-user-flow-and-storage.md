@@ -6,7 +6,7 @@ Research 2026-11-21 for open question 6 in [../research.md](../research.md). Des
 
 1. Capture beats building by hand. PowerToys Workspaces and Moom both start from "arrange your windows, then save". Do the same: one action saves the current workspace as a scene.
 2. Opening a scene has one hard choice: move a window that is already open, or open a new one. PowerToys makes it one per-workspace switch ("Move existing windows"). We copy that, default on.
-3. Storage reuses the omagnet and omahop style: small TOML files in `~/.config/omascenes/`, fractions of the usable area for geometry, dotted sections like omahop's `[profiles.<name>]`. The session autosave is machine state and lives in `~/.local/state/omascenes/`, out of dotfiles.
+3. Storage reuses the omagnet and omahop style: small TOML files in `~/.config/omaplace/`, fractions of the usable area for geometry, dotted sections like omahop's `[profiles.<name>]`. The session autosave is machine state and lives in `~/.local/state/omaplace/`, out of dotfiles.
 4. Capture stores no window titles and no arguments. A launch command or folder is only stored when the user types it in. PowerToys shows why: its CLI docs warn that saved arguments leak.
 5. v1 is small: save, open, delete, rename, one "always open here" rule, and "restore last session" as a menu item (no autostart yet). Surfaces: Omarchy menu, CLI, settings window. No new keys or bar icon by default.
 
@@ -39,18 +39,18 @@ A **scene** is the apps on one workspace of one monitor, with their place and si
 
 ### Capture the current workspace as a scene
 
-1. Open the Omarchy menu, Scenes, "Save this workspace" (or `omascenes save`).
+1. Open the Omarchy menu, Scenes, "Save this workspace" (or `omaplace save`).
 2. Type a name, Enter. Done. Two steps.
 
 Capture takes the focused workspace on the focused monitor. A name that exists asks "Replace?" once. Windows it cannot match to an app (no desktop entry, see question 4 in research.md) are listed in the notification as "not saved".
 
 ### Name or rename
 
-1. Settings window, Scenes page, click the name, type, Enter. Or `omascenes rename old new`.
+1. Settings window, Scenes page, click the name, type, Enter. Or `omaplace rename old new`.
 
 ### Open a scene
 
-1. Omarchy menu, Scenes, pick one (or its key, or `omascenes open work`). One step.
+1. Omarchy menu, Scenes, pick one (or its key, or `omaplace open work`). One step.
 
 Where it opens:
 
@@ -73,7 +73,7 @@ Re-capture keeps fields the user typed (launch command, folder) for apps still p
 
 ### Delete a scene
 
-1. Settings window, Scenes page, Delete, confirm. Or `omascenes delete work`. The scene goes to the trash file `scenes.toml.bak` first (one level of undo).
+1. Settings window, Scenes page, Delete, confirm. Or `omaplace delete work`. The scene goes to the trash file `scenes.toml.bak` first (one level of undo).
 
 ### "This app always opens on workspace 3, monitor X"
 
@@ -101,7 +101,7 @@ Family rule from omahop D11: no new icons by default, one settings window for ev
 | Surface | What it does | v1? | Notes and evidence |
 |---|---|---|---|
 | Omarchy menu | A "Scenes" submenu: Save this workspace, the scene list, Always open here, Restore last session, Settings | yes | Omarchy reads `~/.config/omarchy/extensions/omarchy-menu.jsonc`: dotted ids make submenus, `action` is a shell command, `provider` returns JSON rows at runtime (so the list of scenes can be live). [source: comment header of that file only; the code that reads it was not found]. Not checked: whether a plugin can add rows without editing the user's file. Needs a shell-callable entry point (the CLI below), which depends on research questions 2 and 3 |
-| CLI | `omascenes save NAME`, `open NAME`, `list`, `rename`, `delete`, `restore`, `rule add` | yes | The one entry point every other surface calls. Power users bind it themselves. Exit codes like PowerToys (no match, partly placed, failed) [docs] |
+| CLI | `omaplace save NAME`, `open NAME`, `list`, `rename`, `delete`, `restore`, `rule add` | yes | The one entry point every other surface calls. Power users bind it themselves. Exit codes like PowerToys (no match, partly placed, failed) [docs] |
 | Settings window | Pages: Scenes (gallery of thumbnails, like omagnet's LayoutGallery), Rules, Session, General | yes, small | Same panel pattern as omagnet (`manifest.json` kinds `panel`, launcher `.desktop` running `omarchy-shell shell toggle <id>`) [source]. Thumbnails reuse omagnet's thumbnail drawing |
 | Keybinds | A `key` field per scene, like omagnet's `[layout_<name>] key` | yes, empty by default | No default keys, so nothing is taken from Omarchy |
 | Bar icon | Opt-in icon that opens the menu | later | Off by default, like omagnet's `bar_icon` |
@@ -113,9 +113,9 @@ Family rule from omahop D11: no new icons by default, one settings window for ev
 
 | File | Holds | Why there |
 |---|---|---|
-| `~/.config/omascenes/config.toml` | Settings and placement rules | Hand-edited, belongs in dotfiles, same as omagnet |
-| `~/.config/omascenes/scenes.toml` | Named scenes | User intent, belongs in dotfiles; separate from settings because the app writes it often and it grows |
-| `~/.local/state/omascenes/session.toml` | Last session autosave | Machine state (XDG state dir), written on a timer, never in dotfiles, never committed |
+| `~/.config/omaplace/config.toml` | Settings and placement rules | Hand-edited, belongs in dotfiles, same as omagnet |
+| `~/.config/omaplace/scenes.toml` | Named scenes | User intent, belongs in dotfiles; separate from settings because the app writes it often and it grows |
+| `~/.local/state/omaplace/session.toml` | Last session autosave | Machine state (XDG state dir), written on a timer, never in dotfiles, never committed |
 
 One file for all scenes, not a folder. Same reason as omahop D19: one parser, one watcher, one line-preserving writer, and Lua has no directory listing [source: D19]. Export of one scene is a later feature.
 
@@ -136,7 +136,7 @@ Rules:
 ### Sample (made-up data)
 
 ```toml
-# ~/.config/omascenes/scenes.toml
+# ~/.config/omaplace/scenes.toml
 schema = 1
 
 [scene.work]
@@ -164,7 +164,7 @@ rect = "0.5 0.6 0.5 0.4"
 ```
 
 ```toml
-# ~/.config/omascenes/config.toml (settings and rules)
+# ~/.config/omaplace/config.toml (settings and rules)
 schema = 1
 restore_at_login = "off"     # off | ask | auto
 autosave_minutes = 5         # session autosave; 0 turns it off
@@ -200,7 +200,7 @@ Never stored, by capture or autosave:
 
 Stored only when the user types it: `launch` and `folder`. The settings window marks these fields "you typed this; it is saved in plain text".
 
-Logs and `omascenes list` print app ids and scene names only. A `--details` flag that prints typed fields carries the same warning PowerToys gives [docs].
+Logs and `omaplace list` print app ids and scene names only. A `--details` flag that prints typed fields carries the same warning PowerToys gives [docs].
 
 The session file is in `~/.local/state`, so it does not end up in a dotfiles repo by accident.
 
@@ -223,7 +223,7 @@ The session file is in `~/.local/state`, so it does not end up in a dotfiles rep
 | Export or import one scene | no | yes |
 | `xdg-session-management` (apps restore their own state) | no | check Hyprland support |
 
-## What this means for omascenes
+## What this means for omaplace
 
 - Build one engine: "open scene". Session restore and named scenes both call it. Rules are one-window scenes without a position.
 - The CLI is the base. Menu, keys and settings window all call it, which also answers "a menu action is a shell command".

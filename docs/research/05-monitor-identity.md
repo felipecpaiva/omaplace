@@ -115,7 +115,7 @@ Two scenes for different monitors that both fall to the same target: do not stac
 
 Monitor dropout while a scene is open: Omarchy and Hyprland move windows themselves. We should not fight that. Rule: scenes act only on a user action (restore) or at login, never reactively on a monitor event. A dropout then only matters for the next restore, not for a live one.
 
-## What this means for omascenes
+## What this means for omaplace
 
 - Scene file schema gets a `monitor` block: `identity`, `make`, `model`, `serial_hash` (hash, never the raw serial in logs or git), `internal`, `px_size`, `scale`, `transform`, `slot`. Windows get `x y w h` fractions plus last px.
 - Do not build a second identity system. Read Omarchy's `monitors/workspaces` file and the `omarchy-hyprland-monitor-identity` script behavior [source]. That keeps us aligned if upstream fixes #16328.

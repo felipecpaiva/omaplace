@@ -11,7 +11,7 @@ Seven parallel research passes, one per open question in `../research.md`. Each 
 - The plugin marketplace already lists many session and scene plugins. Closest: `brenoperucchi/omasession`
   (whole-desktop restore, 7 stars), `csnasci/omarchy-sessions` (bar plugin, same size and position),
   `saidrmdhani/omarchy-scenes`, `prudhviy99/omascenes`. (rechecked) See 01.
-- **The name `omascenes` is taken** in the marketplace by `prudhviy99/omascenes`. We must rename before going public.
+- The working name `omascenes` was taken in the marketplace by `prudhviy99/omascenes` (a settings-scenes plugin). **Renamed to `omaplace`** on 2026-11-21 (free on GitHub and in the marketplace, see 08).
 
 ## The gap nobody fills (our angle)
 
@@ -19,7 +19,17 @@ Seven parallel research passes, one per open question in `../research.md`. Each 
 2. Named scenes per workspace and per monitor, with exact floating geometry.
 3. Monitor identity that survives unplug, dock, and the Omarchy 4.5 workspace renumbering.
 
-Whole-desktop restore after reboot is already covered by others. We should not build a fourth one.
+Checked against source code of 17 projects plus core PRs in 08 (gap check) and 09 (review with Omarchy
+standards and Felipe's principles), and rechecked by hand:
+- 1 is unfilled everywhere. `omarchy-app-placement` always uses the focused monitor (`pickMonitor`); app-homes
+  and workspace-router have no monitor field at all. (rechecked)
+- 3 exists in one place only: `n8group/omarchy-session-memory` matches by monitor description first
+  (`src/desktop.rs:196-209`, rechecked), but only for tmux terminal windows, with a daemon and a 5 s poll.
+- 2 with fractions exists in `workspace-layout-presets` and PR #18858, both keyed on the connector name.
+
+Verdict of 09: **no project is a good base; build**, extending Omarchy only through documented seams.
+Whole-desktop restore is covered by others (omasession, omarchy-scenes, PR #18092). Whether omaplace still
+does it, or leaves it to them, is Felipe's choice at design review.
 
 ## Technical findings that shape any design
 
@@ -39,9 +49,7 @@ Whole-desktop restore after reboot is already covered by others. We should not b
 
 ## Decisions for Felipe
 
-Asked now:
-1. Build our own (focused on the gap) or contribute the gap to an existing project.
-2. New name.
+Decided 2026-11-21: name `omaplace`. Build vs contribute: 09 recommends build.
 
 Deferred to design review (recommendations from 06 and 07):
 - Scene opens on the current workspace and monitor by default (saved home optional).

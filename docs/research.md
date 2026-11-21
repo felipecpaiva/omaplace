@@ -1,4 +1,4 @@
-# omascenes research
+# omaplace research
 
 Started 2026-11-21. Wider survey this came from: workspace `docs/research/omarchy-community-demand-2026-11.md`.
 
@@ -40,7 +40,7 @@ Measured with: GraphQL search `repo:omacom/omarchy sort:top` (top 1000 discussio
 ## Correction: others already offer this
 
 "Nobody offers this" was wrong. Three core PRs (#18858, #18092, #10353) and many marketplace plugins
-(omasession, omarchy-sessions, omarchy-scenes, and one already named `omascenes`) exist. Our angle is the
+(omasession, omarchy-sessions, omarchy-scenes, and `prudhviy99/omascenes`, which took our working name) exist. Our angle is the
 gap they leave. See [research/00-summary.md](research/00-summary.md).
 
 ## Open questions for the deep dive

@@ -1,6 +1,6 @@
 # Prior art: saving and restoring sessions and layouts
 
-Date: 2026-11-21. Goal: find what already exists before designing omascenes (placement rules, per
+Date: 2026-11-21. Goal: find what already exists before designing omaplace (placement rules, per
 workspace and monitor scenes, named scenes, session restore on Omarchy, Hyprland 0.56.2 here, Lua config).
 
 Evidence tags on every claim:
@@ -36,7 +36,7 @@ Earlier research reused, not repeated: snapping tools and Magnet/Moom/FancyZones
 
 ## Ranked table
 
-Ranked by how much each one matters to omascenes. Last push is the default branch (meta).
+Ranked by how much each one matters to omaplace. Last push is the default branch (meta).
 
 | # | Name | Link | License | Last push | Stars / open issues | Verdict |
 |---|------|------|---------|-----------|---------------------|---------|
@@ -308,7 +308,7 @@ All of these confirm the same model: **capture, relaunch, wait, move by identity
 10. **Private text:** window titles and folders land in session files (omasession and dataforxyz both warn
     and add a privacy note or exclude list).
 
-## What this means for omascenes
+## What this means for omaplace
 
 1. **Rename.** Candidates must avoid "scenes", "sessions", "restore", "snapshot" (all taken). Decide with the
    design doc.

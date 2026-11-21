@@ -1,4 +1,4 @@
-# 03. Omarchy seams: where omascenes can hook in
+# 03. Omarchy seams: where omaplace can hook in
 
 Research date 2026-11-21. Open question 3 of `docs/research.md`.
 Checked on installed Omarchy 4.5 (`/usr/share/omarchy`, version file says `4.0.0.alpha`, package 4.5.x) and `upstream/quattro` at `9f2e2e94a` (fetched today).
@@ -22,7 +22,7 @@ Earlier research reused, not redone: `omagnet/docs/research/omarchy-app-stack.md
 | Shell plugin manifest | `~/.config/omarchy/plugins/<id>/manifest.json`, spec in `docs/omarchy-shell.md` | Kinds `bar-widget`, `bar`, `panel`, `overlay`, `menu`, `service`; several per plugin. Panel for the scene manager, service for background save, widget optional | Low. `schemaVersion: 1`, same as omagnet/omahop in use today |
 | Shell IPC | `omarchy-shell shell call/toggle/summon <id>` | Open our panel from a menu row or key; call our service from Lua or a script | Low. Documented table of methods |
 | Omarchy menu extension | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | Add a "Scenes" top-level menu with `action`, `provider` (JSON rows from a command), `when`. No plugin API needed | Low to medium. User file, documented in its own header, but the user must write it (consent) |
-| Lua config order | `~/.config/hypr/hyprland.lua` requires `hypr.monitors, input, bindings, looknfeel, autostart` after defaults | One consented `require("omascenes")` line (omagnet option 2). Rules go in user files, loaded after defaults | Low. User-owned, never rewritten by updates |
+| Lua config order | `~/.config/hypr/hyprland.lua` requires `hypr.monitors, input, bindings, looknfeel, autostart` after defaults | One consented `require("omaplace")` line (omagnet option 2). Rules go in user files, loaded after defaults | Low. User-owned, never rewritten by updates |
 | Window rules helper | `o.window(match, rules)` in `default/hypr/helpers.lua`; `hl.window_rule` | "App X opens on workspace N / monitor M" as static rules (goal 1) | Medium. `o.*` is Omarchy-internal; `hl.window_rule` is Hyprland-native and safer |
 | Autostart | `~/.config/hypr/autostart.lua`: `o.launch_on_start("cmd")`; `hl.on("hyprland.start", ...)`; hook dir `~/.config/omarchy/hooks/post-boot.d/` | Reopen scenes after login. `post-boot` runs `sleep 2 && omarchy-hook post-boot` | Low |
 | Power paths | `omarchy-system logout/reboot/shutdown` (menu rows call it). It runs `omarchy-hyprland-window-close-all --wait` then `uwsm stop` / `systemctl` | Observe only. No hook point (see details) | High if we patch it. Do not patch |
@@ -30,7 +30,7 @@ Earlier research reused, not redone: `omagnet/docs/research/omarchy-app-stack.md
 | Launch helpers | `omarchy-launch-webapp`, `-tui`, `-terminal`, `-or-focus`, `uwsm-app --` | Relaunch apps the way Omarchy launches them | Low to medium |
 | Workspace mode state | `~/.local/state/omarchy/workspace-layouts/<id>.lua` (`o.workspace_mode({workspace="1", mode="floating"})`) | Read which workspace is floating or tiled. Keyed by workspace id, so it breaks on renumber (#16928) | Medium to high |
 | Dock | `shell/plugins/dock` (`omarchy.dock`, service kind) | No hook for third parties. Do not target it | High |
-| Per-user state | `~/.local/state/omarchy/` is Omarchy's. `~/.config/<tool>/` for ours | Config and named scenes in `~/.config/omascenes/`; transient state in `~/.local/state/omascenes/` | Low |
+| Per-user state | `~/.local/state/omarchy/` is Omarchy's. `~/.config/<tool>/` for ours | Config and named scenes in `~/.config/omaplace/`; transient state in `~/.local/state/omaplace/` | Low |
 | Marketplace | `omacom/omarchy-plugin-marketplace` | List the plugin. Static scan of the exact commit | Low, but see rules below |
 
 ## Details
@@ -52,8 +52,8 @@ Yes, without a plugin API. `~/.config/omarchy/extensions/omarchy-menu.jsonc` exi
 
 ```jsonc
 "scenes": {"icon":"󰍹","label":"Scenes","aliases":["scenes"]},
-"scenes.save": {"label":"Save this workspace as scene","action":"omascenes save --ask"},
-"scenes.open": {"label":"Open scene","provider":"omascenes menu-rows"}
+"scenes.save": {"label":"Save this workspace as scene","action":"omaplace save --ask"},
+"scenes.open": {"label":"Open scene","provider":"omaplace menu-rows"}
 ```
 
 Costs and risks:
@@ -65,7 +65,7 @@ Costs and risks:
 
 `/usr/share/omarchy/config/hypr/hyprland.lua` (the template copied to `~/.config/hypr/`) does: `bootstrap`, `require("default.hypr.omarchy")`, then user files in order `hypr.monitors, input, bindings, looknfeel, autostart`, then `default.hypr.toggles`, then "any other personal configuration below".
 - Window rules: `o.window("class", { workspace = "5" })` is the documented example in that template. It is a thin wrapper over `hl.window_rule`.
-- `package.path` includes `~/.config/?.lua`, so `require("omascenes")` finds `~/.config/omascenes.lua` or, with dots, `~/.config/omascenes/init.lua` (omagnet research, section 4).
+- `package.path` includes `~/.config/?.lua`, so `require("omaplace")` finds `~/.config/omaplace.lua` or, with dots, `~/.config/omaplace/init.lua` (omagnet research, section 4).
 - Rules in user files load after Omarchy defaults and are never rewritten by updates.
 - Hyprland Lua events we can use, all seen in Omarchy's own Lua: `hyprland.start`, `window.open`, `window.destroy`, `window.move_to_workspace`, `workspace.created`, `workspace.active`, `monitor.added`, `monitor.removed`, `config.reloaded` (grep of `default/hypr/*.lua`: tested). No `hyprland.shutdown` event is used anywhere in Omarchy; whether Hyprland has one in Lua is for the Hyprland agent to confirm.
 
@@ -73,7 +73,7 @@ Costs and risks:
 
 - `default/hypr/autostart.lua` runs on `hyprland.start`: shell, first-run, powerprofiles, monitor-watch, udiskie, herdr server, and finally `sleep 2 && omarchy-hook post-boot`.
 - Three places we can add restore, all user-owned:
-  1. `o.launch_on_start("omascenes restore")` in `~/.config/hypr/autostart.lua` (documented in that file's template comment).
+  1. `o.launch_on_start("omaplace restore")` in `~/.config/hypr/autostart.lua` (documented in that file's template comment).
   2. A script in `~/.config/omarchy/hooks/post-boot.d/` (`omarchy hook install post-boot <script>`). Runs after the 2 s sleep, so the shell and monitor reconcile have started. This dir already exists here (tested).
   3. A `service` plugin that restores when the shell starts.
 - Best choice: the plugin's Lua module registers it on `hyprland.start` itself (no user file edit beyond the one `require`). Timing: `monitor-workspaces.lua` runs `reconcile()` on `hyprland.start` and again on every `monitor.added`/`config.reloaded`. Restoring must wait for monitors to settle, or it will place windows on blocks that then get renumbered.
@@ -120,7 +120,7 @@ How it works (`default/hypr/monitor-workspaces.lua`, read in full):
 
 ### 8. The dock [source, docs]
 
-`omarchy.dock` is a `service` plugin with a `Dock.qml` and `DockModel.js` (pinned apps from `dock.pinned`, windows from `Quickshell.Hyprland` toplevels). It shows on floating workspaces only. It takes no registrations from third parties (omahop D23, `omarchy-app-stack`). Cloning it leaves the app grid empty (#18826). Open PRs touch it heavily (#18852 window instances, #19402, #19403, #19405). **Do not integrate with the dock.** A possible light touch later: a pinned-app `.desktop` that runs `omascenes open <name>`. A `.desktop` in `~/.local/share/applications` is how two existing plugins already get launcher entries (omagnet app-stack doc, 1b).
+`omarchy.dock` is a `service` plugin with a `Dock.qml` and `DockModel.js` (pinned apps from `dock.pinned`, windows from `Quickshell.Hyprland` toplevels). It shows on floating workspaces only. It takes no registrations from third parties (omahop D23, `omarchy-app-stack`). Cloning it leaves the app grid empty (#18826). Open PRs touch it heavily (#18852 window instances, #19402, #19403, #19405). **Do not integrate with the dock.** A possible light touch later: a pinned-app `.desktop` that runs `omaplace open <name>`. A `.desktop` in `~/.local/share/applications` is how two existing plugins already get launcher entries (omagnet app-stack doc, 1b).
 
 ### 9. Marketplace rules and review [source]
 
@@ -137,8 +137,8 @@ From `omacom/omarchy-plugin-marketplace` (`SUBMISSION.md`, `VERIFICATION.md`, re
 - `~/.local/state/omarchy/` is Omarchy's. It holds `monitor-workspaces*`, `workspace-layouts/`, `toggles/`, `windows/about.fit` (tested `ls`). Omarchy migrations can rename or delete files there (it just did for monitors). Read it only through an indirection, never write.
 - Config lives in `~/.config/<tool>/` and Omarchy's Lua resolves it via `paths.config_home` (`XDG_CONFIG_HOME` empty means unset). Use the same rule.
 - Proposed split, same as omagnet:
-  - `~/.config/omascenes/config.toml` (settings) and `~/.config/omascenes/scenes/<name>.toml` or `.json` (named scenes the user may back up or version).
-  - `~/.local/state/omascenes/last-session.json` (the continuous snapshot) and a lock/marker for "restore already done this login", so a Hyprland restart does not open everything twice (PR #18092 does the same).
+  - `~/.config/omaplace/config.toml` (settings) and `~/.config/omaplace/scenes/<name>.toml` or `.json` (named scenes the user may back up or version).
+  - `~/.local/state/omaplace/last-session.json` (the continuous snapshot) and a lock/marker for "restore already done this login", so a Hyprland restart does not open everything twice (PR #18092 does the same).
 - Atomic writes (temp file then rename), private permissions (`0600`), because scene files can hold URLs, paths and folder names. PR #18858 also writes "atomically with private permissions".
 - Format: flat TOML subset for settings (Lua-friendly). For scenes with nested window lists, JSON is easy for QML and bash/jq, but Lua has no JSON parser in Omarchy (omagnet research). Open: one format for both, or QML/bash owns scene files and Lua only gets a line-based export. Decide in design.
 
@@ -164,17 +164,17 @@ What this means: **the demand is real (about 60 reactions across the four thread
 
 Gap check against our four goals:
 
-| Goal | #18858 Scenes | #18092 Reopen | #10353 | omascenes must add |
+| Goal | #18858 Scenes | #18092 Reopen | #10353 | omaplace must add |
 |---|---|---|---|---|
 | 1. Placement rules (app to workspace and monitor) | No | No (only restore) | No | Yes |
 | 2. Save apps + exact geometry per workspace per monitor | Partly (arrangement, not shown as pixel geometry; one monitor tested) | Workspace only, no geometry | No geometry | Yes (floating geometry) |
 | 3. Named scenes, open in one step | Yes | No | No | Overlap |
 | 4. Restore after reboot | No (not its goal) | Yes | Yes | Overlap |
 
-## What this means for omascenes
+## What this means for omaplace
 
-1. **Shape:** one plugin repo, id `io.github.felipecpaiva.omascenes`, kinds `panel` + `service` (+ optional self-hiding `bar-widget`), a Lua module for events and placement, a small CLI or script set for save/open/menu rows. Same skeleton as omagnet and omahop, so the build, test and release method is already known. [source]
-2. **Hook points to use:** (a) consented `require("omascenes")` for Lua; (b) menu extension rows for "Scenes" with a live `provider`; (c) `hyprland.start` or `post-boot.d` for restore; (d) `~/.config/omascenes` and `~/.local/state/omascenes` for data. All are user-owned or documented, and survive updates.
+1. **Shape:** one plugin repo, id `io.github.felipecpaiva.omaplace`, kinds `panel` + `service` (+ optional self-hiding `bar-widget`), a Lua module for events and placement, a small CLI or script set for save/open/menu rows. Same skeleton as omagnet and omahop, so the build, test and release method is already known. [source]
+2. **Hook points to use:** (a) consented `require("omaplace")` for Lua; (b) menu extension rows for "Scenes" with a live `provider`; (c) `hyprland.start` or `post-boot.d` for restore; (d) `~/.config/omaplace` and `~/.local/state/omaplace` for data. All are user-owned or documented, and survive updates.
 3. **Do not hook:** `omarchy-system` (no hook, changes each release), the dock (no API), Omarchy's `~/.local/state/omarchy/*` files for writing. Read the monitor map through live `hl.get_monitors()` descriptions, not the state file, because its path already moved.
 4. **Save model:** continuous debounced snapshot as the base for "restore after reboot", with a freeze trigger during shutdown (close-all empties the desktop before power-off). Named scenes are explicit saves, stored separately.
 5. **Scene schema must carry monitor identity plus slot**, the floating/tiled/scrolling mode, and geometry as a fraction of the monitor work area (so a scene survives a different resolution). Never a raw workspace id.

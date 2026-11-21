@@ -1,4 +1,4 @@
-# omascenes
+# omaplace
 
 Private for now. Saved desktop scenes for Omarchy.
 

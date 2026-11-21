@@ -101,7 +101,7 @@ Omarchy's default terminal on this machine: kitty is running; foot is installed 
 
 - Detect: class `google-chrome` or `firefox`, many windows, one pid [tested for Chrome].
 - Relaunch: start the browser once. Browsers restore their own windows and tabs when "continue where you left off" is on [docs]. Starting more than one process is wrong: a second start passes control to the first (single instance).
-- What omascenes does: start the browser (if no window of that class exists), wait for N windows, then place windows by order (Hyprland address order, or by the saved size). Matching windows to saved slots is a guess; sort by size or by creation order.
+- What omaplace does: start the browser (if no window of that class exists), wait for N windows, then place windows by order (Hyprland address order, or by the saved size). Matching windows to saved slots is a guess; sort by size or by creation order.
 - Never store: tab titles, URLs, profile names, window titles. Browser window titles are tab titles. This is the biggest leak in the whole feature.
 - Reliability: medium (counts differ). Offer a rule option "place only" and a rule option "N windows expected".
 - Option for later: Chromium `--restore-last-session` and profile flags [docs]. Do not rely on it.
@@ -143,7 +143,7 @@ Race: slow apps map late. Rules need `timeout` and `max_windows`. Hyprland offer
 - Paths under home: store as `~/...`, not `/home/<user>/...`.
 - Tests: use made-up fixtures (`/home/test/projects/demo`, `chrome-example.com__-Default`).
 
-## What this means for omascenes
+## What this means for omaplace
 
 - A scene entry is: `{ rule_id, class, strategy, geometry, optional extras }`. The strategy is one of: `desktop-entry`, `webapp`, `terminal` (+ folder), `tui` (+ command), `multiplexer` (+ session), `place-only` (browser, self-restoring apps), `command` (user-written).
 - Build a **per-app rule table** (TOML, user file overrides defaults). Fields: class patterns, aliases, strategy, `timeout`, `max_windows`, `remember` flags, `match` order. Default rows for Omarchy's own apps: terminal, TUIs (`org.omarchy.*`), web apps, browser, Files, editor.
