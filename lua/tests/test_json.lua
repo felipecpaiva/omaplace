@@ -36,4 +36,14 @@ got, err = J.encode(loop)
 assert(got == nil and err:find("deep"), "cycle is refused")
 checks = checks + 2
 
+do
+  local g, e = J.encode({ [1.5] = "x" })
+  assert(g == nil and e:find("key"), "float key is refused")
+  g, e = J.encode({ [true] = 1 })
+  assert(g == nil and e:find("key"), "boolean key is refused")
+  g, e = J.encode({ [1] = "a", ["1"] = "b", [3] = "c" })
+  assert(g == nil and e:find("both"), "clashing keys are refused")
+  checks = checks + 3
+end
+
 print("test_json ok (" .. checks .. " checks)")

@@ -25,6 +25,13 @@
       "slot": 1,
       "follow": false,
       "enabled": true
+    },
+    "twoquotes": {
+      "app": "",
+      "monitor": "",
+      "slot": 2,
+      "follow": false,
+      "enabled": true
     }
   },
   "strategies": {},
@@ -38,6 +45,8 @@
     "line 8: not a key = value line, ignored",
     "rule.broken.slot: out of range 1..10, using 1",
     "rule.broken.follow: expected true or false, using false",
-    "section [rule.bad name!]: bad name, skipped"
+    "section [rule.bad name!]: bad name, skipped",
+    "rule.twoquotes.app: string holds a double quote (this format has no escapes), using \"\"",
+    "rule.twoquotes.app: empty, the rule matches nothing"
   ]
 }

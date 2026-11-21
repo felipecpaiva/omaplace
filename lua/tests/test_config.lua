@@ -56,4 +56,34 @@ for _, junk in ipairs({ "[", "]", "[[x]]", "=", "a=", "\0\0", string.rep("[rule.
   eq(ok, true, "junk does not raise")
 end
 
+-- maxima: a huge timing or size falls back to its default with a warning
+do
+  local c = C.load("expiry_seconds = 601\nsettle_ms = 10001\nlaunch_tick_ms = 5001\nsession_debounce_s = 3601\n"
+    .. "session_keep = 51\nrequest_timeout_s = 601\ncontext_quiet_ms = 30001\n")
+  eq(c.settings.expiry_seconds, 20, "expiry max")
+  eq(c.settings.settle_ms, 1100, "settle max")
+  eq(c.settings.launch_tick_ms, 150, "tick max")
+  eq(c.settings.session_debounce_s, 15, "debounce max")
+  eq(c.settings.session_keep, 5, "keep max")
+  eq(c.settings.request_timeout_s, 60, "timeout max")
+  eq(c.settings.context_quiet_ms, 2000, "quiet max")
+  eq(#c.warnings, 7, "one warning each")
+  eq(C.load("expiry_seconds = 600\nsession_keep = 50\n").settings.session_keep, 50, "the max itself is fine")
+end
+
+-- a second quoted value is unreadable, so the line is ignored with a warning
+do
+  local c = C.load('[rule.a]\nslot = 2\napp = "a" "b"\n')
+  eq(c.rules.a.app, "", "two quoted values: not read")
+  eq(#c.warnings >= 1, true, "two quoted values: warned")
+end
+
+-- a section that is neither rule.<name> nor strategy.<name> still goes to extra, and warns (also when empty)
+do
+  local c = C.load('[Rule.b]\napp = "x"\n[Empty]\n')
+  eq(c.extra["Rule.b.app"], "x", "typo section kept in extra")
+  eq(#c.warnings, 1 + 1, "one warning per odd section")
+  eq(#C.load('[rule.ok]\napp = "x"\n[strategy.ok]\nmatch = "y"\n').warnings, 0, "good sections: no warning")
+end
+
 print("test_config ok (" .. checks .. " checks)")

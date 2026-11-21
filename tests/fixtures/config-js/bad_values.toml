@@ -12,3 +12,7 @@ slot = 11
 follow = "yes"
 [rule.bad name!]
 app = "org.example.Other"
+
+[rule.twoquotes]
+slot = 2
+app = "a" "b"

@@ -5,20 +5,20 @@ local C = {}
 
 -- The one defaults table for the top level. kind: bool, int (min), enum (list), string.
 C.settings_spec = {
-  schema = { default = 1, kind = "int", min = 1 },
+  schema = { default = 1, kind = "int", min = 1, max = 1000000 },
   missing_monitor_scene = { default = "focused", kind = "enum", values = { "focused", "skip" } },
   missing_monitor_rule = { default = "skip", kind = "enum", values = { "focused", "skip" } },
   existing_default = { default = "move", kind = "enum", values = { "move", "new" } },
-  expiry_seconds = { default = 20, kind = "int", min = 1 },
-  settle_ms = { default = 1100, kind = "int", min = 0 },
-  launch_tick_ms = { default = 150, kind = "int", min = 10 },
+  expiry_seconds = { default = 20, kind = "int", min = 1, max = 600 },
+  settle_ms = { default = 1100, kind = "int", min = 0, max = 10000 },
+  launch_tick_ms = { default = 150, kind = "int", min = 10, max = 5000 },
   session = { default = "on", kind = "enum", values = { "on", "off" } },
-  session_debounce_s = { default = 15, kind = "int", min = 1 },
-  session_keep = { default = 5, kind = "int", min = 1 },
-  request_timeout_s = { default = 60, kind = "int", min = 1 },
+  session_debounce_s = { default = 15, kind = "int", min = 1, max = 3600 },
+  session_keep = { default = 5, kind = "int", min = 1, max = 50 },
+  request_timeout_s = { default = 60, kind = "int", min = 1, max = 600 },
   restore_at_login = { default = "off", kind = "enum", values = { "off", "ask", "auto" } },
   app_memory = { default = "scene", kind = "enum", values = { "scene", "last_place", "auto" } },
-  context_quiet_ms = { default = 2000, kind = "int", min = 0 },
+  context_quiet_ms = { default = 2000, kind = "int", min = 0, max = 30000 },
   tiled_order = { default = true, kind = "bool" },
   ignore = { default = "", kind = "string" },
 }
@@ -76,7 +76,10 @@ function C.parse(text)
       local name = line:match("^%s*%[([^%[%]]*)%]%s*$")
       if name then
         section, valid = name, name:match("^[%w_%-]+$") ~= nil or name:match("^[%w_%-]+%.[%w_%-]+$") ~= nil
-        if not valid then warnings[#warnings + 1] = string.format("line %d: section [%s] is not a valid name, its keys are ignored", n, name) end
+        if not valid then warnings[#warnings + 1] = string.format("line %d: section [%s] is not a valid name, its keys are ignored", n, name)
+        elseif not (name:match("^rule%.") or name:match("^strategy%.")) then
+          warnings[#warnings + 1] = string.format("line %d: section [%s] is not rule.<name> or strategy.<name>, kept as extra", n, name)
+        end
       else
         local k, v = line:match("^%s*([%w_%-]+)%s*=%s*(.-)%s*$")
         local parsed = k and value(v)

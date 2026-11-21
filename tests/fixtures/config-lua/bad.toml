@@ -22,3 +22,7 @@ app = "x"
 [strategy.odd]
 match = "org.example.*"
 use = "teleport"
+
+[rule.twoquotes]
+slot = 2
+app = "a" "b"

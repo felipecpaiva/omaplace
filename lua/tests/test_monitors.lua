@@ -134,4 +134,23 @@ m, how = M.resolve(fp, { mon("DP-1", { description = "renamed" }), mon("DP-2", {
 eq(how, "identity", "identity first")
 eq(m.name, "DP-2", "identity monitor chosen over a serial match")
 
+-- twins stay sticky: DP-2 alone was plain, DP-1 came later and is "#2" in Omarchy, though sorted first here
+do
+  local d2, d1 = mon("DP-2", { serial = "" }), mon("DP-1", { serial = "" })
+  local saved = M.fingerprint(d2, { d2 })
+  eq(saved.identity, "Example Corp EX27 SN1", "alone: plain identity")
+  local mm, hh = M.resolve(saved, { d1, d2 }, "skip")
+  eq(mm, d2, "sticky twin: still DP-2")
+  eq(hh, "identity", "sticky twin: by identity")
+  local saved1 = M.fingerprint(d1, { d1, d2 }) -- DP-1 plain, twin
+  mm = M.resolve(saved1, { d1, d2 }, "skip")
+  eq(mm, d1, "twin DP-1 stays DP-1")
+  -- DP-1 unplugged: its serialless twin DP-2 is not it
+  mm, hh = M.resolve(saved1, { d2 }, "skip")
+  eq(mm, nil, "unplugged twin: no match under skip")
+  eq(hh, "skip", "unplugged twin: skip")
+  mm, hh = M.resolve(saved1, { d2 }, "focused")
+  eq(hh ~= "identity", true, "unplugged twin: never by identity")
+end
+
 print("test_monitors ok (" .. checks .. " checks)")

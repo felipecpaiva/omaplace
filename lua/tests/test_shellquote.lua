@@ -44,4 +44,12 @@ for i, argv in ipairs(cases) do
   end
 end
 
+do
+  local g, e = Q.join({ "a", nil, "c" })
+  assert(g == nil and e:find("holes"), "a hole is refused")
+  g, e = Q.join({ "a", x = "b" })
+  assert(g == nil and e:find("holes"), "an extra key is refused")
+  checks = checks + 2
+end
+
 print("test_shellquote ok (" .. checks .. " checks)")

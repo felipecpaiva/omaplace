@@ -5,6 +5,9 @@ local M = {}
 -- Returns nil and a reason for a non-string element or a NUL byte (a shell cannot carry one).
 function M.join(argv)
   if type(argv) ~= "table" then return nil, "argv must be a list" end
+  local n = 0
+  for _ in pairs(argv) do n = n + 1 end
+  if n ~= #argv then return nil, "argv has holes or extra keys" end
   local out = {}
   for i = 1, #argv do
     local s = argv[i]

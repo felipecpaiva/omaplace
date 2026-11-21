@@ -47,18 +47,19 @@ local function enc(v, depth)
     for i = 1, #v do parts[i] = enc(v[i], depth + 1) end
     return "[" .. table.concat(parts, ",") .. "]"
   end
-  local keys = {}
-  for k in pairs(v) do keys[#keys + 1] = tostring(k) end
-  table.sort(keys)
-  for i, k in ipairs(keys) do
-    local val = v[k]
-    if val == nil then val = v[tonumber(k)] end
-    parts[i] = quote(k) .. ":" .. enc(val, depth + 1)
+  local keys, vals = {}, {}
+  for k, val in pairs(v) do
+    if type(k) ~= "string" and math.type(k) ~= "integer" then error("key " .. tostring(k) .. " is not a string or integer", 0) end
+    local ks = tostring(k)
+    if vals[ks] ~= nil then error("two keys both become " .. quote(ks), 0) end
+    keys[#keys + 1], vals[ks] = ks, { val }
   end
+  table.sort(keys)
+  for i, k in ipairs(keys) do parts[i] = quote(k) .. ":" .. enc(vals[k][1], depth + 1) end
   return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- Returns the JSON text, or nil and a reason (function values, nesting deeper than 64).
+-- Returns the JSON text, or nil and a reason (function values, odd or clashing keys, nesting deeper than 64).
 function M.encode(value)
   local ok, out = pcall(enc, value, 0)
   if not ok then return nil, out end
