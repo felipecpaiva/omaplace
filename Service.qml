@@ -270,7 +270,7 @@ Item {
   function finishSave() {
     let r = root.req
     try {
-      let sc = Summary.sceneCapture(r.capture, r.resolved, r.terms)
+      let sc = Summary.sceneCapture(r.capture, r.resolved, r.terms, root.strategies(root.config()))
       if (sc.capture.windows.length === 0) { root.finish(root.fail("failed", "no app on this desktop can be saved")); return }
       let w = root.writableScenes()
       if (w.error) { root.finish(w.error); return }

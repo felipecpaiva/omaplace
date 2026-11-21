@@ -16,7 +16,8 @@ const capture = {
     { class: "org.example.Editor", monitor: 1, slot: 2, order: 1, rect: [0, 0, 0.5, 1], floating: true, context: "", pid: 4242 },
     { class: "Alacritty", monitor: 1, slot: 2, order: 2, rect: [0.5, 0, 0.5, 1], floating: true, context: "", pid: 4343 },
     { class: "org.example.Unknown", monitor: 1, slot: 2, order: 3, rect: [0, 0, 1, 1], floating: true, context: "", pid: 1 },
-    { class: "google-chrome", monitor: 1, slot: 2, order: 4, rect: [0, 0, 1, 1], floating: true, context: "?", pid: 2 }
+    { class: "google-chrome", monitor: 1, slot: 2, order: 4, rect: [0, 0, 1, 1], floating: true, pid: 2 },
+    { class: "google-chrome", monitor: 1, slot: 2, order: 5, rect: [0, 0, 1, 1], floating: true, context: "Profile 1", pid: 2 }
   ]
 }
 
@@ -69,21 +70,23 @@ test("terminalFields: folder under home is shortened, a shell keeps no program, 
   assert.deepEqual(S.terminalFields(quoted, F.filter(quoted.argv), home), { folder: "", launch: "", dropped: 2 })
 })
 
-test("sceneCapture saves what can start, skips the rest, keeps unknown profiles as ?", () => {
+test("sceneCapture saves what can start, skips the rest, marks untagged context apps as ?", () => {
   const resolved = capture.windows.map((w) => A.resolve(w.class, entries, strategies, { context: w.context }))
   assert.equal(S.isTerminal(resolved[1], strategies), true)
   assert.equal(S.isTerminal(resolved[0], strategies), false)
   const terms = []
   terms[1] = { folder: "~/code/demo", launch: "agent run", dropped: 1 }
-  const r = S.sceneCapture(capture, resolved, terms)
+  const r = S.sceneCapture(capture, resolved, terms, strategies)
   assert.equal(r.capture.saved_on, "Example Corp EX24")
-  assert.deepEqual(r.counts, { saved: 3, skipped: 1, need_profile: 1, dropped: 1 })
-  assert.deepEqual(r.capture.windows.map((w) => w.class), ["org.example.Editor", "Alacritty", "google-chrome"])
+  assert.deepEqual(r.counts, { saved: 4, skipped: 1, need_profile: 1, dropped: 1 })
+  assert.deepEqual(r.capture.windows.map((w) => w.class), ["org.example.Editor", "Alacritty", "google-chrome", "google-chrome"])
   assert.equal(r.capture.windows[1].folder, "~/code/demo")
   assert.equal(r.capture.windows[1].launch, "agent run")
-  assert.equal(r.capture.windows[2].context, "?")
+  assert.equal(r.capture.windows[2].context, "?", "an untagged context app needs a profile")
+  assert.equal(r.capture.windows[3].context, "Profile 1", "a tagged one keeps its profile")
+  assert.equal(r.capture.windows[0].context, "", "a plain app has no context")
   assert.equal("pid" in r.capture.windows[0], false, "pid is never saved")
-  const empty = S.sceneCapture({ windows: {} }, [], [])
+  const empty = S.sceneCapture({ windows: {} }, [], [], strategies)
   assert.deepEqual(empty.counts, { saved: 0, skipped: 0, need_profile: 0, dropped: 0 })
 })
 

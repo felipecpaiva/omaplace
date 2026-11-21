@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # omaplace: the foreground program of a terminal window (design D12). Read only, /proc only.
 # Usage: procinfo.sh <terminal pid>
-# Prints one line: {"cwd":"<folder>","argv":[...]} for the deepest descendant that is a shell's child, or the shell itself.
-# Prints {} when the pid is gone, has no shell, or cannot be read. Never reads or prints the environment.
+# Prints one line: {"cwd":"<folder>","argv":[...]} for the deepest descendant that is a shell's child, or the shell itself,
+# or the terminal's direct child when that is not a shell. Prints {} when the pid is gone, has no child, or cannot be read. Never reads or prints the environment.
 set -euo pipefail
 
 empty() { echo '{}'; exit 0; }
@@ -42,16 +42,16 @@ json_str() { # json_str <text>: a JSON string, no tools beyond bash
 }
 
 [ -d /proc/"$1" ] || empty
-# shortcut: the terminal's shell is its newest child; a terminal with several tabs in one process gives that tab only.
+# shortcut: the newest child is the one we follow; a terminal with several tabs in one process gives that tab only.
+# The terminal's newest child, then down through shells: a program started straight by the terminal (xdg-terminal-exec
+# with a program, as omaplace opens it) is its own answer.
 read -r -a kids <<< "$(children "$1")"
 [ ${#kids[@]} -gt 0 ] || empty
 cur=${kids[-1]}
-is_shell "$cur" || empty
-while :; do
+while is_shell "$cur"; do
   read -r -a kids <<< "$(children "$cur")"
   [ ${#kids[@]} -gt 0 ] || break
   cur=${kids[-1]}
-  is_shell "$cur" || break
 done
 cwd=$(readlink /proc/"$cur"/cwd 2>/dev/null) || empty
 mapfile -d '' -t argv < /proc/"$cur"/cmdline 2>/dev/null || empty

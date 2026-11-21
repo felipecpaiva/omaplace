@@ -59,13 +59,25 @@ for _ in $(seq 50); do
 done
 expect "shell itself when it has no child" "$out2" 'o.argv[0] === "bash" && o.argv[1].endsWith("idle.sh") && o.cwd.endsWith("/my dir")'
 
+# a program started straight by the terminal, no shell between (xdg-terminal-exec with a program)
+setsid bash -c 'cd "$0"; sleep 301; :' "$work" &
+groups+=("$!")
+term3=$!
+out3="{}"
+for _ in $(seq 50); do
+  out3=$(bash "$script" "$term3")
+  [[ $out3 == *301* ]] && break
+  sleep 0.1
+done
+expect "program as the terminal's direct child" "$out3" 'JSON.stringify(o.argv) === JSON.stringify(["sleep", "301"]) && o.cwd.endsWith("/my dir")'
+
 sleep 0 &
 gone=$!
 wait "$gone"
 check "gone pid prints {}" "$([ "$(bash "$script" "$gone")" = "{}" ] && echo 0 || echo 1)"
-sleep 300 &
+sleep 302 &
 lone=$!
-check "no shell child prints {}" "$([ "$(bash "$script" "$lone")" = "{}" ] && echo 0 || echo 1)"
+check "a pid with no child prints {}" "$([ "$(bash "$script" "$lone")" = "{}" ] && echo 0 || echo 1)"
 kill "$lone"
 r=0
 bash "$script" "not-a-pid" 2>/dev/null || r=$?

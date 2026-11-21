@@ -12,7 +12,7 @@
 - `bin/omaplace`: words of design 7.3, waits for `result-<req>.json` with `inotifywait` (1 s slices) or a 200 ms check,
   never longer than `request_timeout_s` (grep of config.toml, default 60).
 - `tests/cli.test.sh` (62 checks, fake `omarchy-shell` first on PATH, temp HOME and XDG_RUNTIME_DIR),
-  `tests/procinfo.test.sh` (9 checks, real `terminal -> shell -> program` trees in their own process group).
+  `tests/procinfo.test.sh` (10 checks, real `terminal -> shell -> program` trees in their own process group).
 - Merged main (WP4) before the commit; `js/AppResolve.js` from main is kept as it is.
 
 ## Decisions
@@ -32,8 +32,9 @@
 - **Writes.** `FileView` with `atomicWrites` (temp file, then rename) and `blockWrites`. Before every write of scenes.toml
   or config.toml the old text goes to `scenes.toml.bak` / `config.toml.bak`. A scenes.toml with a newer schema or a
   section with a bad scene name is never rewritten (`SceneStore.serialize` writes the whole file and would drop it).
-- **Save.** Windows AppResolve cannot start are not saved and counted as `skipped`; a window with context `?` is saved
-  and counted as `need_profile`. An empty desktop fails (`no app on this desktop can be saved`) instead of erasing the
+- **Save.** Windows AppResolve cannot start are not saved and counted as `skipped`; a window of a context app (strategy
+  `use = context`: Chrome, Firefox, the VS Code family) with no `omaplace-ctx` tag (capture gives no context) is saved
+  with context `?` and counted as `need_profile` (design 5.4a rule 3). An empty desktop fails (`no app on this desktop can be saved`) instead of erasing the
   scene. Terminal windows (strategy `use = terminal`) with a `pid` get `procinfo.sh`, one at a time; argv goes through
   ArgFilter; a shell in the foreground keeps no program; the folder under HOME is saved as `~/...`. An argument or
   folder holding a double quote or a line break (scenes.toml has no escapes) is dropped and counted in `dropped`.
@@ -71,7 +72,8 @@
 - `FileView` behaviour assumed from the Quickshell types and omahop: `reload()` plus `waitForJob()` with `blockLoading`
   gives the current text; `setText` right after a `path` change writes the new path (result and plan files);
   `onSaveFailed` fires before `setText` returns with `blockWrites`. Rename, remove and rule remove answer from that.
-- `procinfo.sh` takes the terminal's newest child shell; a terminal that runs many tabs in one process gives that
+- `procinfo.sh` follows the terminal's newest child down through shells (a program started straight by the terminal,
+  as `xdg-terminal-exec --dir=X prog` does, is the answer itself); a terminal that runs many tabs in one process gives that
   tab only (`shortcut:` comment in the script).
 - Result, capture and plan files stay in the runtime folder (tmpfs, cleared at logout); nothing deletes them.
 

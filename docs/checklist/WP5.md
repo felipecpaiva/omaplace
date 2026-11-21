@@ -20,5 +20,7 @@ One harmless test app, no synthetic input, never a virtual monitor. Use made-up 
 9. `omaplace settings` toggles the settings panel.
 10. While idle, `pgrep -f procinfo.sh` and `pgrep -f inotifywait` find nothing; result files are in
     `$XDG_RUNTIME_DIR/omaplace/`.
-11. FileView assumptions (batch log "Known limits"): result and plan files are written at their new path each time, and
+11. `omaplace restore` (empty argument) reaches the service through `omarchy-shell`'s socket path and answers `not_yet`
+    (exit 5); nothing else of Service.qml's JavaScript has run before this check.
+12. FileView assumptions (batch log "Known limits"): result and plan files are written at their new path each time, and
     a removed scenes.toml reads as empty.

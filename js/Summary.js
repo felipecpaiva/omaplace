@@ -84,9 +84,10 @@ function terminalFields(info, filtered, home) {
 }
 
 // capture: design 5.5 (kind "capture"). resolved[i] and terms[i] belong to capture.windows[i]; terms[i] is the result of
-// terminalFields() or undefined. Windows with no way to start them are not saved (counted as skipped); a window whose
-// profile is unknown is saved with context "?" and counted.
-function sceneCapture(capture, resolved, terms) {
+// terminalFields() or undefined. Windows with no way to start them are not saved (counted as skipped). A window of a
+// context app (strategy use "context") without an omaplace tag has an unknown profile or folder: it is saved with
+// context "?" and counted, so the settings window can ask once (design 5.4a rule 3).
+function sceneCapture(capture, resolved, terms, strategies) {
   const wins = listOf(capture && capture.windows)
   const mons = listOf(capture && capture.monitors)
   const out = { saved_on: "", windows: [] }
@@ -97,12 +98,14 @@ function sceneCapture(capture, resolved, terms) {
   }
   wins.forEach((w, i) => {
     const r = resolved[i]
-    if (!r || (r.mode === "skip" && w.context !== "?")) { counts.skipped++; return }
+    const strat = r && strategies ? strategies[r.strategy] : null
+    const context = String(w.context || "") !== "" ? String(w.context) : strat && strat.use === "context" ? "?" : ""
+    if (!r || (r.mode === "skip" && context !== "?")) { counts.skipped++; return }
     const t = terms[i] || { folder: "", launch: "", dropped: 0 }
     counts.dropped += t.dropped
-    if (w.context === "?") counts.need_profile++
+    if (context === "?") counts.need_profile++
     out.windows.push({
-      app: appIdOf(r, w.class), class: String(w.class), context: String(w.context || ""),
+      app: appIdOf(r, w.class), class: String(w.class), context,
       rect: Array.isArray(w.rect) && w.rect.length === 4 ? w.rect.slice() : [0, 0, 1, 1],
       order: Number(w.order) || 1, floating: w.floating === true, launch: t.launch, folder: t.folder
     })
