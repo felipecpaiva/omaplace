@@ -65,7 +65,7 @@ Item {
   property string lastResultPath: ""
 
   // DesktopEntries is lazy: the first read is empty, so it is touched at load (no process, no timer).
-  Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher(); root.refreshAuto() }
+  Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher(); root.markMoves(); root.refreshAuto() }
   // find deletes the file only when grep finds the marker line in it: argv only, no shell.
   Component.onDestruction: {
     if (root.launcherInstalled)
@@ -103,8 +103,9 @@ Item {
     if (oldText !== "") bakConfig.setText(oldText)
     if (root.writeError === "") configFile.setText(text)
     if (root.writeError === "" && !reloadProc.running) reloadProc.running = true
-    root.refreshAuto()
-    return root.writeError
+    let err = root.writeError
+    root.refreshAuto() // may write scenes.toml, which resets writeError
+    return err
   }
 
   function config() { return ConfigIO.parse(root.readNow(configFile)) }
@@ -268,6 +269,7 @@ Item {
     let c = LuaCall.code(text)
     if (c === "no_lua") { root.finish(root.fail("no_lua")); return }
     if (c !== "" && c !== "ok") { root.finish(c === "busy" ? root.fail("busy") : root.fail("failed", c)); return }
+    r.luaOk = c === "ok"
     if (r.kind === "open") {
       r.evaluated = true
       root.watching = true
@@ -289,7 +291,7 @@ Item {
     if (!r) return
     let cap = Summary.parseJson(text)
     if (!cap) {
-      if (r.retried) { root.finish(root.fail("no_lua")); return }
+      if (r.retried) { root.finish(r.luaOk ? root.fail("failed", "no capture from the Lua module") : root.fail("no_lua")); return }
       r.retried = true
       luaCheck.restart()
       return
@@ -368,7 +370,9 @@ Item {
   function onLuaCheck() {
     let r = root.req
     if (!r) return
-    if (r.kind === "open") { if (!r.seen) root.finish(root.fail(r.other ? "busy" : "no_lua")) }
+    if (r.kind === "open") {
+      if (!r.seen) root.finish(r.other ? root.fail("busy") : r.luaOk ? root.fail("failed", "no status from the Lua module") : root.fail("no_lua"))
+    }
     else root.readCapture()
   }
 
@@ -398,6 +402,10 @@ Item {
   }
 
   // ---- auto app memory (WP10): moves Lua reported between scene desktops go into scenes.toml
+
+  // At load: events already in moves.json were handled by an earlier shell (or happened while it was down) and are
+  // never replayed. A replay could move a second window of the same class, since AutoMove matches by class and context.
+  function markMoves() { root.lastMovesAt = MovesFeed.pending(root.readNow(movesFile), -1).maxAt }
 
   function refreshAuto() {
     try { root.autoMemory = root.config().settings.app_memory === "auto" } catch (e) { root.autoMemory = false }

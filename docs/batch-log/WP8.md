@@ -26,7 +26,9 @@
   a file whose newest `at` is older than that means Hyprland restarted, so all events count again (AutoMove skips the
   ones already applied). `AutoMove.apply` runs on the scenes doc; scenes.toml is written (`.bak` first) only when an
   event was applied, and `at` only moves on once the write worked. Skipped reasons other than "already applied" are
-  logged with the class only. No timer.
+  logged with the class only. No timer. At load the service marks every event already in the file as handled and
+  never replays it: AutoMove matches by class and context, so a replay could move a second terminal of the same scene.
+  Moves made while the shell was down are therefore dropped (they still update Lua's own app memory).
 - Fix (a): a save with nothing to save answers `{"ok":false,"code":"empty"}` (design 7.2 lists the code; the settings
   window has a word for it).
 - Fix (c): `js/SceneStore.js` `mergeCapture` matches in passes: all exact (class, context) pairs first; then a
@@ -37,7 +39,7 @@
   previous request's result file, with `rm -f --` on paths built from our own ids. `hyprctl eval` calls go through
   `js/LuaCall.js`, which returns `omaplace:<code>`: `no_lua` only when `_G.omaplace` is really missing, and Lua's own
   errors (`busy`, `bad_plan`, `no_monitor`, `no_runtime`, `bad_path`) end the request at once instead of a `no_lua`
-  after 2 s. `startRestore` checks the instance name before it becomes a path. A file chooser that never starts clears
+  after 2 s. When Lua answered `ok` but no status or capture arrives, the answer is `failed`, not `no_lua`. `startRestore` checks the instance name before it becomes a path. A file chooser that never starts clears
   `picking` (`onStarted` plus `onRunningChanged`).
 
 ## Verified
@@ -54,7 +56,8 @@
   the live checks, S6 among them.
 - A row started from the menu has no terminal: the CLI's text and errors are not seen. An open or restore still sends
   its notification; a save or rule add from the menu shows nothing. A notification for those is a small follow-up.
-- `hyprctl eval` printing the chunk's return value is taken from the WP2 checklist; if it prints nothing, the service
+- Every save, open and rule add now sends the wrapped chunk (an anonymous function, as `default/hypr/startup-cursor.lua`
+  sends an `if ... end` chunk). Not run live. `hyprctl eval` printing the chunk's return value is taken from the WP2 checklist; if it prints nothing, the service
   falls back to the old wait (status watch and the 2 s check).
 - The app memory choice "Automatic" in the General page is still marked "(later)" (WP6). The wiring is in; enabling
   the button is a one-word change once the live check of WP10 passes. Until then set `app_memory = "auto"` by hand.

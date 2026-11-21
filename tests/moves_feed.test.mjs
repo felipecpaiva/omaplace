@@ -33,3 +33,11 @@ test("bad text, no array or no valid event changes nothing", () => {
   const r = pending(JSON.stringify([null, { at: Infinity }, ev(7)]), -1)
   assert.deepEqual(r.events.map((e) => e.at), [7])
 })
+
+test("the mark taken at load skips every event already in the file", () => {
+  const text = JSON.stringify([ev(100), ev(200)])
+  const mark = pending(text, -1).maxAt
+  assert.deepEqual(pending(text, mark).events, [])
+  assert.deepEqual(pending(JSON.stringify([ev(100), ev(200), ev(250)]), mark).events.map((e) => e.at), [250])
+  assert.equal(pending("", -1).maxAt, -1) // no file: nothing to skip
+})
