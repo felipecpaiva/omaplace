@@ -285,11 +285,11 @@ All examples are made up.
 ### 5.1 Monitor fingerprint (F4)
 
 ```
-{ identity = "Example Corp EX27 #1", make = "Example Corp", model = "EX27", serial_hash = "a1b2c3",
+{ identity = "Example Corp EX27", make = "Example Corp", model = "EX27", serial_hash = "a1b2c3",
   internal = false, width = 2560, height = 1440, scale = 1.25, transform = 0, last_connector = "DP-2" }
 ```
 
-`identity` is Omarchy's own key (description, `#N` for twins). `serial_hash` is a short hash, never the serial.
+`identity` is Omarchy's own key: the description, with ` #2`, ` #3` added for later twins (the first twin has no suffix). `serial_hash` is a short hash, never the serial.
 
 `monitors.resolve(fp, live, policy)` tries, in order, and returns which step matched:
 
@@ -305,7 +305,7 @@ All examples are made up.
 ```toml
 [rule.editor]
 app = "org.example.Editor"      # matched against initialClass
-monitor = "Example Corp EX27 #1" # identity; empty = any monitor, keep the slot
+monitor = "Example Corp EX27"    # identity; empty = any monitor, keep the slot
 slot = 3                        # 1..10 inside that monitor's block
 follow = false                  # true: switch to the workspace when it opens
 enabled = true
@@ -325,7 +325,7 @@ existing = "move"            # move | new
 home_monitor = ""            # empty: open on the current monitor; else an identity
 home_slot = 0                # 0: current workspace; else 1..10
 key = ""                     # optional, user picked
-saved_on = "Example Corp EX27 #1"
+saved_on = "Example Corp EX27"
 
 [scene.work.window.1]
 app = "org.example.Editor"   # desktop entry id, from AppResolve at capture
@@ -395,7 +395,7 @@ single quoted, `'` written as `'\''`) because `hl.exec_cmd` takes one string.
 
 ```json
 { "schema": 1, "kind": "session", "saved_at": 1763700000, "mode": "per_monitor",
-  "monitors": [ { "fp": { "identity": "Example Corp EX27 #1", "internal": false } } ],
+  "monitors": [ { "fp": { "identity": "Example Corp EX27", "internal": false } } ],
   "windows": [ { "class": "org.example.Editor", "monitor": 0, "slot": 2, "order": 1, "rect": [0, 0, 0.5, 1],
                  "floating": true, "fullscreen": 0, "minimized": false } ] }
 ```
