@@ -41,10 +41,10 @@ DEMO_CLASS = "omaplace-demo"
 
 # ---- coordinates, logical px of the whole screen. Read them from branding/demo/calibrate*.png (--calibrate).
 CALIBRATED_FOR = (1600, 1000)  # the monitor's logical size these were read on; the run refuses another size
-DESKTOPS_TAB = (0, 0)        # the "Desktops" page button in the settings window (clicked so the page is sure to be first)
-DESK8_CARD = (0, 0)          # the desktop 8 tile on the Desktops page
-EDITOR_SCROLL = 0            # wheel clicks down after picking the tile, if "Open all" is below the fold
-OPEN_ALL = (0, 0)            # the "Open all" button of desktop 8's editor (after EDITOR_SCROLL)
+DESKTOPS_TAB = (479, 244)       # the "Desktops" page button in the settings window (clicked so the page is sure to be first)
+DESK8_CARD = (870, 425)          # the desktop 8 tile on the Desktops page
+EDITOR_SCROLL = 6            # wheel clicks down after picking the tile, if "Open all" is below the fold
+OPEN_ALL = (595, 738)          # the "Open all" button of desktop 8's editor (after EDITOR_SCROLL)
 OMACALC_GRAB = (60, 14)      # where to press on Omacalc to drag it, from its top-left corner (its title bar)
 DRAG_BY = -600               # how far the drag moves Omacalc: its centre ends in the left zone, a strip of the terminal stays
 NOTIF_ZOOM = 2               # the notification part shows the top right 1/NOTIF_ZOOM of the area, scaled up to the same size
@@ -365,6 +365,8 @@ def main():
     todo = [c for n in wanted for c in NEEDS.get(n, ()) if globals()[c] == (0, 0)]
     if todo: raise SystemExit(f"calibrate first (--calibrate), then set {', '.join(todo)} at the top of this file")
     preflight()
+    # Every frame shows the top right corner: a card of someone's own would land in the GIF (never dismissed for them).
+    if not cal and toasts(): raise SystemExit("a notification card is on screen: clear your notifications, then run again")
     os.makedirs(OUT, exist_ok=True)
     files = [SCENES, SCENES + ".bak", CONFIG, CONFIG + ".bak", ENTRY]
     staged = False
