@@ -39,7 +39,12 @@ end
 
 function M.fingerprint(monitor, all_monitors)
   local serial = monitor.serial or ""
+  local twins = 0
+  for _, m in ipairs(all_monitors or {}) do
+    if not m.is_mirror and described(m) == described(monitor) then twins = twins + 1 end
+  end
   return {
+    twin = twins > 1 or nil, -- the identity was shared with another screen when this was saved
     identity = identity_of(monitor, all_monitors),
     make = monitor.make or "",
     model = monitor.model or "",
@@ -86,15 +91,30 @@ function M.resolve(fp, live, policy)
     end
   end
 
-  local m = first(function(l) return fp.identity ~= nil and l.identity == fp.identity end)
-  if m then return m, "identity" end
+  -- Omarchy keeps a twin's identity while it stays plugged in, so a recomputed " #2" can be wrong. First look
+  -- for the connector this monitor had last time (same description, any " #N"). Otherwise fall back to the
+  -- recomputed identity. A serialless twin whose connector is gone is not guessed at by identity, model or
+  -- shape: the screen left behind could be a different one.
+  local m
+  local lost_twin = fp.twin and (fp.serial_hash or "") == ""
+  if type(fp.identity) == "string" then
+    local base = fp.identity:gsub(" #%d+$", "")
+    for _, mon in ipairs(list) do
+      local d = described(mon)
+      if mon.name == fp.last_connector and (d == fp.identity or d == base) then return mon, "identity" end
+    end
+    if not lost_twin then
+      m = first(function(l) return l.identity == fp.identity end)
+      if m then return m, "identity" end
+    end
+  end
   -- an empty serial hash must never match: two monitors without serials are not the same monitor
   m = first(function(l)
     return (fp.serial_hash or "") ~= "" and l.serial_hash == fp.serial_hash and l.make == fp.make and l.model == fp.model
   end)
   if m then return m, "serial" end
   local same, count = nil, 0
-  if (fp.make or "") ~= "" or (fp.model or "") ~= "" then
+  if not lost_twin and ((fp.make or "") ~= "" or (fp.model or "") ~= "") then
     for i, l in ipairs(fps) do
       if l.make == fp.make and l.model == fp.model then count = count + 1; same = same or list[i] end
     end
@@ -106,7 +126,7 @@ function M.resolve(fp, live, policy)
   end
   local best, best_gap
   for i, l in ipairs(fps) do
-    local gap = shape_gap(fp, l)
+    local gap = not lost_twin and shape_gap(fp, l)
     if gap and (not best_gap or gap < best_gap) then best, best_gap = list[i], gap end
   end
   if best then return best, "shape" end

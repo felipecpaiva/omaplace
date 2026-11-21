@@ -113,7 +113,11 @@ function parse(text) {
     if (k.kind === "bad") { warn("line " + (n + 1) + ": not a key = value line, ignored"); continue }
     if (k.kind === "section") {
       const m = /^(rule|strategy)\.(.*)$/.exec(k.name)
-      if (!m) { sec = { kind: "unknown", label: k.name + "." }; continue }
+      if (!m) {
+        warn("section [" + k.name + "]: not rule.<name> or strategy.<name>, kept as extra")
+        sec = { kind: "unknown", label: k.name + "." }
+        continue
+      }
       if (!NAME_RE.test(m[2])) { warn("section [" + k.name + "]: bad name, skipped"); sec = { kind: "skip" }; continue }
       const isRule = m[1] === "rule"
       const specs = isRule ? RULE_SPECS : STRATEGY_SPECS

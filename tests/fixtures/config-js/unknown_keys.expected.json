@@ -31,7 +31,9 @@
     }
   },
   "strategies": {},
-  "warnings": [],
+  "warnings": [
+    "section [theme]: not rule.<name> or strategy.<name>, kept as extra"
+  ],
   "extra": {
     "future_option": "x",
     "number_option": 7,
