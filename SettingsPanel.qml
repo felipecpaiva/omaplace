@@ -43,6 +43,7 @@ Item {
       root.service.ensureDirs()
       root.service.refreshMonitors()
       root.service.desktopsInfo()
+      root.service.rescanScenes()
     }
     root.reload()
     Qt.callLater(function () { content.forceActiveFocus() })

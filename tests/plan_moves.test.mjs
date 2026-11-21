@@ -124,18 +124,49 @@ test("zone move: the window takes the zone holding its centre, with the zone's r
   assert.doesNotThrow(() => S.serialize(r.doc))
 })
 
-test("zone move: same zone changes nothing; taken zone, no zone, no zones in the layout are not possible", () => {
+test("zone move: same zone changes nothing; no rect and a layout without zones are not possible", () => {
   assert.deepEqual(P.edit(doc(), mv(1, { to: { rect: [0, 0, 0.4, 1] } })).changed, false)
-  const taken = P.edit(doc(), mv(1))
-  assert.equal(taken.code, "not_possible")
-  assert.match(taken.reason, /zone 2 already holds chromium/)
-  const outside = P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", to: { rect: null } }))
-  assert.deepEqual(outside, { code: "not_possible", reason: "the window is outside every zone" })
-  const noRect = P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", to: {} }))
-  assert.equal(noRect.reason, "the window is outside every zone")
+  const noRect = P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", to: { rect: null } }))
+  assert.deepEqual(noRect, { code: "not_possible", reason: "the move has no place" })
+  assert.equal(P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", to: {} })).reason, "the move has no place")
   const tiled = P.edit(doc(), mv(1, { scene: "desk-5", class: "org.example.Term" }))
   assert.equal(tiled.code, "not_possible")
   assert.match(tiled.reason, /layout tiled has no zones/)
+})
+
+test("zone move onto a zone another window holds: the two swap zones and rects, and the plan is re-placed (D24)", () => {
+  const r = P.edit(doc(), mv(1))
+  assert.equal(r.changed, true)
+  assert.equal(r.replace, true)
+  const [editor, chrome] = r.doc.scenes["desk-2"].windows
+  assert.deepEqual([editor.class, editor.zone, editor.rect], ["org.example.Editor", 2, [0.5, 0, 0.5, 1]])
+  assert.deepEqual([chrome.class, chrome.zone, chrome.rect, chrome.context], ["chromium", 1, [0, 0, 0.5, 1], "Profile 1"])
+  assert.doesNotThrow(() => S.serialize(r.doc))
+  // a move into a free zone needs no re-place: only the moved window changed and it is already there
+  assert.equal(P.edit(doc(), mv(1, { scene: "desk-3", class: "org.example.Mail", to: { rect: [0.6, 0.6, 0.3, 0.3] } })).replace, undefined)
+})
+
+test("zone move outside every zone: the plan becomes free, every window keeps its rect (D24)", () => {
+  const d = doc()
+  d.scenes["desk-2"].layout = "0 0 0.5 0.5; 0.5 0 0.5 0.5" // two zones in the top half only
+  d.scenes["desk-2"].windows[0].rect = [0, 0, 0.5, 0.5]
+  delete d.scenes["desk-2"].windows[1].rect // a window without a stored rect gets its zone's
+  const r = P.edit(d, mv(1, { to: { rect: [0.1, 0.6, 0.3, 0.3] } }))
+  assert.equal(r.changed, true)
+  assert.equal(r.replace, undefined)
+  const s = r.doc.scenes["desk-2"]
+  assert.equal(s.layout, "free")
+  assert.deepEqual(s.windows.map((w) => [w.class, w.zone, w.rect, w.floating]),
+    [["org.example.Editor", undefined, [0.1, 0.6, 0.3, 0.3], true], ["chromium", undefined, [0.5, 0, 0.5, 0.5], true]])
+  assert.deepEqual(S.planProblems(r.doc.scenes), {})
+  assert.doesNotThrow(() => S.serialize(r.doc))
+})
+
+test("zone move of a free plan's window stores its new rect", () => {
+  const notes = { scene: "desk-6", class: "org.example.Notes" }
+  const r = P.edit(doc(), mv(1, { ...notes, to: { rect: [0.2, 0.2, 0.4, 0.4] } }))
+  assert.deepEqual(r.doc.scenes["desk-6"].windows[0].rect, [0.2, 0.2, 0.4, 0.4])
+  assert.equal(P.edit(doc(), mv(1, { ...notes, to: { rect: [0.1, 0.1, 0.3, 0.3] } })).changed, false)
 })
 
 test("a move whose plan is gone or changed is not found; an unreadable move is not possible", () => {
@@ -183,12 +214,49 @@ test("desktop move from a many-window plan joins the target plan by its layout",
   assert.deepEqual(fKeep.doc.scenes["desk-6"].windows[1].rect, [0, 0, 0.5, 1])
 })
 
-test("desktop move from a many-window plan: no plan there, a full plan, a taken or missing zone are not possible", () => {
-  assert.match(P.edit(doc(), mv(1, toDesk(8))).reason, /no plan on desktop 8/)
+test("desktop move from a many-window plan: a full plan, a taken or missing zone of the target plan are not possible", () => {
   assert.match(P.edit(doc(), mv(1, toDesk(4))).reason, /full holds one window/)
   assert.match(P.edit(doc(), mv(1, toDesk(3, [0, 0, 0.3, 0.3]))).reason, /used twice/)
   assert.match(P.edit(doc(), mv(1, toDesk(3))).reason, /outside every zone/)
-  assert.match(P.edit(doc(), mv(1, toDesk(2, null, { to: { identity: "Other Monitor", slot: 2, rect: null } }))).reason, /no plan on desktop 2/)
+})
+
+test("desktop move from a many-window plan onto a desktop with no plan: a new free plan holds the window (D24)", () => {
+  const r = P.edit(doc(), mv(1, toDesk(8, [0.1, 0.2, 0.3, 0.4])))
+  assert.equal(r.changed, true)
+  assert.equal(r.created, "desk-example-corp-ex27-8")
+  assert.deepEqual(r.doc.scenes["desk-2"].windows.map((w) => w.class), ["chromium"])
+  const s = r.doc.scenes[r.created]
+  assert.deepEqual([s.plan, s.layout, s.home_monitor, s.home_slot, s.open_at_login], [true, "free", MON, 8, false])
+  assert.deepEqual(s.windows.map((w) => [w.class, w.zone, w.rect, w.floating]), [["org.example.Editor", undefined, [0.1, 0.2, 0.3, 0.4], true]])
+  assert.deepEqual(S.planProblems(r.doc.scenes), {})
+  assert.doesNotThrow(() => S.serialize(r.doc))
+  const back = S.parse(S.serialize(r.doc))
+  assert.deepEqual(back.errors, [])
+  assert.equal(back.scenes[r.created].layout, "free")
+
+  // another monitor: its own plan; a tiled window without a rect gets the whole desktop
+  const o = P.edit(doc(), mv(1, toDesk(2, null, { to: { identity: "Other Monitor", slot: 2, rect: null, floating: false } })))
+  assert.equal(o.created, "desk-other-monitor-2")
+  assert.deepEqual(o.doc.scenes[o.created].windows[0].rect, [0, 0, 1, 1])
+
+  // a taken name gets a number
+  const d = doc()
+  d.scenes["desk-example-corp-ex27-8"] = { ...d.scenes.work }
+  assert.equal(P.edit(d, mv(1, toDesk(8))).created, "desk-example-corp-ex27-8-2")
+})
+
+test("a plan on the focused monitor (\"\") moving a window to a desktop with no plan: the new plan is on \"\" too", () => {
+  const d = doc()
+  d.scenes["desk-5"].home_monitor = ""
+  const r = P.edit(d, mv(1, { scene: "desk-5", class: "org.example.Term", ...toDesk(9) }))
+  assert.equal(r.created, "desk-monitor-9")
+  assert.equal(r.doc.scenes[r.created].home_monitor, "")
+  assert.deepEqual(r.doc.scenes["desk-5"].windows.map((w) => w.class), ["org.example.Files"])
+  // and a "" plan on the target slot counts as that desktop's plan: the window joins it
+  d.scenes["desk-6"].home_monitor = ""
+  const j = P.edit(d, mv(1, toDesk(6, [0.2, 0.2, 0.5, 0.5])))
+  assert.equal(j.created, undefined)
+  assert.deepEqual(j.doc.scenes["desk-6"].windows.map((w) => w.class), ["org.example.Notes", "org.example.Editor"])
 })
 
 test("desktop move out of a plan holding two windows of that class and context is not possible", () => {

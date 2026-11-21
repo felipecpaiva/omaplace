@@ -222,6 +222,7 @@ Item {
 
   function begin(kind, fields) {
     if (root.req) return Summary.answer(root.fail("busy"))
+    root.rescanScenes() // so a run of a hand-made first scenes.toml is tracked by its plan
     root.counter++
     let r = fields || {}
     r.id = "q" + root.counter + "-" + Date.now()
@@ -293,9 +294,11 @@ Item {
     try {
       let cfg = root.config()
       r.run = "r" + root.counter + "-" + Date.now()
+      // a re-place (r.replace) waits 1 s at most: windows that are closed are not coming
       let plan = r.snapshot
         ? Plan.fromSession(r.snapshot, root.launchesFor(r.snapshot.windows, cfg), { run: r.run, expiry_s: cfg.settings.expiry_seconds })
-        : Plan.fromScene(r.scene, root.launchesFor(r.scene.windows, cfg), Object.assign(Summary.planTarget(r.scene, r.run, cfg.settings.expiry_seconds), { scene: r.name }), cfg.rules)
+        : Plan.fromScene(r.scene, r.replace ? r.scene.windows.map(function () { return { mode: "place_only" } }) : root.launchesFor(r.scene.windows, cfg),
+          Object.assign(Summary.planTarget(r.scene, r.run, r.replace ? 1 : cfg.settings.expiry_seconds), { scene: r.name }), cfg.rules)
       r.planPath = root.runtimeDir + "/plan-" + r.run + ".lua"
       planFile.path = r.planPath
       planFile.setText("return " + LuaLiteral.encode(plan) + "\n")
@@ -451,11 +454,13 @@ Item {
     resultFile.path = root.runtimeDir + "/result-" + r.id + ".json"
     root.lastResultPath = resultFile.path
     resultFile.setText(Summary.answer(res) + "\n")
-    if (r.kind === "open") {
-      let text = (res.state ? Summary.notifyText(res) : "could not open (" + res.code + ")") + (r.modeNote ? "; " + r.modeNote : "")
+    // a re-place after "Update plan" is not news: the CLI already said "plan updated", and closed apps make it partial
+    if (r.kind === "open" && !r.replace) {
+      let text =(res.state ? Summary.notifyText(res) : "could not open (" + res.code + ")") + (r.modeNote ? "; " + r.modeNote : "")
       root.notices.push(["omarchy-notification-send", "omaplace: " + r.name, text])
       root.nextNotice()
     }
+    root.rescanScenes()
     root.refreshAuto()
     // The login.json watch can miss a file replaced by rename, so every request end reads it again.
     root.checkLogin()
@@ -516,6 +521,14 @@ Item {
     return false
   }
 
+  // A scenes.toml made after the service started is never seen by the watch (a watch on a missing file never fires,
+  // live-M5). No polling: every request end and every settings window open read it again (writePlans writes only when
+  // the plans changed) and arm the watch again, now that the file may exist.
+  function rescanScenes() {
+    root.writePlans()
+    root.rearm(scenesFile)
+  }
+
   function reloadPlans() {
     if (root.plansBusy) { root.plansAgain = true; return }
     root.plansBusy = true
@@ -552,7 +565,10 @@ Item {
       let e = PlanMoves.edit(w.doc, m)
       if (e.code) return Summary.answer(root.fail(e.code, e.reason))
       let err = e.changed ? root.writeScenes(w.text, SceneStore.serialize(e.doc)) : ""
-      return Summary.answer(err === "" ? { ok: true, scene: m.scene, changed: e.changed } : root.fail("failed", err))
+      if (err !== "") return Summary.answer(root.fail("failed", err))
+      // a swap (D24): the plan's open windows go to their new zones; place_only never starts a closed one
+      if (e.replace) root.begin("open", { name: m.scene, scene: Object.assign({}, e.doc.scenes[m.scene], { existing: "move" }), replace: true })
+      return Summary.answer({ ok: true, scene: m.scene, changed: e.changed })
     } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
   }
 

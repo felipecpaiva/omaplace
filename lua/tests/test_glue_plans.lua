@@ -496,6 +496,52 @@ fake.advance(3000)
 eq(m2.snapped[rchat2.address], nil, "not a plan scene: untracked")
 close(rchat2)
 
+-- Open all of a `full` plan: the run places the window, then maximizes it like a snap (live-M5 finding 3)
+reset()
+local fvid = new_window("org.example.Video", 3)
+_G.omaplace.open({ run = "p4", scene = "desk-4", target = { fp = { identity = "Example Panel" }, slot = 4 },
+  existing = "move", layout = "floating", windows = {
+    { class = "org.example.Video", order = 1, rect = { 0, 0, 1, 1 }, floating = false, fullscreen = 1,
+      mode = "launch", launch = { "video" } } } })
+fake.advance(3000)
+eq(fvid.workspace.id, 4, "full run: moved to its desktop")
+local ffs
+for _, c in ipairs(fake.dispatched) do
+  if c.name == "window.fullscreen" then ffs = c.args end
+end
+eq(ffs and ffs.mode, "maximized", "full run: maximized")
+eq(ffs and ffs.action, "set", "full run: set, not toggle")
+eq(fvid.fullscreen, 1, "full run: window maximized")
+eq(_G.omaplace.status().state, "done", "full run done")
+close(fvid)
+-- the same on a tiled desktop: no rect, still maximized
+reset()
+local tvid = new_window("org.example.Video", 6)
+_G.omaplace.open({ run = "p5", scene = "desk-4", target = { fp = {}, slot = 3 }, existing = "move", layout = "tiled",
+  windows = { { class = "org.example.Video", order = 1, rect = { 0, 0, 1, 1 }, floating = false, fullscreen = 1,
+    mode = "launch", launch = { "video" } } } })
+fake.advance(3000)
+eq(tvid.workspace.id, 3, "full run on a tiled desktop: moved")
+eq(count("window.resize"), 0, "tiled: no rect")
+eq(tvid.fullscreen, 1, "tiled: maximized")
+close(tvid)
+-- a run that is not full never maximizes
+eq(count("window.fullscreen"), 1, "only the full window was maximized")
+
+-- re-place after an "Update plan" swap (D24): every window place_only, so open windows move and nothing starts
+reset()
+fake.exec_log = {}
+local sed = new_window("org.example.Editor", 12, { floating = true, tags = { FLOAT }, monitor = ext })
+_G.omaplace.open({ run = "p6", scene = "desk-2", target = { fp = { identity = "Example Corp EX27" }, slot = 2 },
+  existing = "move", layout = "floating", expiry_s = 1, windows = {
+    { class = "org.example.Chat", order = 1, rect = { 0, 0, 0.5, 1 }, mode = "place_only" },
+    { class = "org.example.Editor", order = 2, rect = { 0.5, 0, 0.5, 1 }, mode = "place_only" } } })
+fake.advance(3000)
+eq(#fake.exec_log, 0, "place_only: nothing launched")
+eq(sed.at.x, 3000, "place_only: the open Editor moved to the right half")
+eq(_G.omaplace.status().state, "partial", "the closed Chat is reported, not started")
+close(sed)
+
 -- a file reload (same Lua state) with a bad plans.lua: the plans kept still have their subscriptions
 write(state .. "/plans.lua", "return { plans = ")
 load()

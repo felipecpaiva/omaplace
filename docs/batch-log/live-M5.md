@@ -25,3 +25,34 @@ so the toggle fallback was used.
 2. "Update plan" is often `not_possible`: a zone move onto a zone another window holds (no swap), and a desktop move out
    of a plan with several windows onto a desktop with no plan. The button is offered anyway.
 3. Open all of a `full` plan places by rect only; the maximize dispatch is only in the snap path.
+
+## Fixes (2026-11-21, not yet checked live)
+
+1. **New `scenes.toml` not seen** (finding 1). `Service.rescanScenes()` reads `scenes.toml` again (`writePlans`, which
+   writes `plans.lua` and reloads Lua only when the plans changed) and re-arms the watch. It runs at the start and end
+   of every request (`begin`, `finish`) and on every settings window open. No folder watch: Quickshell.Io has none
+   (checked its qmltypes: FileView, Process, Socket, IpcHandler, ...), and `Qt.labs.folderlistmodel` would add a module
+   and fire on our own `.bak` writes. No polling. A hand-made first file is
+   therefore picked up by the next command or settings open, not instantly.
+2. **"Update plan" not_possible** (finding 2, D24). `PlanMoves.edit`:
+   - zone move onto a held zone: the two windows swap zones and rects; the answer carries `replace`, and the service
+     then opens the plan with every window `place_only` and a 1 s expiry (Lua's existing mode: open windows move,
+     nothing starts, closed ones end the run `partial`). That run sends no summary notification (the CLI already said
+     "plan updated"), and like every run it ends with the view on the plan's desktop, where a zone move happens anyway.
+   - zone move outside every zone: the plan becomes `free`, each window keeps its zone rect, the moved one the move's rect.
+   - zone move in a `free` plan: the new rect is stored (Lua reports zone drift for any placed floating window).
+   - desktop move out of a many-window plan onto a desktop with no plan: the window leaves its plan, a new `free` plan
+     (`Desktops.newSceneName`, `open_at_login` false, home monitor "" when the old plan had "") holds it at the move's
+     rect, or `[0, 0, 1, 1]` for a tiled window. A plan with home monitor "" on the target slot now counts as that
+     desktop's plan (the window joins it).
+   - still `not_possible`: twins (class and context twice), `full` receiving a second window, and, as D24 says "as
+     before", a join into a zone plan where the zone is taken or missing, a single-window plan onto a desktop that has a
+     plan, a zone move without a rect, a zone move in a tiled or scrolling plan (Lua never reports those).
+3. **Open all of a `full` plan not maximized** (finding 3). The run now carries `fullscreen` per window into its slot
+   info and, after placing (or on a tiled desktop, instead of placing), dispatches
+   `hl.dsp.window.fullscreen({ mode = "maximized", action = "set" })` like the snap path.
+
+Tests: `tests/plan_moves.test.mjs` (swap, free conversion, free-plan rect, new plan, "" monitor, names),
+`lua/tests/test_glue_plans.lua` (full run on a floating and a tiled desktop, place_only re-place launches nothing).
+`bash tests/run-all.sh`: 46 run, 0 failed, 3 skipped (luacheck, stylua, shellcheck not installed). Scrub ok.
+Still to check live: a swap re-place, and the full Open all reaching fullscreen state 1.

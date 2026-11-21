@@ -467,10 +467,22 @@ local function apply(run, s, w, fresh)
     if not run.live then return settled(run) end
     local now_w = Place.find(address)
     if not now_w then return settled(run, s.n, false, "gone") end
+    -- a `full` plan window: maximized after placing, like a snap (fullscreen state 1 keeps the bar, S11)
+    local function maximize(x)
+      if info.fullscreen and x then
+        hl.dispatch(hl.dsp.window.fullscreen({ mode = "maximized", action = "set", window = Place.sel(x) }))
+      end
+    end
     -- not floating there (a tiled desktop): no rect, and that is not an error (D13)
-    if not (now_w.floating and (info.float_target or has_tag(now_w, M.FLOAT_TAG))) then return settled(run) end
+    if not (now_w.floating and (info.float_target or has_tag(now_w, M.FLOAT_TAG))) then
+      maximize(now_w)
+      return settled(run)
+    end
     local area = Geometry.usable(info.target.mon)
-    Place.put(now_w, Geometry.place_frac(area, info.rect), function(ok, reason) settled(run, s.n, ok, reason) end)
+    Place.put(now_w, Geometry.place_frac(area, info.rect), function(ok, reason)
+      maximize(Place.find(address))
+      settled(run, s.n, ok, reason)
+    end)
   end
   -- a raise must not leave the run waiting for a put that never ends
   local function put_now()
@@ -628,7 +640,7 @@ local function start_run(plan)
   end
   for i, w in ipairs(plan.windows) do
     local t = type(w) == "table" and target_of(w) or nil -- plain table: a plan window
-    run.info[i] = { target = t, launch = w.launch, rect = valid_rect(w.rect),
+    run.info[i] = { target = t, launch = w.launch, rect = valid_rect(w.rect), fullscreen = w.fullscreen == 1,
       float_target = t ~= nil and layout == "floating" and (main == nil or t.ws == main.ws) }
     if not t and book.slots[i].state ~= "skipped" then Tickets.fail(book, i, "no_monitor") end
   end

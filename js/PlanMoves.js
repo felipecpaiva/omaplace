@@ -2,6 +2,7 @@
 .import "Zones.js" as Zones
 .import "Plan.js" as Plan
 .import "SceneStore.js" as SceneStore
+.import "Desktops.js" as Desktops
 // Hand moves of planned windows (design D21, D23, 14.8): read plan-moves.json and turn a move into a
 // scene edit for "Update plan". Pure: text and docs in, no files, no clock. Rects are fractions of the usable area,
 // like scene rects.
@@ -70,8 +71,20 @@ function joinPlan(target, win, to) {
   return null
 }
 
-// The scene edit for "Update plan" (design 14.8). doc is a SceneStore doc and is never changed.
-// Returns { doc, changed } (changed false: the plan already says so) or { code: "not_found" | "not_possible", reason }.
+// A zone plan becomes free (D24): every window keeps the rect it has now (its zone's), `moved` the move's rect.
+function toFree(scene, moved, rect) {
+  for (const w of scene.windows) {
+    w.rect = Plan.zoneRect(scene.layout, w.zone).rect || (rectOk(w.rect) ? w.rect : [0, 0, 1, 1]) // where the opener put it
+    delete w.zone
+    w.floating = true
+  }
+  moved.rect = rect.slice()
+  scene.layout = "free"
+}
+
+// The scene edit for "Update plan" (design 14.8, D24). doc is a SceneStore doc and is never changed.
+// Returns { doc, changed (false: the plan already says so), replace? (true: place the plan's open windows again),
+// created? (the name of a new plan) } or { code: "not_found" | "not_possible", reason }.
 function edit(scenesDoc, m) {
   if (!valid(m)) return no("not_possible", "the move is not readable")
   const doc = JSON.parse(JSON.stringify(scenesDoc))
@@ -79,15 +92,26 @@ function edit(scenesDoc, m) {
   if (!scene || scene.plan !== true) return no("not_found", "plan " + m.scene + " is gone")
   const win = scene.windows[m.window - 1]
   if (!win || win.class !== m.class || (win.context || "") !== (m.context || "")) return no("not_found", "plan " + m.scene + " changed since the move")
+  const out = { doc, changed: true }
   if (m.kind === "zone") {
-    if (!isZoneLayout(scene.layout)) return no("not_possible", "layout " + scene.layout + " has no zones")
-    const z = zoneAt(scene.layout, m.to.rect)
-    // shortcut: outside every zone the plan would switch to free after a confirm (design 14.8), not built in WP12
-    if (z === 0) return no("not_possible", "the window is outside every zone")
-    if (z === win.zone) return { doc, changed: false }
-    const other = scene.windows.find((w) => w !== win && w.zone === z)
-    if (other) return no("not_possible", "zone " + z + " already holds " + other.class)
-    setZone(win, scene.layout, z)
+    // Lua reports zone moves only of floating windows, which always have a rect
+    if (!rectOk(m.to.rect)) return no("not_possible", "the move has no place")
+    if (scene.layout === "free") {
+      if (JSON.stringify(win.rect) === JSON.stringify(m.to.rect)) return { doc, changed: false }
+      win.rect = m.to.rect.slice()
+    } else if (!isZoneLayout(scene.layout)) {
+      return no("not_possible", "layout " + scene.layout + " has no zones")
+    } else {
+      const z = zoneAt(scene.layout, m.to.rect)
+      if (z === 0) toFree(scene, win, m.to.rect)
+      else if (z === win.zone) return { doc, changed: false }
+      else {
+        const other = scene.windows.find((w) => w !== win && w.zone === z)
+        // swap: the other window goes to the moved one's old zone, and a re-place moves it there
+        if (other) { setZone(other, scene.layout, win.zone); out.replace = true }
+        setZone(win, scene.layout, z)
+      }
+    }
   } else {
     // An empty home_monitor means the focused monitor. The move does not say which monitor had the focus, so such a
     // plan keeps "" and only its slot changes.
@@ -99,15 +123,29 @@ function edit(scenesDoc, m) {
       if (!anyMonitor) scene.home_monitor = m.to.identity
       scene.home_slot = m.to.slot
     } else {
-      const name = Object.keys(doc.scenes).find((n) => doc.scenes[n].plan === true && (doc.scenes[n].home_monitor || "") === m.to.identity && doc.scenes[n].home_slot === m.to.slot)
-      if (!name) return no("not_possible", "no plan on desktop " + m.to.slot + " of that monitor")
+      // a plan on the focused monitor ("") is that desktop's plan too
+      const name = Object.keys(doc.scenes).find((n) => doc.scenes[n].plan === true && ["", m.to.identity].indexOf(doc.scenes[n].home_monitor || "") !== -1 && doc.scenes[n].home_slot === m.to.slot)
       scene.windows.splice(m.window - 1, 1)
-      const why = joinPlan(doc.scenes[name], win, m.to)
-      if (why) return no("not_possible", why)
+      if (name) {
+        const why = joinPlan(doc.scenes[name], win, m.to)
+        if (why) return no("not_possible", why)
+      } else {
+        // no plan there (D24): a new free plan holds the window where it is now
+        const identity = anyMonitor ? "" : m.to.identity
+        const created = Desktops.newSceneName(identity, m.to.slot, doc.scenes)
+        if (created === "") return no("not_possible", "no free scene name for desktop " + m.to.slot)
+        delete win.zone
+        win.rect = rectOk(m.to.rect) ? m.to.rect.slice() : [0, 0, 1, 1]
+        win.floating = true
+        win.order = 1
+        doc.scenes[created] = Desktops.newPlan(identity, m.to.slot, "free")
+        doc.scenes[created].windows.push(win)
+        out.created = created
+      }
     }
   }
   // Any plan the edit makes invalid (a used zone, two plans on one desktop, full with two windows) refuses the edit.
   const before = SceneStore.planProblems(scenesDoc.scenes), problems = SceneStore.planProblems(doc.scenes)
   for (const n of Object.keys(problems)) if (!before[n]) return no("not_possible", "plan " + n + " would be invalid: " + problems[n])
-  return { doc, changed: true }
+  return out
 }
