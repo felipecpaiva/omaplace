@@ -7,4 +7,4 @@ Private for now. App placement rules, scenes and session restore for Omarchy, wi
 - Keep named scenes for the desktops you use often. Open one again in one step.
 - Restore the whole session after a reboot.
 
-Status: **design** (2026-11-21). Docs only, no code yet. Start at [docs/design.md](docs/design.md); research in [docs/research/](docs/research/00-summary.md).
+Status: **design** (2026-11-21). Goals and today's plan: [docs/goals.md](docs/goals.md). How it is built: [docs/design.md](docs/design.md); research in [docs/research/](docs/research/00-summary.md).
