@@ -86,6 +86,8 @@ run rule remove editor
 check "rule remove maps to ruleRemove" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace ruleRemove editor")"
 run restore
 check "restore always passes one argument" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace restore ")"
+run restore 2
+check "restore 2 passes the generation" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace restore 2")"
 run settings
 check "settings exits 0" "$(is "$code" 0)"
 

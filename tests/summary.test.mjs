@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 const load = (f) => readFileSync(new URL("../js/" + f, import.meta.url), "utf8").replace(".pragma library", "")
-const S = new Function(load("Summary.js") + "; return { validName, answer, parseJson, fromUrl, entryList, appIdOf, isTerminal, joinArgs, terminalFields, sceneCapture, layoutOf, planTarget, runResult, notifyText, ruleFromCapture, sceneList }")()
+const S = new Function(load("Summary.js") + "; return { validName, answer, parseJson, fromUrl, entryList, appIdOf, isTerminal, joinArgs, terminalFields, sceneCapture, layoutOf, planTarget, runResult, notifyText, ruleFromCapture, sceneList, instanceName, pickSession }")()
 const A = new Function(load("AppResolve.js") + "; return { resolve, defaultStrategies }")()
 const F = new Function(load("ArgFilter.js") + "; return { filter }")()
 
@@ -131,4 +131,27 @@ test("sceneList gives names and window counts", () => {
   assert.deepEqual(S.sceneList({ scenes: { work: { windows: [{}, {}] }, play: { windows: [] } } }),
     [{ name: "work", windows: 2 }, { name: "play", windows: 0 }])
   assert.deepEqual(S.sceneList(null), [])
+})
+
+const index = [{ instance: "abc_1", saved_at: 30 }, { instance: "abc_2", saved_at: 20 }, { instance: "abc_3", saved_at: 10 }]
+
+test("instanceName matches the Lua rule", () => {
+  assert.equal(S.instanceName("a1b2_3-4.5"), "a1b2_3_4_5")
+  assert.equal(S.instanceName("x".repeat(200)).length, 128)
+})
+
+test("pickSession skips the current instance and counts previous ones", () => {
+  assert.equal(S.pickSession(index, "abc_1", ""), "abc_2")
+  assert.equal(S.pickSession(index, "abc_1", "previous"), "abc_2")
+  assert.equal(S.pickSession(index, "abc_1", "1"), "abc_2")
+  assert.equal(S.pickSession(index, "abc_1", "2"), "abc_3")
+  assert.equal(S.pickSession(index, "abc_1", "3"), "")
+  assert.equal(S.pickSession(index, "abc_1", "abc_3"), "abc_3")
+  assert.equal(S.pickSession(index, "abc_1", "../x"), "")
+})
+
+test("pickSession answers empty for no index, a bad index or only the current instance", () => {
+  assert.equal(S.pickSession(null, "abc_1", ""), "")
+  assert.equal(S.pickSession({ a: 1 }, "abc_1", ""), "")
+  assert.equal(S.pickSession([{ instance: "abc_1" }, null, { saved_at: 1 }], "abc_1", ""), "")
 })

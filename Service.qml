@@ -24,6 +24,7 @@ Item {
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string runtimeDir: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omaplace"
   readonly property string configDir: root.home + "/.config/omaplace"
+  readonly property string stateDir: root.home + "/.local/state/omaplace"
   readonly property string procinfoPath: Summary.fromUrl(Qt.resolvedUrl("libexec/procinfo.sh"))
 
   property int counter: 0
@@ -41,7 +42,7 @@ Item {
 
     function save(name: string): string { return root.startSave(name) }
     function open(name: string): string { return root.startOpen(name) }
-    function restore(gen: string): string { return Summary.answer({ ok: false, code: "not_yet" }) }
+    function restore(gen: string): string { return root.startRestore(gen) }
     function list(): string { return root.listScenes() }
     function rename(fromName: string, toName: string): string { return root.renameScene(fromName, toName) }
     function remove(name: string): string { return root.removeScene(name) }
@@ -174,6 +175,27 @@ Item {
     return root.begin("open", { name: name, scene: scene })
   }
 
+  // Restore (design 6.5): one session plan; Lua sends each window to its own monitor and desktop. The rest of the flow is open's.
+  function startRestore(gen) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    try {
+      let current = Summary.instanceName(Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "")
+      let instance = Summary.pickSession(Summary.parseJson(root.readNow(sessionsFile)), current, String(gen || ""))
+      if (instance === "") return Summary.answer(root.fail("not_found", "no previous session"))
+      sessionFile.path = root.stateDir + "/session-" + instance + ".json"
+      let snap = Summary.parseJson(root.readNow(sessionFile))
+      if (!snap || !Array.isArray(snap.windows) || snap.windows.length === 0) return Summary.answer(root.fail("not_found", "that session has no windows"))
+      return root.begin("open", { name: "last session", snapshot: snap })
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  function launchesFor(wins, cfg) {
+    let table = root.strategies(cfg), list = root.entries()
+    return wins.map(function (w) {
+      return AppResolve.resolve(w.class, list, table, { context: w.context, folder: w.folder, launch: w.launch, home: root.home })
+    })
+  }
+
   function step() {
     let r = root.req
     if (!r) return
@@ -191,12 +213,10 @@ Item {
     let r = root.req
     try {
       let cfg = root.config()
-      let table = root.strategies(cfg), list = root.entries()
-      let launches = r.scene.windows.map(function (w) {
-        return AppResolve.resolve(w.class, list, table, { context: w.context, folder: w.folder, launch: w.launch, home: root.home })
-      })
       r.run = "r" + root.counter + "-" + Date.now()
-      let plan = Plan.fromScene(r.scene, launches, Summary.planTarget(r.scene, r.run, cfg.settings.expiry_seconds), cfg.rules)
+      let plan = r.snapshot
+        ? Plan.fromSession(r.snapshot, root.launchesFor(r.snapshot.windows, cfg), { run: r.run, expiry_s: cfg.settings.expiry_seconds })
+        : Plan.fromScene(r.scene, root.launchesFor(r.scene.windows, cfg), Summary.planTarget(r.scene, r.run, cfg.settings.expiry_seconds), cfg.rules)
       r.planPath = root.runtimeDir + "/plan-" + r.run + ".lua"
       planFile.path = r.planPath
       planFile.setText("return " + LuaLiteral.encode(plan) + "\n")
@@ -372,6 +392,8 @@ Item {
   FileView { id: bakScenes; path: root.configDir + "/scenes.toml.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write scenes.toml.bak" }
   FileView { id: configFile; path: root.configDir + "/config.toml"; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write config.toml" }
   FileView { id: bakConfig; path: root.configDir + "/config.toml.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write config.toml.bak" }
+  FileView { id: sessionsFile; path: root.stateDir + "/sessions.json"; blockLoading: true; printErrors: false }
+  FileView { id: sessionFile; blockLoading: true; printErrors: false }
   FileView {
     id: statusFile
     path: root.runtimeDir + "/status.json"

@@ -167,3 +167,16 @@ function ruleFromCapture(capture, cls) {
 function sceneList(doc) {
   return Object.keys((doc && doc.scenes) || {}).map((name) => ({ name, windows: listOf(doc.scenes[name].windows).length }))
 }
+
+// Same rule as lua/omaplace.lua: every character outside [A-Za-z0-9_] becomes "_", cut to 128.
+function instanceName(sig) { return String(sig).replace(/[^A-Za-z0-9_]/g, "_").slice(0, 128) }
+
+// index: sessions.json (newest first, [{instance, saved_at}]). gen "" or "previous" is the newest instance that is not
+// `current`; "1", "2" count the same previous ones; anything else must be an instance name. Returns "" when none fits.
+function pickSession(index, current, gen) {
+  const names = listOf(index).map((e) => (e && typeof e.instance === "string" ? e.instance : "")).filter((n) => n !== "")
+  const before = names.filter((n) => n !== current)
+  if (gen === "" || gen === "previous") return before[0] || ""
+  if (/^[0-9]+$/.test(gen)) return before[Number(gen) - 1] || ""
+  return names.indexOf(gen) === -1 ? "" : gen
+}
