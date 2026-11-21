@@ -1,0 +1,6 @@
+# made-up config for the app memory glue test: no session timer, one rule
+session = "off"
+
+[rule.notes]
+app = "org.example.Notes"
+slot = 2

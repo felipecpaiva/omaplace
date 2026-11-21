@@ -2,7 +2,8 @@
 -- calls hl, and the only one that reads or writes files.
 -- Load:  pcall(dofile, <plugin folder>/lua/omaplace.lua)   Settings: ~/.config/omaplace/config.toml
 -- Idle cost: no timer is armed until a monitor event arrives, and then only one one-shot (500 ms debounce). A scene
--- run arms one-shot timers only while it is live; window.open returns at once when no run is live.
+-- run arms one-shot timers only while it is live. With no run live, window.open only looks the class up in app
+-- memory (F5) and arms one settle timer when it places a remembered floating window.
 -- A re-armed debounce switches the old timer off (HL.Timer:set_enabled) and also bumps a generation number, so a
 -- timer that fires anyway does nothing.
 local M = { version = "0.1.0" }
@@ -19,6 +20,7 @@ local Json = dofile(dir .. "/json.lua")
 local Shellquote = dofile(dir .. "/shellquote.lua")
 local Geometry = dofile(dir .. "/geometry.lua")
 local Policy = dofile(dir .. "/sessionpolicy.lua")
+local Memory = dofile(dir .. "/memory.lua")
 
 M.debounce_ms = 500
 M.applied = {} -- spec names declared so far, so a vanished rule can be switched off
@@ -34,11 +36,16 @@ if old_m and type(old_m.applied) == "table" then M.applied = old_m.applied end
 if old_m then
   for _, sub in ipairs(old_m.subs or {}) do pcall(sub.remove, sub) end
   for _, sub in ipairs(old_m.session_subs or {}) do pcall(sub.remove, sub) end
+  for _, sub in ipairs(old_m.memory_subs or {}) do pcall(sub.remove, sub) end
   if old_m.timer then pcall(old_m.timer.set_enabled, old_m.timer, false) end
   if old_m.session_timer then pcall(old_m.session_timer.set_enabled, old_m.session_timer, false) end
+  if old_m.memory_timer then pcall(old_m.memory_timer.set_enabled, old_m.memory_timer, false) end
 end
 M.subs = {}
 M.session_subs = {}
+M.memory_subs = {}
+M.memory_moved = {} -- addresses moved to another workspace, read when the memory debounce fires
+M.memory_own = {} -- addresses memory itself just moved: their one move event is not a user's move
 -- a freeze survives a reload of this file (a close-all can come with one)
 M.session_state = old_m and type(old_m.session_state) == "table" and old_m.session_state or Policy.new()
 
@@ -52,6 +59,12 @@ local function read_file(path)
   local text = f:read("a")
   f:close()
   return text
+end
+
+local function state_dir()
+  local home = os.getenv("HOME")
+  if not home or home == "" then return nil end
+  return home .. "/.local/state/omaplace"
 end
 
 local function load_config()
@@ -86,10 +99,12 @@ function M.rebuild()
   return true
 end
 
--- A session failure never stops the rules.
+-- A session or memory failure never stops the rules.
 local function sync_session_safe()
   local ok, err = pcall(function() M.sync_session() end)
   if not ok then log("session setup failed: " .. tostring(err)) end
+  local ok_m, err_m = pcall(function() M.sync_memory() end)
+  if not ok_m then log("memory setup failed: " .. tostring(err_m)) end
 end
 
 function M.reload_config()
@@ -194,6 +209,63 @@ local function later(ms, fn)
   end, { type = "oneshot", timeout = math.max(1, math.floor(ms)) })
 end
 
+-- ---------------------------------------------------------------- app memory, core (F5, design 6.3)
+-- ~/.local/state/omaplace/memory.lua is written only here, through a temp file and a rename.
+
+M.MEMORY_DEBOUNCE_MS = 2000
+M.MEMORY_TAG = "omaplace-slot=memory"
+
+-- app_memory "off" is not in config.lua yet (only scene, last_place, auto); the glue already honours it.
+local function memory_on() return M.memory ~= nil and M.settings.app_memory ~= "off" end
+
+local function load_memory()
+  local d = state_dir()
+  local text = d and read_file(d .. "/memory.lua")
+  if not text then log("app memory: no memory.lua yet, starting empty"); return Memory.new() end
+  local mem, err = Memory.decode(text)
+  if not mem then log("app memory: memory.lua not used (" .. tostring(err) .. "), starting empty"); return Memory.new() end
+  return mem
+end
+
+local function save_memory()
+  local d = state_dir()
+  if not d or not M.memory then return end
+  local text, err = Memory.encode(M.memory)
+  if not text then log("memory encode failed: " .. tostring(err)); return end
+  write_in(d, "memory.lua", text)
+end
+
+-- One window's place the way a snapshot sees it (special workspaces, minimized and ignored classes give nil).
+local function place_of(w)
+  local live = hl.get_monitors()
+  local slots = Slots.with(rawget(_G, "o"))
+  local snap = Capture.snapshot({ w }, live, {
+    slot_of = slots.slot_of, is_floating = function() return has_tag(w, M.FLOAT_TAG) end,
+    fingerprint = Monitors.fingerprint, usable = Geometry.usable, ignore = Capture.ignore_set(M.settings.ignore),
+    scope = "all",
+  })
+  local p = snap.windows[1]
+  if not p or p.minimized then return nil end
+  p.fp = snap.monitors[p.monitor + 1].fp
+  return p
+end
+
+-- How many other windows of `class` are open (the event's own window is left out by address).
+local function others_of(class, address)
+  local n = 0
+  for _, x in ipairs(hl.get_windows()) do
+    if x.initial_class == class and x.address ~= address then n = n + 1 end
+  end
+  return n
+end
+
+local function remember(kind, w)
+  local p = place_of(w)
+  if not p then return false end
+  p.kind, p.others = kind, others_of(p.class, w.address)
+  return Memory.update(M.memory, p, M.settings.app_memory, os.time())
+end
+
 -- The live desktops as a snapshot (design 5.5). scope "focused" or "all".
 local function snapshot_of(scope, kind)
   local live, wins = hl.get_monitors(), hl.get_windows()
@@ -289,6 +361,23 @@ local function conclude(run)
     if s.state == "claimed" then placed = placed + 1 else missed[#missed + 1] = s.class .. " " .. s.state end
   end
   run.state = (#missed == 0 and not run.forced) and "done" or "partial"
+  if memory_on() then
+    local ok_m, err_m = pcall(function()
+      local changed = false
+      for _, s in ipairs(run.book.slots) do
+        local info = run.info[s.n]
+        local w = s.state == "claimed" and info.address and Place.find(info.address)
+        local p = w and place_of(w)
+        if p then
+          p.kind, p.class, p.context = "placed", s.class, s.context ~= "" and s.context or nil
+          if info.rect and p.floating then p.rect = info.rect end -- the scene's own fractions, not a rounded read back
+          changed = Memory.update(M.memory, p, M.settings.app_memory, os.time()) or changed
+        end
+      end
+      if changed then save_memory() end
+    end)
+    if not ok_m then log("memory update failed: " .. tostring(err_m)) end
+  end
   write_status(run)
   log(string.format("run %s %s: %d placed%s", run.id, run.state, placed,
     #missed > 0 and (", not placed: " .. table.concat(missed, ", ")) or ""))
@@ -566,12 +655,110 @@ function M.open_file(path)
   return M.open(plan)
 end
 
--- A new window: only looked at while a run is live.
+-- ---------------------------------------------------------------- app memory, events (F5, design 6.3)
+
+-- An enabled placement rule for this class (rules match initial_class only, so context plays no part).
+local function has_rule(cls)
+  for name, rule in pairs(M.rules) do
+    if rule.app == cls and M.enabled["omaplace-rule-" .. name] then return true end -- rules.lua's spec name
+  end
+  return false
+end
+
+-- A window opened by hand while no run is live goes to its remembered place when it is the first window of its
+-- class, not on a special workspace. A rule's desktop wins (D9); the rect only on a floating desktop (D13).
+local function place_from_memory(w)
+  if not memory_on() then return end
+  local cls = w.initial_class or ""
+  if cls == "" then return end
+  local entry = Memory.lookup(M.memory, cls, Capture.context_of(w))
+  if not entry then return end
+  local ws = w.workspace
+  if not ws or (ws.id or 0) < 0 or (ws.name or ""):sub(1, 8) == "special:" then return end
+  if others_of(cls, w.address) > 0 then return end
+  local mon = Monitors.resolve(entry.fp, hl.get_monitors(), M.settings.missing_monitor_scene)
+  local target = mon and Slots.with(rawget(_G, "o")).workspace_id(mon, entry.slot)
+  if not target then return end
+  if has_rule(cls) then
+    if target ~= ws.id then return end -- the rule put it on another desktop: leave it there, no rect
+  else
+    -- set before the move (its event can come during the dispatch): a long settle_ms would let the debounce read
+    -- the window before the put and overwrite the rect
+    if ws.id ~= target and #M.memory_subs > 0 then M.memory_own[w.address] = true end
+    Place.to_workspace(w, target, true)
+  end
+  tag(w, "+" .. M.MEMORY_TAG)
+  if not (entry.floating and entry.rect) then return end
+  local address, rect = w.address, entry.rect
+  -- Omarchy re-arranges a moved window about 1 s later, and a new app may still resize itself: wait (settle_ms).
+  later(M.settings.settle_ms, function()
+    local now_w = Place.find(address)
+    if not (now_w and now_w.floating and has_tag(now_w, M.FLOAT_TAG)) then return end
+    Place.put(now_w, Geometry.place_frac(Geometry.usable(mon), rect), function(ok, reason)
+      if not ok then log("memory place of " .. cls .. " failed: " .. tostring(reason)) end
+    end)
+  end)
+end
+M.place_from_memory = place_from_memory
+
+-- One debounce for close and move (last_place, auto): a close is read at once (the window is gone later), a move
+-- when the timer fires (after Omarchy re-arranged it). One save per burst.
+local function arm_memory_save()
+  M.memory_gen = (M.memory_gen or 0) + 1
+  local gen = M.memory_gen
+  if M.memory_timer then pcall(M.memory_timer.set_enabled, M.memory_timer, false) end
+  M.memory_timer = later(M.MEMORY_DEBOUNCE_MS, function()
+    if gen ~= M.memory_gen then return end
+    M.memory_timer = nil
+    local changed = M.memory_dirty == true
+    M.memory_dirty = false
+    local moved = M.memory_moved
+    M.memory_moved = {}
+    for address in pairs(moved) do
+      local w = Place.find(address)
+      if w then changed = remember("moved", w) or changed end
+    end
+    if changed then save_memory() end
+  end)
+end
+
+function M.on_memory_event(event, w)
+  local tw = type(w)
+  if not memory_on() or (tw ~= "table" and tw ~= "userdata") then return end
+  if event == "window.close" then
+    if w.address then M.memory_own[w.address] = nil end
+    if remember("closed", w) then M.memory_dirty = true; arm_memory_save() end
+  elseif w.address and M.memory_own[w.address] then
+    M.memory_own[w.address] = nil
+  elseif not (M.run and M.run.live) and w.address then -- a run's own moves are recorded when it ends
+    M.memory_moved[w.address] = true
+    arm_memory_save()
+  end
+end
+
+-- Subscribe to close and move only in the modes that record them (at load and on reload_config).
+function M.sync_memory()
+  local on = M.settings.app_memory == "last_place" or M.settings.app_memory == "auto"
+  if on == (#M.memory_subs > 0) then return end
+  for _, sub in ipairs(M.memory_subs) do pcall(sub.remove, sub) end
+  M.memory_subs = {}
+  if not on then return end
+  for _, event in ipairs({ "window.close", "window.move_to_workspace" }) do
+    local sub = hl.on(event, function(w)
+      local handled, e = pcall(function() _G.omaplace._m.on_memory_event(event, w) end)
+      if not handled then log(event .. " memory handler failed: " .. tostring(e)) end
+    end)
+    if sub then M.memory_subs[#M.memory_subs + 1] = sub end
+  end
+end
+
+-- A new window: claimed by a live run, or else placed from app memory.
 function M.on_window_open(w)
   local run = M.run
   -- Hyprland hands windows over as userdata (HL.Window), the tests as tables: accept both, nothing else.
   local tw = type(w)
-  if not (run and run.live) or (tw ~= "table" and tw ~= "userdata") then return end
+  if tw ~= "table" and tw ~= "userdata" then return end
+  if not (run and run.live) then return place_from_memory(w) end
   local mine = M.SLOT_PREFIX .. run.id .. "/"
   for _, t in ipairs(Capture.tags_of(w)) do
     if t:sub(1, #mine) == mine then return end -- already claimed by this run
@@ -608,12 +795,6 @@ end
 -- ---------------------------------------------------------------- session snapshots (design 6.4)
 -- One file per Hyprland instance, so a new boot never overwrites the previous boot's last session. sessions.json
 -- lists the instances newest first (Lua cannot list a folder), and only this file writes either.
-
-local function state_dir()
-  local home = os.getenv("HOME")
-  if not home or home == "" then return nil end
-  return home .. "/.local/state/omaplace"
-end
 
 local warned_instance = false
 local function instance()
@@ -727,6 +908,13 @@ _G.omaplace = { version = M.version, reload_config = M.reload_config, status = M
 ensure_dir()
 make_dir(state_dir())
 interrupt_stale(old_m)
+-- A reload keeps the memory in this Lua state (it can be newer than the file); a save the old timer still owed is done now.
+if old_m and type(old_m.memory) == "table" then
+  M.memory = old_m.memory
+  if old_m.memory_timer then save_memory() end
+else
+  M.memory = load_memory()
+end
 
 local ok, err = pcall(function() load_config(); sync_session_safe(); assert(M.rebuild()) end)
 if not ok then log("load failed: " .. tostring(err)) end
