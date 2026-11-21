@@ -1,0 +1,14 @@
+future_setting = "hello"
+future_number = 7
+session = "off"
+
+[rule.editor]
+app = "org.example.Editor"
+color = "red"
+
+[strategy.one]
+match = "org.example.One"
+flavor = 2
+
+[mystery]
+a = true

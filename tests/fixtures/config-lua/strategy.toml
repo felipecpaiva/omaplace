@@ -1,0 +1,9 @@
+[strategy.browser]
+match = "org.example.Browser"
+use = "context"
+launch_context = "org.example.Browser --profile={context}"
+context = "work"
+
+[strategy.keeper]
+match = "org.example.Keeper"
+use = "place_only"

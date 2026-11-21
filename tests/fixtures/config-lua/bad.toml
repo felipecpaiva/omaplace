@@ -1,0 +1,24 @@
+expiry_seconds = "soon"
+settle_ms = -5
+launch_tick_ms = 1.5
+session = "maybe"
+session_keep = 0
+tiled_order = "yes"
+ignore = 12
+this line is nonsense
+app_memory = 0x10
+
+[rule.editor]
+app = "org.example.Editor"
+slot = 11
+follow = "no"
+
+[rule.empty]
+slot = 3
+
+[rule.bad name]
+app = "x"
+
+[strategy.odd]
+match = "org.example.*"
+use = "teleport"

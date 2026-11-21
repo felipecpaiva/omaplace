@@ -1,0 +1,17 @@
+# every setting, all valid, made up
+schema = 1
+missing_monitor_scene = "skip"
+missing_monitor_rule = "focused"
+existing_default = "new"
+expiry_seconds = 30
+settle_ms = 900
+launch_tick_ms = 200
+session = "off"
+session_debounce_s = 10
+session_keep = 3
+request_timeout_s = 90
+restore_at_login = "ask"
+app_memory = "last_place"
+context_quiet_ms = 1500
+tiled_order = false
+ignore = "org.example.Skipme, org.example.Other"  # trailing comment

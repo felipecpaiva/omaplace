@@ -1,0 +1,10 @@
+[rule.editor]
+app = "org.example.Editor"      # matched against initialClass
+monitor = "Example Corp EX27 #1" # identity, a # inside quotes is kept
+slot = 3
+follow = true
+
+[rule.chat]
+app = "org.example.Chat"
+slot = 10
+enabled = false
