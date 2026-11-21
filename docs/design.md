@@ -245,7 +245,7 @@ classDiagram
 | `lua/geometry.lua` | Rect math, fractions of the usable area. Header names the omagnet commit it was copied from | Diverge from omagnet without the parity test failing |
 | `lua/monitors.lua` | Fingerprint a monitor, resolve a fingerprint to a live monitor with a named fallback step | Read Omarchy state files |
 | `lua/slots.lua` | The only code that knows Omarchy's workspace model | Be called with a global id as if it were a slot |
-| `lua/capture.lua` | Turn live windows and monitors into a snapshot (class, rect fraction, slot, flags) | Store titles, pids, addresses |
+| `lua/capture.lua` | Turn live windows and monitors into a snapshot (class, rect fraction, left-to-right order, slot, flags) | Store titles, pids, addresses |
 | `lua/rules.lua` | Turn config rules plus live monitors into named rule specs (enabled or disabled); a class in `suppressed` gets its rule disabled | Call `hl.window_rule` itself |
 | `lua/shellquote.lua` | Turn a plan argv into one safely single-quoted command string for `hl.exec_cmd` (typed fields included) | Pass any string unquoted |
 | `lua/tickets.lua` | Match new windows to waiting slots by class, in order, with expiry | Use title, pid or address as identity |
@@ -313,7 +313,8 @@ saved_on = "Example Corp EX27 #1"
 [scene.work.window.1]
 app = "org.example.Editor"   # desktop entry id, from AppResolve at capture
 class = "org.example.Editor" # initialClass, the match key
-rect = "0 0 0.5 1"           # x y w h fractions of the usable area
+rect = "0 0 0.5 1"           # x y w h fractions of the usable area (used on floating workspaces)
+order = 1                    # left-to-right rank (used on tiled and scrolling workspaces)
 floating = true
 launch = ""                  # typed by the user only
 folder = ""                  # typed by the user only
@@ -323,12 +324,18 @@ folder = ""                  # typed by the user only
 
 ```lua
 { run = "r-20261121-1", target = { fp = {...}, slot = 0 }, existing = "move", expiry_s = 20,
+  layout = "floating",   -- floating: place rects; tiled or scrolling: sequential, in order, no rects
   windows = {
-    { class = "org.example.Editor", rect = {0, 0, 0.5, 1}, floating = true,
+    { class = "org.example.Editor", order = 1, rect = {0, 0, 0.5, 1}, floating = true,
       launch = { "uwsm-app", "--", "org.example.Editor.desktop" }, mode = "launch" },
-    { class = "chromium", rect = {0.5, 0, 0.5, 1}, floating = true, mode = "place_only" },
+    { class = "chromium", order = 2, rect = {0.5, 0, 0.5, 1}, floating = true, mode = "place_only" },
   } }
 ```
+
+`order` is the left-to-right rank at capture (by `x`, then `y`), saved for every window. On a floating target the run may
+launch in parallel ticks and place by rect. On a tiled or scrolling target (`layout` from Omarchy's workspace mode) the run
+is sequential: the next window is launched or moved only after the previous one is claimed or expired, so tiling inserts
+them in saved order. Rects are ignored there.
 
 `mode`: `launch` (start it if no window to move), `place_only` (never start; apps that restore themselves),
 `skip` (unresolved app, reported). `launch` is always an argv array; Lua joins it with `shellquote.join` (every element
@@ -339,7 +346,7 @@ single quoted, `'` written as `'\''`) because `hl.exec_cmd` takes one string.
 ```json
 { "schema": 1, "kind": "session", "saved_at": 1763700000, "mode": "per_monitor",
   "monitors": [ { "fp": { "identity": "Example Corp EX27 #1", "internal": false } } ],
-  "windows": [ { "class": "org.example.Editor", "monitor": 0, "slot": 2, "rect": [0, 0, 0.5, 1],
+  "windows": [ { "class": "org.example.Editor", "monitor": 0, "slot": 2, "order": 1, "rect": [0, 0, 0.5, 1],
                  "floating": true, "fullscreen": 0, "minimized": false } ] }
 ```
 
@@ -426,7 +433,7 @@ sequenceDiagram
   end
   G->>T: tickets.new(remaining windows, now, expiry)
   G->>H: rebuild rules with suppressed = classes that hold a live ticket
-  loop one launch per 150 ms tick
+  loop floating target: one launch per 150 ms tick. Tiled or scrolling target: next window only after the previous is claimed or expired
     G->>H: hl.exec_cmd(launch argv)
   end
   H-->>G: window.open(w)
@@ -538,7 +545,7 @@ Placed windows get `omaplace-slot=<run>/<n>`. It stops a window being claimed tw
 | `session_keep` | 5 (Hyprland instances, not writes) | |
 | `request_timeout_s` | 60 | |
 | `restore_at_login` | `off` | yes |
-| `exact_on_tiled` | `false` (place workspace only on tiled workspaces) | yes |
+| `tiled_order` | `true` (on tiled and scrolling workspaces, open or move windows one at a time in saved order) | |
 | `ignore` | `""` | |
 
 ## 8. Performance budget
@@ -570,12 +577,12 @@ Any work package that adds per-event work records a measurement in `docs/batch-l
 | D10 | Already-open apps are moved, missing ones launched (`existing = move`) | default, unconfirmed |
 | D11 | One `scenes.toml` for all scenes | default, unconfirmed |
 | D12 | Terminal folders and launch lines are typed by the user only | default, unconfirmed |
-| D13 | Workspace placement everywhere; exact rects on floating workspaces only | default, unconfirmed |
+| D13 | Floating workspaces: exact rects. Tiled and scrolling workspaces: no forced rects; restore the apps and keep their left-to-right order by opening or moving them one at a time in saved order | decided (Felipe, 2026-11-21) |
 | D14 | Soft link to omagnet (`fit_shadow`, slot tag) | default, unconfirmed |
-| D15 | Session snapshot and manual restore in this plan as M3; restore at login off | default, unconfirmed |
+| D15 | Session snapshot and manual restore in this plan as M3; restore at login off | decided (Felipe, 2026-11-21) |
 | D16 | Private now; code written public-safe (scrub test from day one) | default, unconfirmed |
 
-## 10. Spikes (live checks, each needs Felipe's OK, one harmless window, no input events)
+## 10. Spikes (live checks, approved by Felipe 2026-11-21 on the condition that each is asked for right before it runs; one harmless window, no input events)
 
 | # | Question | How to check | Gates |
 |---|---|---|---|
@@ -585,6 +592,7 @@ Any work package that adds per-event work records a measurement in `docs/batch-l
 | S4 | Does our dispatch after Omarchy's open rule land the exact rect on a floating workspace? | place one test window | WP4 |
 | S5 | What does `omarchy-shell shell call` print and return for a third-party service? | call a no-op method | WP5 |
 | S6 | Does a menu `action` row with a full path to our CLI run from the Omarchy menu? | add a row in a copy, then restore | WP8 |
+| S8 | On a tiled (dwindle) and a scrolling workspace, do 3 windows opened one at a time keep their left-to-right order? | open 3 test windows in order, read `at` | WP4 |
 | S7 | Two monitors: rule to slot of the second monitor, unplug, replug | needs a real second monitor, never a virtual one | WP2 sign-off |
 
 ## 11. Work packages (for builder sub-agents)
