@@ -121,6 +121,8 @@ function findPlan(scenes, identity, slot, focused) {
 // ---- apps
 
 // Installed apps for the picker, from DesktopEntries values: { value: id, label: name, icon, startupWMClass }, sorted by name.
+const TERMINAL = /^\s*(\S*\/)?(xdg-terminal-exec|alacritty|kitty|ghostty|foot|wezterm|konsole|gnome-terminal)(\s|$)/
+
 function appChoices(values) {
   const out = []
   for (let i = 0; i < (values ? values.length : 0); i++) {
@@ -147,8 +149,6 @@ function appChoices(values) {
   for (const a of out) if (a.startupWMClass !== "") a.shared = byClass[a.startupWMClass.toLowerCase()] - 1
   return out.sort((a, b) => a.label.toLowerCase() < b.label.toLowerCase() ? -1 : a.label.toLowerCase() > b.label.toLowerCase() ? 1 : 0)
 }
-
-const TERMINAL = /^\s*(\S*\/)?(xdg-terminal-exec|alacritty|kitty|ghostty|foot|wezterm|konsole|gnome-terminal)(\s|$)/
 
 // The window class an Exec sets with --app-id or --class, before any -e (after it the flags belong to the program), or "".
 function execClass(exec) {

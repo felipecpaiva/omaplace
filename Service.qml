@@ -55,10 +55,9 @@ Item {
   property string lastAnswer: ""
 
   // Launcher entry (WP6), like omagnet's: written at load, removed at unload, and only ever over a file with our marker.
-  readonly property string launcherSource: Summary.fromUrl(Qt.resolvedUrl("omaplace.desktop"))
+  readonly property string launcherSource: Summary.fromUrl(Qt.resolvedUrl("Service.qml"))
   readonly property string launcherDest: root.home + "/.local/share/applications/omaplace.desktop"
   readonly property string launcherMarker: "X-Omaplace-Managed=true"
-  property bool launcherInstalled: false
 
   // Omarchy menu rows (WP8): written only from the settings window's button, never at load, with a backup first.
   readonly property string menuPath: root.home + "/.config/omarchy/extensions/omarchy-menu.jsonc"
@@ -108,8 +107,7 @@ Item {
   // The folders come first: plans.lua and the login marker are written once mkdirProc is done.
   Component.onCompleted: { let touch = DesktopEntries.applications.values.length; root.installLauncher(); root.markMoves(); root.refreshAuto(); mkdirProc.running = true }
   // find deletes the file only when grep finds the marker line in it: argv only, no shell.
-  Component.onDestruction: {
-    if (root.launcherInstalled)
+  function dropLauncher() {
       Quickshell.execDetached(["find", root.launcherDest, "-maxdepth", "0", "-type", "f", "-exec", "grep", "-qx", root.launcherMarker, "{}", ";", "-delete"])
   }
 
@@ -760,18 +758,11 @@ Item {
   // guards as above (busy, writableScenes, try/catch) and goes through writeConfig (which also tells Lua to reload) or
   // writeScenes (with the .bak first).
 
+  // The launcher entry belongs to the settings app now (D40). The entry older versions installed is removed, only when it
+  // carries our marker line; a file of the user's own is never touched.
   function installLauncher() {
-    if (root.launcherSource === "" || root.home === "") return
-    let want = root.readNow(launcherSourceFile)
-    if (want.indexOf(root.launcherMarker) === -1) return
-    // The icon ships in the plugin folder, so the installed entry names it by full path (no install step outside it).
-    let dir = root.launcherSource.slice(0, root.launcherSource.lastIndexOf("/"))
-    want = want.replace(/^Icon=omaplace$/m, "Icon=" + dir + "/branding/logo/icon-256.png")
-    let have = root.readNow(launcherFile)
-    if (have !== "" && have.indexOf(root.launcherMarker) === -1) return // a file of the user's own: never written over
-    root.launcherInstalled = true
-    // shortcut: FileView does not create ~/.local/share/applications; it exists on Omarchy, add a mkdir if a report says otherwise
-    if (have !== want) launcherFile.setText(want)
+    if (root.home === "") return
+    root.dropLauncher()
   }
 
   // A fresh install has no ~/.config/omaplace until the first slow request; the window calls this when it opens.
@@ -795,7 +786,7 @@ Item {
   }
 
   function modelNow() {
-    return AppSeam.model(root.panelData(), root.desktopCards(), root.appChoices(), root.req !== null, ++root.appSeq)
+    return AppSeam.model(root.panelData(), root.desktopCards(), root.appChoices(), root.liveMonitors, root.req !== null, ++root.appSeq)
   }
 
   function pushModel() {
@@ -851,10 +842,14 @@ Item {
     try {
       let text = root.readNow(configFile)
       let cfg = ConfigIO.parse(text)
-      for (let n in cfg.rules) if (cfg.rules[n].app === app) return Summary.answer(root.fail("failed", "this app has a rule already: " + n))
+      for (let n in cfg.rules) if (cfg.rules[n].app === app || cfg.rules[n].app === Desktops.classOf(app, root.appChoices(), {}).class) return Summary.answer(root.fail("failed", "this app has a rule already: " + n))
       let name = AppSeam.ruleName(app, cfg.rules)
       if (name === "") return Summary.answer(root.fail("failed", "no free rule name"))
-      let err = root.writeConfig(text, ConfigIO.setRule(text, name, { app: app, monitor: monitor, slot: slot, follow: false }))
+      // the picker gives an entry id; the rule needs the window class, found the way a plan finds it (design 14.7)
+      let seen = Desktops.seenClasses(SceneStore.parse(root.readNow(scenesFile)).scenes, root.desktopsLive.classes, root.entries())
+      let cls = Desktops.classOf(app, root.appChoices(), seen).class
+      if (!cls) return Summary.answer(root.fail("failed", "no window class for that app"))
+      let err = root.writeConfig(text, ConfigIO.setRule(text, name, { app: cls, monitor: monitor, slot: slot, follow: false }))
       return Summary.answer(err === "" ? { ok: true, rule: name } : root.fail("failed", err))
     } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
   }
@@ -1162,7 +1157,11 @@ Item {
   Process { id: deskMode; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskMode.gen === root.deskGen) root.onDeskMode(text) } }
   // omagnet's own settings window, for its layout editor (D31); only offered while omagnet's Lua is loaded.
   function openOmagnet() { Quickshell.execDetached(["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omagnet"]) }
-  Process { id: settingsProc; command: ["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omaplace"] }
+  // The settings app (D40); a fixed script, no user text in it.
+  Process {
+    id: settingsProc
+    command: ["bash", "-c", "command -v omaplace-settings >/dev/null && exec omaplace-settings open; exec omarchy-notification-send omaplace 'The settings app is not installed. Get omaplace-settings from the omaplace releases page.'"]
+  }
 
   Process {
     id: monitorsProc
@@ -1236,7 +1235,6 @@ Item {
   FileView { id: answerFile; blockLoading: true; printErrors: false }
   FileView { id: appReqFile; blockLoading: true; printErrors: false }
   FileView { id: appOutFile; blockWrites: true; atomicWrites: true; printErrors: false }
-  FileView { id: launcherSourceFile; path: root.launcherSource; blockLoading: true; printErrors: false }
   FileView { id: menuFile; path: root.menuPath; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the Omarchy menu file" }
   FileView { id: menuBak; path: root.menuPath + ".omaplace.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the menu backup" }
   // moves.json is only ever replaced by a rename, which a watch can miss; finish() reads it too.
@@ -1256,5 +1254,4 @@ Item {
   FileView { id: loginFile; path: root.runtimeDir + "/login.json"; blockLoading: true; printErrors: false; watchChanges: true; onFileChanged: { root.checkLogin(); Qt.callLater(root.rearm, loginFile) } }
   FileView { id: restoreMarker; path: root.runtimeDir + "/restore-done-" + root.instance; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the restore marker" }
   FileView { id: markerFile; path: root.runtimeDir + "/login-done-" + root.instance; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the login marker" }
-  FileView { id: launcherFile; path: root.launcherDest; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false }
 }

@@ -1,0 +1,14 @@
+generated/
+resources.qrc
+build/
+*.o
+moc_*
+qrc_*.cpp
+Makefile
+.qmake.stash
+omaplace-settings
+tests/settings-tests
+tests/*.png
+pkgbuild/pkg/
+pkgbuild/src/
+pkgbuild/*.pkg.tar.zst

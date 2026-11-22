@@ -90,6 +90,9 @@ eq(Capture.context_of({ tags = "omaplace-ctx=" .. Capture.ctx_hex("x") .. "*" })
 eq(Capture.home_of({ tags = { "omarchy-minimized-from-13" } }), 13, "home tag")
 local set = Capture.ignore_set("a, B  c")
 eq(set.a and set.b and set.c, true, "ignore set")
+eq(Capture.ignore_set("")["omaplace-settings"], true, "the settings app is always ignored (D39)")
+local own = Capture.snapshot({ win("omaplace-settings", 1, panel, 0, 0, 800, 600) }, { panel, ext }, opts)
+eq(#own.windows, 0, "the settings window is never captured")
 
 -- a window a pixel larger than the usable area (a tiled border, seen live) is saved inside 0..1
 local over = Capture.snapshot({ win("org.example.Big", 1, panel, -1, -1, 2003, 1002) }, { panel, ext }, opts)

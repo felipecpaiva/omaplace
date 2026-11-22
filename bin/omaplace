@@ -24,7 +24,7 @@ Usage: omaplace [--json] <command>
   rule remove <name>    delete a rule
   status                show the current or last run
   plan-update <id>      write a hand move of a planned window into its plan (the "Update plan" notification button)
-  settings              open the settings window
+  settings              open the settings app (omaplace-settings)
 
   --json                print the service's JSON answer instead of text
 Exit codes: 0 ok (also a picker closed without a choice), 2 bad usage, 3 not found or nothing to save,
@@ -68,7 +68,12 @@ case $word in
   save | open | remove) need $# 1; args=("$word" "$1") ;;
   restore) [ $# -le 1 ] || bad "restore takes at most 1 argument"; args=(restore "${1:-}") ;;
   rename) need $# 2; args=(rename "$1" "$2") ;;
-  list | status | settings) need $# 0; args=("$word") ;;
+  settings) need $# 0
+    # one settings app (D36, D40): the omaplace-settings package
+    if command -v omaplace-settings >/dev/null; then setsid -f omaplace-settings open >/dev/null 2>&1; exit 0; fi
+    echo "omaplace: the settings app is not installed. Get omaplace-settings from https://github.com/felipecpaiva/omaplace/releases/latest and install it with: sudo pacman -U omaplace-settings-*.pkg.tar.zst" >&2
+    exit 3 ;;
+  list | status) need $# 0; args=("$word") ;;
   plan-update) need $# 1; [[ $1 =~ ^[0-9]+$ ]] || bad "plan-update takes a move id (a number)"; args=(planUpdate "$1") ;;
   rule)
     case "${1:-}" in

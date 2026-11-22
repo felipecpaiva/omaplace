@@ -968,6 +968,7 @@ function M.on_window_open(w)
   -- Hyprland hands windows over as userdata (HL.Window), the tests as tables: accept both, nothing else.
   local tw = type(w)
   if tw ~= "table" and tw ~= "userdata" then return end
+  if (w.initial_class or "") == Capture.ALWAYS_IGNORED then return end -- the settings app (D39)
   if M.settings.app_memory == "auto" and w.address and w.workspace then M.last_ws[w.address] = w.workspace.id end
   track(w)
   if w.workspace then Place.home(w.workspace.id, (M.rule_homes or {})[w.workspace.id]) end -- a rule's desktop
@@ -1396,6 +1397,15 @@ function M.desktops(req_id)
   if not written then return nil, err end
   return d
 end
+
+-- The settings app floats, centred, like Omarchy's own small apps (D36). o.window is Omarchy's helper; without it the
+-- window opens as the desktop puts it.
+pcall(function()
+  local o = rawget(_G, "o")
+  if type(o) == "table" and type(o.window) == "function" then
+    o.window("^(omaplace-settings)$", { float = true, center = true, size = { 1040, 720 } })
+  end
+end)
 
 -- _m is internal: the next load of this file reads them (see above).
 _G.omaplace = { version = M.version, reload_config = M.reload_config, status = M.status, open = M.open,

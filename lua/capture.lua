@@ -46,8 +46,11 @@ function M.home_of(w)
 end
 
 -- "a, b c" -> { a = true, b = true, c = true }, lower case.
+-- The settings app's own window is always left alone (D39): never in a scene, a snapshot or a rule.
+M.ALWAYS_IGNORED = "omaplace-settings"
+
 function M.ignore_set(text)
-  local set = {}
+  local set = { [M.ALWAYS_IGNORED] = true }
   for cls in tostring(text or ""):gmatch("[^%s,]+") do set[cls:lower()] = true end
   return set
 end
@@ -75,8 +78,9 @@ end
 function M.snapshot(windows, monitors, opts)
   opts = opts or {}
   local ignore = opts.ignore or {}
-  if ignore[1] then
-    local set = {}
+  if ignore[1] or not ignore[M.ALWAYS_IGNORED] then
+    local set = { [M.ALWAYS_IGNORED] = true }
+    for k, v in pairs(ignore) do if type(k) == "string" then set[k] = v end end
     for _, c in ipairs(ignore) do set[tostring(c):lower()] = true end
     ignore = set
   end
