@@ -106,17 +106,19 @@ run restore
 check "restore always passes one argument" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace restore ")"
 run restore 2
 check "restore 2 passes the generation" "$(is "$(cat "$FAKE_LOG")" "io.github.felipecpaiva.omaplace restore 2")"
+export OMAPLACE_SETTINGS_BIN=omaplace-settings-not-installed-test
 run settings
 check "settings without the app says how to install it" "$(is "$code" 3)"
 check "settings names the package" "$(has "$out" "omaplace-settings")"
 check "settings never calls the shell" "$(is "$(cat "$FAKE_LOG")" "")"
-printf '#!/bin/sh\necho "$@" > "%s/settings-args"\n' "$tmp" > "$tmp/bin/omaplace-settings"
-chmod +x "$tmp/bin/omaplace-settings"
+printf '#!/bin/sh\necho "$@" > "%s/settings-args"\n' "$tmp" > "$tmp/bin/omaplace-settings-test"
+chmod +x "$tmp/bin/omaplace-settings-test"
+export OMAPLACE_SETTINGS_BIN=omaplace-settings-test
 run settings
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$tmp/settings-args" ] && break; sleep 0.1; done
 check "settings starts the app" "$(is "$code" 0)"
 check "the app is opened with open" "$(is "$(cat "$tmp/settings-args" 2>/dev/null)" "open")"
-mv "$tmp/bin/omaplace-settings" "$tmp/omaplace-settings.off"
+unset OMAPLACE_SETTINGS_BIN
 
 export FAKE_ANSWER='{"ok":true,"busy":false,"run":"r3-1700000000000","state":"partial","items":2}'
 run status

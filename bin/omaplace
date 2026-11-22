@@ -70,7 +70,8 @@ case $word in
   rename) need $# 2; args=(rename "$1" "$2") ;;
   settings) need $# 0
     # one settings app (D36, D40): the omaplace-settings package
-    if command -v omaplace-settings >/dev/null; then setsid -f omaplace-settings open >/dev/null 2>&1; exit 0; fi
+    app=${OMAPLACE_SETTINGS_BIN:-omaplace-settings}   # the tests point this at a stand-in, never the real app
+    if command -v "$app" >/dev/null; then setsid -f "$app" open >/dev/null 2>&1; exit 0; fi
     echo "omaplace: the settings app is not installed. Get omaplace-settings from https://github.com/felipecpaiva/omaplace/releases/latest and install it with: sudo pacman -U omaplace-settings-*.pkg.tar.zst" >&2
     exit 3 ;;
   list | status) need $# 0; args=("$word") ;;
