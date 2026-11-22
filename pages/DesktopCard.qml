@@ -54,6 +54,7 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: Style.spacing.md
     Dropdown {
+      id: layoutPicker
       Layout.preferredWidth: Style.space(200)
       label: "Layout"
       value: editor.custom ? "custom" : editor.model.choice
@@ -62,7 +63,9 @@ ColumnLayout {
       foreground: editor.panel.foreground
       accent: editor.panel.accent
       fontFamily: editor.panel.fontFamily
+      Component.onCompleted: if (editor.view) editor.view.takeFocus(layoutPicker, editor.model.key + "\nlayout")
       onChanged: function (value) {
+        editor.view.focusTag = editor.model.key + "\nlayout"
         editor.view.customKey = value === "custom" ? editor.model.key : ""
         if (value === "") { if (editor.model.plan) editor.panel.askDelete("plan", editor.model.name) }
         else if (value !== "custom" && value !== editor.model.layout) editor.panel.editPlan(editor.model, "layout", value)
@@ -77,8 +80,10 @@ ColumnLayout {
       placeholderText: "0 0 0.5 1; 0.5 0 0.5 1"
       foreground: editor.panel.foreground
       accent: editor.panel.accent
+      Component.onCompleted: if (editor.view) editor.view.takeFocus(zonesField, editor.model.key + "\nzones")
       onEditingFinished: {
         if (text.trim() === "" || text.trim() === editor.model.layout) return
+        editor.view.focusTag = editor.model.key + "\nzones"
         editor.view.setDraft(editor.model.key, text) // kept if the save is refused
         editor.panel.editPlan(editor.model, "layout", text)
       }

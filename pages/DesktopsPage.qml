@@ -19,6 +19,9 @@ Flickable {
   property string customKey: ""
   property var drafts: ({})
   property var openRows: ({})
+  // The control that made the last edit ("<card key>\nlayout", "...\nzones", "<row key>\napp"). Every edit rebuilds
+  // the cards, so the new copy of that control takes the keyboard focus back (takeFocus) instead of losing it.
+  property string focusTag: ""
   readonly property string current: page.selected !== "" ? page.selected
     : page.desks.groups.length > 0 ? page.desks.groups[0].cards[0].key : ""
 
@@ -29,9 +32,22 @@ Flickable {
     if (kept) page.drafts = kept
   }
   function setDraft(key, text) { let d = Object.assign({}, page.drafts); d[key] = text; page.drafts = d }
+  function takeFocus(item, tag) {
+    if (tag === "" || tag !== page.focusTag) return
+    page.focusTag = ""
+    Qt.callLater(function () { let f = page.firstFocusable(item); if (f) f.forceActiveFocus() })
+  }
+  // The shell's controls keep their focusable part inside (a Dropdown's trigger), so search for it.
+  function firstFocusable(item) {
+    if (!item || !item.visible) return null
+    if (item.activeFocusOnTab) return item
+    for (let i = 0; i < item.children.length; i++) { let f = page.firstFocusable(item.children[i]); if (f) return f }
+    return null
+  }
   function toggleRow(key) { let o = Object.assign({}, page.openRows); o[key] = !o[key]; page.openRows = o }
 
   onVisibleChanged: {
+    page.focusTag = ""
     if (visible && page.panel.service) page.apps = page.panel.service.appChoices()
     page.refresh()
   }

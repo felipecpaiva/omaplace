@@ -34,6 +34,7 @@ ColumnLayout {
       font.pixelSize: Style.font.body
     }
     SearchableDropdown {
+      id: appPicker
       Layout.fillWidth: true
       showLabel: false
       value: row.place.app
@@ -44,7 +45,12 @@ ColumnLayout {
       accent: row.panel.accent
       fontFamily: row.panel.fontFamily
       // the same app again is sent too when its stored class is a guess the page can now confirm (row.want)
-      onChanged: function (value) { if (value !== "" && (value !== row.place.app || row.place.cls !== row.place.want)) row.panel.editPlan(row.card, "app", { pos: row.place.pos, id: value }) }
+      Component.onCompleted: if (row.view) row.view.takeFocus(appPicker, row.rowKey + "\napp")
+      onChanged: function (value) {
+        if (value === "" || (value === row.place.app && row.place.cls === row.place.want)) return
+        row.view.focusTag = row.rowKey + "\napp"
+        row.panel.editPlan(row.card, "app", { pos: row.place.pos, id: value })
+      }
     }
     Button {
       visible: !row.place.empty
@@ -61,7 +67,7 @@ ColumnLayout {
       foreground: row.panel.foreground
       accent: row.panel.accent
       fontFamily: row.panel.fontFamily
-      onClicked: row.panel.editPlan(row.card, "clear", row.place.pos)
+      onClicked: { row.view.focusTag = row.rowKey + "\napp"; row.panel.editPlan(row.card, "clear", row.place.pos) }
     }
   }
 
