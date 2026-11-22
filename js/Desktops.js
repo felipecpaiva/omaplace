@@ -266,6 +266,8 @@ function cardOf(mon, slot, ws, found, live, ctx) {
     windows: (live.windows || {})[ws] || 0, mode, plan: !!found, name: "", layout: "", choice: "", openAtLogin: false,
     error: "", badge: (mode ? modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback,
     options: layoutOptions(mode, ctx.omagnet, (ctx.omDesks || {})[ws] || null),
+    // the number a person uses (D50): the workspace id under Hyprland's rules (their keys go to it), else the slot
+    number: live.numbering === "rules" && ws > 0 ? ws : slot,
     live: liveApps((live.wsClasses || {})[ws], ctx.apps, mon.area)
   }
   card.liveRows = liveRows(card.live)
@@ -470,6 +472,20 @@ function shownCards(cards) {
   const used = (cards || []).filter((c) => c.plan || c.windows > 0)
   const empty = (cards || []).filter((c) => !(c.plan || c.windows > 0))
   return { shown: (cards || []).filter((c) => used.indexOf(c) !== -1 || c === empty[0]), folded: Math.max(0, empty.length - 1) }
+}
+
+// Hyprland's workspace rules (`hyprctl workspacerules -j`) as the desktops of each monitor (D50):
+// { monitors: { "<rule monitor>": [ids, sorted] } }. Only numbered workspaces bound to a monitor count.
+function workspacePlan(rules) {
+  const monitors = {}
+  for (const r of Array.isArray(rules) ? rules : []) {
+    const id = Number(r && r.workspaceString)
+    const mon = r && typeof r.monitor === "string" ? r.monitor : ""
+    if (!Number.isInteger(id) || id < 1 || mon === "" || String(id) !== String(r.workspaceString).trim()) continue
+    ;(monitors[mon] = monitors[mon] || []).push(id)
+  }
+  for (const k of Object.keys(monitors)) monitors[k] = Array.from(new Set(monitors[k])).sort((a, b) => a - b).slice(0, 10)
+  return { monitors }
 }
 
 // One line about what is open on a desktop now, for the editor: "Reddit and Google Chrome, both full screen".

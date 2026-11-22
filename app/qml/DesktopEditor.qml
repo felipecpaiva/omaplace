@@ -34,12 +34,12 @@ ColumnLayout {
 
     function edit(op, arg) { app.act("editPlan", [card.identity, card.slot, card.focused === true, op, arg, card.mode || ""]) }
     function removePlan() {
-        if (card.plan) app.ask(qsTr("Forget the plan of desktop %1? The file before the change is kept as scenes.toml.bak.").arg(card.slot), "removeScene", [card.name], qsTr("Desktop %1 is forgotten").arg(card.slot))
+        if (card.plan) app.ask(qsTr("Forget the plan of desktop %1? The file before the change is kept as scenes.toml.bak.").arg(card.number || card.slot), "removeScene", [card.name], qsTr("Desktop %1 is forgotten").arg(card.number || card.slot))
     }
     function remember() {
         const args = [card.identity, card.slot, card.focused === true, card.mode || "", card.workspace]
-        const done = qsTr("Desktop %1 is remembered").arg(card.slot)
-        if (card.plan) app.ask(qsTr("Remember desktop %1 as it is now? This replaces its plan. The file before the change is kept as scenes.toml.bak.").arg(card.slot), "planFromDesktop", args, done)
+        const done = qsTr("Desktop %1 is remembered").arg(card.number || card.slot)
+        if (card.plan) app.ask(qsTr("Remember desktop %1 as it is now? This replaces its plan. The file before the change is kept as scenes.toml.bak.").arg(card.number || card.slot), "planFromDesktop", args, done)
         else app.act("planFromDesktop", args, done)
     }
 
@@ -57,12 +57,12 @@ ColumnLayout {
                 textFormat: Text.PlainText
                 font.bold: true
                 font.pixelSize: 18
-                text: editor.card.plan ? editor.card.title : qsTr("Desktop %1").arg(editor.card.slot)
+                text: editor.card.plan ? editor.card.title : qsTr("Desktop %1").arg(editor.card.number || editor.card.slot)
             }
             Label {
                 color: ui.secondary
                 textFormat: Text.PlainText
-                text: (editor.card.plan ? qsTr("Desktop %1, ").arg(editor.card.slot) : "") + (editor.monitorLabel || editor.card.monitorName || "")
+                text: (editor.card.plan ? qsTr("Desktop %1, ").arg(editor.card.number || editor.card.slot) : "") + (editor.monitorLabel || editor.card.monitorName || "")
             }
         }
         Label {
@@ -133,7 +133,7 @@ ColumnLayout {
             primary: true
             text: editor.card.state === "closed" ? qsTr("Open it") : qsTr("Put windows back")
             enabled: !editor.card.error && (editor.card.rows || []).some(function (r) { return !r.empty })
-            onClicked: editor.app.act("open", [editor.card.name], qsTr("Desktop %1 is back as remembered").arg(editor.card.slot))
+            onClicked: editor.app.act("open", [editor.card.name], qsTr("Desktop %1 is back as remembered").arg(editor.card.number || editor.card.slot))
         }
         ActionButton {
             objectName: "updateFromNow"
@@ -188,7 +188,7 @@ ColumnLayout {
                 valueRole: "value"
                 enabled: editor.writable
                 currentIndex: Math.max(0, editor.options.findIndex(function (o) { return o.value === (editor.custom ? "custom" : (editor.card.choice || "")) }))
-                Accessible.name: qsTr("Layout of desktop %1").arg(editor.card.slot)
+                Accessible.name: qsTr("Layout of desktop %1").arg(editor.card.number || editor.card.slot)
                 onActivated: {
                     const v = currentValue
                     editor.customKey = v === "custom" ? editor.card.key : ""

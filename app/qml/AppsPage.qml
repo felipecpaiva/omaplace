@@ -21,7 +21,7 @@ ScrollView {
     readonly property var openWindows: {
         const out = []
         for (const g of page.groups) for (const c of g.cards) for (const a of (c.live || []))
-            out.push({ class: a.class, label: a.label, icon: a.icon, rect: a.rect, identity: c.identity, monitor: g.label || g.name, slot: c.slot, floating: c.mode === "floating" })
+            out.push({ class: a.class, label: a.label, icon: a.icon, rect: a.rect, identity: c.identity, monitor: g.label || g.name, slot: c.slot, number: c.number || c.slot, floating: c.mode === "floating" })
         return out
     }
     contentWidth: availableWidth
@@ -34,8 +34,10 @@ ScrollView {
     function labelOf(cls) { const a = page.appOf(cls); return a ? a.label : cls }
     function iconOf(cls) { const a = page.appOf(cls); return a && a.icon ? backend.iconSource(a.icon) : "" }
     function placeText(rule) {
-        const mon = rule.monitor === "laptop" ? qsTr("any laptop screen") : rule.monitor === "" ? qsTr("the monitor in use") : rule.monitor
-        return qsTr("Desktop %1, %2").arg(rule.slot || 1).arg(mon)
+        const g = page.groups.find(function (x) { return x.identity === rule.monitor }) || null
+        const mon = rule.monitor === "laptop" ? qsTr("any laptop screen") : rule.monitor === "" ? qsTr("the monitor in use") : g ? (g.label || g.name) : rule.monitor
+        const card = g ? g.cards.find(function (c) { return c.slot === (rule.slot || 1) }) : null
+        return qsTr("Desktop %1, %2").arg(card ? card.number : (rule.slot || 1)).arg(mon)  // the number the user's keys use (D50)
     }
     function setIgnored(list) { page.app.act("setSetting", ["ignore", list.join(", ")]) }
 
@@ -185,13 +187,13 @@ ScrollView {
                         Layout.fillWidth: true
                         spacing: 8
                         Image { source: modelData.icon ? backend.iconSource(modelData.icon) : ""; sourceSize: Qt.size(20, 20); visible: source != ""; Layout.preferredWidth: 20; Layout.preferredHeight: 20 }
-                        Label { Layout.fillWidth: true; elide: Text.ElideRight; textFormat: Text.PlainText; text: qsTr("%1, desktop %2, %3").arg(modelData.label).arg(modelData.slot).arg(modelData.monitor) }
+                        Label { Layout.fillWidth: true; elide: Text.ElideRight; textFormat: Text.PlainText; text: qsTr("%1, desktop %2, %3").arg(modelData.label).arg(modelData.number).arg(modelData.monitor) }
                         ActionButton {
                             objectName: "always-" + index
                             text: qsTr("Always here")
                             onClicked: {
                                 const r = modelData.floating && modelData.rect ? modelData.rect.map(function (v) { return Math.round(v * 1000) / 1000 }).join(" ") : ""
-                                page.app.act("ruleNewAt", [modelData.class, modelData.identity, modelData.slot, r], qsTr("%1 always opens on desktop %2, %3").arg(modelData.label).arg(modelData.slot).arg(modelData.monitor))
+                                page.app.act("ruleNewAt", [modelData.class, modelData.identity, modelData.slot, r], qsTr("%1 always opens on desktop %2, %3").arg(modelData.label).arg(modelData.number).arg(modelData.monitor))
                                 page.adding = false
                             }
                         }

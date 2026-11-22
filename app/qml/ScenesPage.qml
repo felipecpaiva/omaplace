@@ -18,7 +18,7 @@ ScrollView {
     readonly property var freeDesks: {
         const out = []
         for (const g of ((page.app.model.desks || {}).groups || [])) for (const c of g.cards)
-            if (!c.plan && g.connected !== false) out.push({ value: out.length, label: qsTr("Desktop %1, %2").arg(c.slot).arg(g.label || g.name), card: c })
+            if (!c.plan && g.connected !== false) out.push({ value: out.length, label: qsTr("Desktop %1, %2").arg(c.number || c.slot).arg(g.label || g.name), card: c })
         return out
     }
     readonly property var scenes: page.homeless.filter(function (s) { return s.name.toLowerCase().indexOf(page.filter.toLowerCase()) !== -1 })

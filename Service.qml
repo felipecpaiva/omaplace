@@ -1167,6 +1167,32 @@ Item {
   // counts, hyprctl clients -j for the open window classes, then omarchy-hyprland-workspace-layout-current per shown
   // workspace. revision++ when the read is done.
 
+  // ---- desktop numbering from Hyprland's workspace rules (D50): read, written for Lua, Lua told to reload; then `done`.
+  // Every step is a process (never a blocking hyprctl); a failed step still calls `done`, with the numbering as it was.
+  property var wsDone: []
+  property string wsText: ""
+  function readWorkspaceRules(done) {
+    if (done) root.wsDone = root.wsDone.concat([done])
+    if (!wsRulesProc.running && !wsPlanEval.running) wsRulesProc.running = true
+  }
+  function onWorkspaceRules(text) {
+    let rules = Summary.parseJson(text)
+    let plan = Desktops.workspacePlan(Array.isArray(rules) ? rules : [])
+    let lua = "return " + LuaLiteral.encode(plan) + "\n"
+    if (lua !== root.wsText) {
+      root.wsText = lua
+      wsPlanFile.setText(lua)
+      wsPlanEval.running = true
+      return
+    }
+    root.wsFinished()
+  }
+  function wsFinished() {
+    let list = root.wsDone
+    root.wsDone = []
+    for (let f of list) f()
+  }
+
   function desktopsInfo() {
     // A read can wedge when a command never starts (no exit comes). Without a timer, the next ask after 10 s starts over.
     if (root.deskBusy && Date.now() - root.deskStarted < 10000) { root.deskAgain = true; return }
@@ -1178,6 +1204,7 @@ Item {
     root.deskAgain = false
     root.deskNext = { reason: "", monitors: [], windows: {}, modes: {}, classes: [], wsClasses: {} }
     root.deskId = "panel-" + (++root.deskCounter)
+    root.readWorkspaceRules(null) // a monitor plugged in or new rules: read again; the next read shows them
     root.deskRun(deskEval, ["hyprctl", "eval", LuaCall.wrap("desktops", [LuaLiteral.encode(root.deskId)], LuaLiteral.encode(root.deskReplyPath()))])
   }
 
@@ -1194,6 +1221,7 @@ Item {
     let d = c === "ok" && brace !== -1 ? Summary.parseJson(text.slice(brace)) : null
     root.deskNext.monitors = d && Array.isArray(d.monitors) ? d.monitors : []
     root.deskNext.omagnet = d ? d.omagnet : null
+    root.deskNext.numbering = d ? d.numbering : ""
     if (!d) root.deskNext.reason = c === "no_lua" ? "The omaplace Lua module is not loaded in Hyprland" : "No desktop list from the Lua module (" + (c || "no answer") + ")"
     root.deskRun(deskWs, ["hyprctl", "workspaces", "-j"])
   }
@@ -1291,12 +1319,15 @@ Item {
       root.dirsReady = code === 0
       if (code !== 0) { root.finish(root.fail("failed", "cannot create " + root.runtimeDir)); return }
       root.step()
-      // reload_plans at every start, even with plans.lua unchanged (Lua's retry of its login.json write): the first write
-      // of a start always happens (plansText is empty) and reloads; only a build that failed needs the call here
-      if (!root.writePlans()) root.reloadPlans()
-      root.checkRestore() // first: a restore queued before the login plans runs before them (D26)
-      root.checkLogin()
-      if (root.deskAgain) root.desktopsInfo() // the Desktops page asked before the runtime folder existed
+      // the desktop numbering first (D50): login plans and a restore must land on the user's own workspaces
+      root.readWorkspaceRules(function () {
+        // reload_plans at every start, even with plans.lua unchanged (Lua's retry of its login.json write): the first write
+        // of a start always happens (plansText is empty) and reloads; only a build that failed needs the call here
+        if (!root.writePlans()) root.reloadPlans()
+        root.checkRestore() // first: a restore queued before the login plans runs before them (D26)
+        root.checkLogin()
+        if (root.deskAgain) root.desktopsInfo() // the Desktops page asked before the runtime folder existed
+      })
     }
   }
 
@@ -1322,6 +1353,11 @@ Item {
   Process { id: procProc; stdout: StdioCollector { onStreamFinished: root.onProcinfo(text) } }
   Process { id: reloadProc; command: ["hyprctl", "eval", "_G.omaplace.reload_config()"] }
   Process { id: restoreAsk; onExited: (code) => { if (code === 0) restoreMarker.setText("ask\n"); else console.warn("omaplace: restore question not sent (" + code + ")") } }
+  Process { id: wsRulesProc; command: ["hyprctl", "workspacerules", "-j"]; stdout: StdioCollector { onStreamFinished: root.onWorkspaceRules(text) }
+    onExited: (code) => { if (code !== 0) root.wsFinished() } }
+  Process { id: wsPlanEval; command: ["hyprctl", "eval", "return _G.omaplace and _G.omaplace.reload_ws_plan()"]
+    onExited: { root.wsFinished(); root.revision++ } }
+  FileView { id: wsPlanFile; path: root.runtimeDir + "/workspace-plan.lua"; blockWrites: true; atomicWrites: true; printErrors: false }
   Process { id: noticeProc; onExited: { root.noticeBusy = false; root.nextNotice() } }
   Process { id: plansEval; onExited: { plansReply.command = ["cat", "--", root.runtimeDir + "/reply-plans.txt"]; plansReply.running = true } }
   Process { id: plansReply; stdout: StdioCollector { onStreamFinished: root.afterReloadPlans(text) } }

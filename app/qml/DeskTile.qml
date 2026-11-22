@@ -11,7 +11,7 @@ AbstractButton {
     readonly property string word: card.error ? qsTr("Problem") : card.state === "changed" ? qsTr("Changed") : card.plan ? qsTr("Saved") : ""
     activeFocusOnTab: true
     padding: 3
-    Accessible.name: qsTr("Desktop %1, %2").arg(tile.card.slot).arg(tile.card.badge)
+    Accessible.name: qsTr("Desktop %1, %2").arg(tile.card.number || tile.card.slot).arg(tile.card.badge)
     Keys.onReturnPressed: tile.clicked()
     Keys.onEnterPressed: tile.clicked()
 
@@ -27,7 +27,7 @@ AbstractButton {
             width: parent.width
             elide: Text.ElideRight
             textFormat: Text.PlainText
-            text: String(tile.card.slot) + (tile.card.windows > 0 ? "  · " + tile.card.windows : "")
+            text: String(tile.card.number || tile.card.slot) + (tile.card.windows > 0 ? "  · " + tile.card.windows : "")
             font.pixelSize: 12
             font.bold: true
             color: tile.selected ? ui.accent : ui.text

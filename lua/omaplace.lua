@@ -101,11 +101,15 @@ local function focused_of(live)
   end
 end
 
+-- Desktop numbering (D50): Hyprland's workspace rules when the service has sent them, else Omarchy's model.
+M.ws_plan = M.ws_plan or nil
+local function slots_now() return Slots.with(rawget(_G, "o"), M.ws_plan) end
+
 -- Declare every rule again under its own name (hl.window_rule replaces in place) and switch off the ones that went.
 function M.rebuild()
   local ok, live = pcall(hl.get_monitors)
   if not ok or type(live) ~= "table" then return nil, "no monitors" end
-  local slots = Slots.with(rawget(_G, "o"))
+  local slots = slots_now()
   local specs, vanished, places = Rules.build(
     M.rules, live, Monitors.resolve, slots.workspace_id, focused_of(live), M.applied, M.settings.missing_monitor_rule)
   M.rule_places, M.rule_homes = places, {}
@@ -262,7 +266,7 @@ end
 -- One window's place the way a snapshot sees it (special workspaces, minimized and ignored classes give nil).
 local function place_of(w)
   local live = hl.get_monitors()
-  local slots = Slots.with(rawget(_G, "o"))
+  local slots = slots_now()
   local snap = Capture.snapshot({ w }, live, {
     slot_of = slots.slot_of, is_floating = function() return has_tag(w, M.FLOAT_TAG) end,
     fingerprint = Monitors.fingerprint, usable = Geometry.usable, ignore = Capture.ignore_set(M.settings.ignore),
@@ -310,7 +314,7 @@ local function snapshot_of(scope, kind)
     if w.workspace and has_tag(w, M.FLOAT_TAG) then floating[w.workspace.id] = true end
   end
   local focused = focused_of(live)
-  local slots = Slots.with(rawget(_G, "o"))
+  local slots = slots_now()
   local snap = Capture.snapshot(wins, live, {
     slot_of = slots.slot_of, is_floating = function(id) return floating[id] == true end,
     fingerprint = Monitors.fingerprint, usable = Geometry.usable, ignore = Capture.ignore_set(M.settings.ignore),
@@ -608,7 +612,7 @@ local function start_run(plan)
     return nil, "bad_plan"
   end
   local live = hl.get_monitors()
-  local slots = Slots.with(rawget(_G, "o"))
+  local slots = slots_now()
   local target_of, main = targets(plan, live, slots)
   if not target_of then return nil, main end
   local now = M.now_ms()
@@ -782,7 +786,7 @@ local function place_from_memory(w)
   if not ws or (ws.id or 0) < 0 or (ws.name or ""):sub(1, 8) == "special:" then return end
   if others_of(cls, w.address) > 0 then return end
   local mon = Monitors.resolve(entry.fp, hl.get_monitors(), M.settings.missing_monitor_scene)
-  local target = mon and Slots.with(rawget(_G, "o")).workspace_id(mon, entry.slot)
+  local target = mon and slots_now().workspace_id(mon, entry.slot)
   if not target then return end
   if has_rule(cls) then
     if target ~= ws.id then return end -- the rule put it on another desktop: leave it there, no rect
@@ -1170,7 +1174,7 @@ end
 local function plan_target(plan)
   local live = hl.get_monitors()
   local mon = plan.home_monitor == "" and focused_of(live) or Monitors.resolve({ identity = plan.home_monitor }, live, "skip")
-  return mon, mon and Slots.with(rawget(_G, "o")).workspace_id(mon, plan.home_slot)
+  return mon, mon and slots_now().workspace_id(mon, plan.home_slot)
 end
 
 -- A window opened while no run is live. Returns true when a plan holds its class and context (snapped or not), so app
@@ -1307,6 +1311,19 @@ end
 
 -- reload_plans(): read plans.lua again. true, or nil and no_file | bad_plans | failed. A bad file is ignored (the
 -- plans loaded before stay); a missing one means no plans.
+-- reload_ws_plan(): read workspace-plan.lua (the service writes it from `hyprctl workspacerules -j`), then declare the
+-- rules again, since a rule's desktop may now be another workspace. true, or nil and no_file | bad_plan.
+function M.reload_ws_plan()
+  local dir = runtime_dir()
+  local t, err
+  if dir then t, err = load_literal(dir .. "/workspace-plan.lua", "workspace plan") end
+  if not t then M.ws_plan = nil; pcall(M.rebuild); return nil, err or "no_file" end
+  if type(t) ~= "table" or type(t.monitors) ~= "table" then M.ws_plan = nil; return nil, "bad_plan" end
+  M.ws_plan = t
+  pcall(M.rebuild)
+  return true
+end
+
 function M.reload_plans()
   local ok, res, why = pcall(function()
     local d = state_dir()
@@ -1359,9 +1376,11 @@ end
 -- to $XDG_RUNTIME_DIR/omaplace/desktops-<req_id>.json, because `hyprctl eval` cannot hand a table back (LuaCall).
 function M.desktops(req_id)
   local ok, d = pcall(function()
-    local slots = Slots.with(rawget(_G, "o"))
-    return Plans.desktops(hl.get_monitors(), slots.workspace_id,
+    local slots = slots_now()
+    local d0 = Plans.desktops(hl.get_monitors(), slots.workspace_id,
       function(m, all) return Monitors.fingerprint(m, all).identity end)
+    d0.numbering = slots.mode() -- rules: the settings app shows workspace ids, as the user's keys do (D50)
+    return d0
   end)
   if not ok then log("desktops failed: " .. tostring(d)); return nil, "failed" end
   -- each monitor's usable area (logical px), so the settings app can draw open windows where they are (D42)
@@ -1421,10 +1440,11 @@ end)
 -- _m is internal: the next load of this file reads them (see above).
 _G.omaplace = { version = M.version, reload_config = M.reload_config, status = M.status, open = M.open,
   open_file = M.open_file, capture = M.capture, session_save_now = M.session_save_now, sessions = M.sessions,
-  reload_plans = function() return M.reload_plans() end, desktops = function(req_id) return M.desktops(req_id) end,
+  reload_plans = function() return M.reload_plans() end, reload_ws_plan = function() return M.reload_ws_plan() end, desktops = function(req_id) return M.desktops(req_id) end,
   _m = M, _rebuild_soon = rebuild_soon }
 
 ensure_dir()
+pcall(M.reload_ws_plan) -- the numbering the service wrote this session (D50); none yet: Omarchy's model
 make_dir(state_dir())
 -- move ids go on from the file, so an "Update plan" action left from before a restart never hits a new move
 if not M.plan_moves then

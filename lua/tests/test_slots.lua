@@ -29,6 +29,23 @@ eq(gl.slot_of(7), 7, "global slot_of")
 eq(Slots.with({}).mode(), "global", "o without workspaces")
 eq(Slots.with({ workspaces = {} }).mode(), "global", "workspaces without workspace_id")
 
+-- D50: Hyprland's workspace rules (hyprmoncfg): laptop 1 to 3 by description, HDMI 4 to 6, DP-1 7 to 9
+local plan = { monitors = { ["desc:Example Panel"] = { 1, 2, 3 }, ["HDMI-A-1"] = { 4, 5, 6 }, ["DP-1"] = { 7, 8, 9 } } }
+local off = { workspaces = { enabled = false, workspace_id = function() return 99 end } }
+local r = Slots.with(off, plan)
+eq(r.mode(), "rules", "rules win")
+eq(r.workspace_id({ name = "eDP-1", description = "Example Panel" }, 2), 2, "laptop by its description")
+eq(r.workspace_id({ name = "HDMI-A-1" }, 1), 4, "HDMI desktop 1 is workspace 4")
+eq(r.workspace_id({ name = "DP-1" }, 3), 9, "DP-1 desktop 3 is workspace 9")
+eq(r.workspace_id({ name = "DP-1" }, 4), nil, "DP-1 has 3 desktops")
+eq(r.slot_of(8), 2, "workspace 8 is desktop 2 of its monitor")
+eq(r.slot_of(4), 1, "workspace 4 is desktop 1")
+eq(Slots.with(off).mode(), "global", "Omarchy numbering turned off and no rules: plain ids")
+eq(Slots.with(off).workspace_id({ name = "DP-1" }, 2), 2, "not Omarchy's 12")
+eq(Slots.with(fake.o, { monitors = {} }).mode(), "per_monitor", "no rules: Omarchy's model")
+local mixed = Slots.with(fake.o, { monitors = { ["DP-1"] = { 7, 8 } } })
+eq(mixed.workspace_id({ name = "DP-2" }, 3), 13, "a monitor without rules keeps Omarchy's model")
+
 for _, bad in ipairs({ 0, 11, 1.5, "3" }) do
   local id, err = pm.workspace_id({ name = "eDP-1" }, bad)
   eq(id, nil, "bad slot refused")

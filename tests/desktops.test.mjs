@@ -502,3 +502,22 @@ test("monitors with a broken or shared name are told apart", () => {
   const g = D.uniqueLabels([{ name: "DP-1", label: "Example Corp EX27" }, { name: "DP-2", label: "Example Corp EX27" }, { name: "eDP-1", label: "Laptop screen" }])
   assert.deepEqual(g.map((x) => x.label), ["Example Corp EX27 (DP-1)", "Example Corp EX27 (DP-2)", "Laptop screen"])
 })
+
+test("Hyprland's workspace rules as each monitor's desktops (D50)", () => {
+  const p = D.workspacePlan([
+    { workspaceString: "special:qconsole" }, { workspaceString: "3", monitor: "desc:Example Panel" },
+    { workspaceString: "1", monitor: "desc:Example Panel" }, { workspaceString: "2", monitor: "desc:Example Panel" },
+    { workspaceString: "4", monitor: "HDMI-A-1" }, { workspaceString: "5", monitor: "HDMI-A-1" },
+    { workspaceString: "7", monitor: "DP-1" }, { workspaceString: "name:web", monitor: "DP-1" }, { workspaceString: "8" }
+  ])
+  assert.deepEqual(p.monitors, { "desc:Example Panel": [1, 2, 3], "HDMI-A-1": [4, 5], "DP-1": [7] })
+  assert.deepEqual(D.workspacePlan(null).monitors, {})
+})
+
+test("desktops carry the number people use (D50)", () => {
+  const ruled = { ...live, numbering: "rules", monitors: [{ ...live.monitors[0], slots: [{ slot: 1, workspace: 7 }, { slot: 2, workspace: 8 }] }] }
+  const cs = D.cards(ruled, doc({}), {}).groups[0].cards
+  assert.equal(cs[0].number, 7, "workspace 7 under the rules")
+  assert.equal(cs[1].number, 8)
+  assert.equal(D.cards(live, doc({}), {}).groups[0].cards[1].number, 2, "Omarchy's model: the slot")
+})
