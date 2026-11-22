@@ -12,7 +12,16 @@ ScrollView {
     property string filter: ""
     readonly property var settings: app.panel.settings || ({})
     readonly property bool writable: app.panel.scenesWritable === true
-    readonly property var scenes: (app.panel.scenes || []).filter(function (s) { return s.name.toLowerCase().indexOf(page.filter.toLowerCase()) !== -1 })
+    // saved desktops with a home show on Desktops; here are the ones you open anywhere (D48)
+    readonly property var homeless: (app.panel.scenes || []).filter(function (s) { return s.plan !== true })
+    // the desktops a saved one can move to: not remembered yet
+    readonly property var freeDesks: {
+        const out = []
+        for (const g of ((page.app.model.desks || {}).groups || [])) for (const c of g.cards)
+            if (!c.plan && g.connected !== false) out.push({ value: out.length, label: qsTr("Desktop %1, %2").arg(c.slot).arg(g.label || g.name), card: c })
+        return out
+    }
+    readonly property var scenes: page.homeless.filter(function (s) { return s.name.toLowerCase().indexOf(page.filter.toLowerCase()) !== -1 })
     contentWidth: availableWidth
     clip: true
 
@@ -20,11 +29,11 @@ ScrollView {
         width: page.availableWidth
         spacing: 14
 
-        Hint { text: qsTr("A scene is the apps of one desktop, saved by name. Save one with: omaplace save <name>, or Save this desktop in the Omarchy menu. Folders and programs are saved in plain text in ~/.config/omaplace/scenes.toml.") }
+        Hint { text: qsTr("Saved desktops you can open on any desktop. Save one with Save this desktop in the Omarchy menu, or: omaplace save <name>. Remembered desktops are on the Desktops page.") }
         Hint { warn: true; visible: page.app.panel.ok === true && !page.writable; text: qsTr("scenes.toml has a newer schema or a scene with a bad name: it is shown but not changed. Fix the file first.") }
 
         Card {
-            title: qsTr("Saved scenes")
+            title: qsTr("Saved desktops")
             TextField {
                 objectName: "sceneFilter"
                 visible: (page.app.panel.scenes || []).length > 3
@@ -32,7 +41,7 @@ ScrollView {
                 placeholderText: qsTr("Filter scenes")
                 onTextChanged: page.filter = text
             }
-            Hint { visible: (page.app.panel.scenes || []).length === 0; text: qsTr("No scenes yet.") }
+            Hint { visible: page.homeless.length === 0; text: qsTr("Nothing saved here yet.") }
             Repeater {
                 model: page.scenes
                 ColumnLayout {
@@ -59,6 +68,25 @@ ScrollView {
                         Label { color: ui.secondary; text: (sceneRow.modelData.windows.length === 1 ? qsTr("1 window") : qsTr("%1 windows").arg(sceneRow.modelData.windows.length)) }
                         ActionButton { text: qsTr("Open"); primary: true; onClicked: page.app.act("open", [sceneRow.modelData.name], qsTr("Opened %1").arg(sceneRow.modelData.name)) }
                         ActionButton {
+                            objectName: "sceneHome-" + sceneRow.modelData.name
+                            text: qsTr("Give it a home...")
+                            enabled: page.writable && page.freeDesks.length > 0
+                            onClicked: homeMenu.popup()
+                            Menu {
+                                id: homeMenu
+                                background: Rectangle { implicitWidth: 260; color: ui.surface; border.color: ui.edge; radius: Math.min(6, ui.radius) }
+                                Repeater {
+                                    model: page.freeDesks
+                                    MenuItem {
+                                        required property var modelData
+                                        text: modelData.label
+                                        onTriggered: page.app.act("sceneHome", [sceneRow.modelData.name, modelData.card.identity, modelData.card.slot, modelData.card.focused === true, modelData.card.mode || ""],
+                                            qsTr("%1 now lives on %2").arg(sceneRow.modelData.name).arg(modelData.label))
+                                    }
+                                }
+                            }
+                        }
+                        ActionButton {
                             objectName: "sceneWindows-" + sceneRow.modelData.name
                             text: sceneRow.open ? qsTr("Hide windows") : qsTr("Windows")
                             onClicked: { const o = Object.assign({}, page.expanded); o[sceneRow.modelData.name] = !sceneRow.open; page.expanded = o }
@@ -66,7 +94,7 @@ ScrollView {
                         ActionButton {
                             text: qsTr("Delete")
                             enabled: page.writable
-                            onClicked: page.app.ask(qsTr("Delete the scene %1? The file before the change is kept as scenes.toml.bak.").arg(sceneRow.modelData.name),
+                            onClicked: page.app.ask(qsTr("Delete %1? The file before the change is kept as scenes.toml.bak.").arg(sceneRow.modelData.name),
                                 "removeScene", [sceneRow.modelData.name], qsTr("Deleted %1").arg(sceneRow.modelData.name))
                         }
                     }

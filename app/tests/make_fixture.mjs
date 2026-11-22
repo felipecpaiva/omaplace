@@ -47,7 +47,7 @@ const panel = {
     { name: "editor", app: "org.example.Editor", monitor: MON, slot: 3, follow: false, enabled: true, rect: "0.5 0 0.5 1", keep_rect: true },
     { name: "chat", app: "org.example.Chat", monitor: "laptop", slot: 1, follow: true, enabled: false, rect: "", keep_rect: false }
   ],
-  scenes: Object.keys(doc.scenes).map((name) => ({ name, windows: doc.scenes[name].windows.map((w) => Object.assign({}, w,
+  scenes: Object.keys(doc.scenes).map((name) => ({ name, plan: doc.scenes[name].plan === true, windows: doc.scenes[name].windows.map((w) => Object.assign({}, w,
     w.context === "?" ? { need: { kind: "folder", profiles: [] } } : {})) })),
   sessions: [
     { instance: "abc_1700000000_1", savedAt: 1700003600, windows: 6, current: true },

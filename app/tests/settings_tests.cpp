@@ -156,6 +156,8 @@ class SettingsTests : public QObject {
     };
 
 private slots:
+    // a failed test shows the requests it did send (ops and made-up args only)
+    void cleanup() { if (QTest::currentTestFailed()) for (const QString &r : requests()) qDebug().noquote() << "sent:" << r; }
     void initTestCase() {
         QVERIFY(m_dir.isValid());
         m_rt = m_dir.path() + "/rt";
@@ -286,11 +288,11 @@ private slots:
         // Apps: pick an app in the searchable picker (type, Enter), then Add sends ruleNew with its id
         click(w, find(w->contentItem(), "nav1"));
         grab(w, "page-apps");
+        click(w, find(w->contentItem(), "addApp"));
         click(w, find(w->contentItem(), "newRuleApp"));
         for (const QChar c : QString("calc")) QTest::keyClick(w, c.toLatin1());
         QTest::keyClick(w, Qt::Key_Return);
         QTest::qWait(100);
-        click(w, find(w->contentItem(), "newRuleAdd"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("ruleNew", R"(["org.example.Calc","",1])"), 5000);
 
         // Scenes: Delete asks first; Yes sends removeScene
@@ -305,7 +307,7 @@ private slots:
         grab(w, "page-scenes-confirm");
         QMetaObject::invokeMethod(confirm, "accept");
         QTRY_VERIFY_WITH_TIMEOUT(!confirm->property("visible").toBool(), 3000);
-        QTRY_VERIFY_WITH_TIMEOUT(sent("removeScene", R"(["desk-2"])"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(sent("removeScene", R"(["work"])"), 5000);  // Saved lists only those without a home
 
         // Restore: the big button restores the last session; the login choice is the fixture's "ask"
         click(w, find(w->contentItem(), "nav3"));
@@ -376,8 +378,9 @@ private slots:
         choose(inTools(w, c, "layoutPicker"), "tiled");
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",3,true,"layout","tiled","tiled"])"), 5000);
 
-        // Apps: each rule control, app memory, ignored apps
+        // Apps (D47): a place's details open under its row; app memory; leave an open app alone; always here
         click(w, find(c, "nav1"));
+        click(w, find(c, "ruleOpen-editor"));
         click(w, find(c, "ruleOn-editor"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setRule", R"(["editor","enabled",false])"), 5000);
         click(w, find(c, "ruleFollow-editor"));
@@ -391,12 +394,20 @@ private slots:
         QMetaObject::invokeMethod(slot, "increase");
         QMetaObject::invokeMethod(slot, "valueModified");
         QTRY_VERIFY_WITH_TIMEOUT(sent("setRule", R"(["editor","slot",4])"), 5000);
-        click(w, byText(c, "Where you left it"));
+        click(w, byText(c, "Where you left them"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["app_memory","last_place"])"), 5000);
-        click(w, byText(c, "Use the focused monitor"));
+        click(w, byText(c, "It goes to the monitor in use"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["missing_monitor_rule","focused"])"), 5000);
-        typeIn(w, find(c, "ignoreField"), "steam, mpv");
-        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["ignore","steam, mpv"])"), 5000);
+        click(w, find(c, "unignore-steam"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["ignore",""])"), 5000);
+        click(w, find(c, "addApp"));
+        click(w, find(c, "leave-0"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["ignore","steam, org.example.Editor"])"), 5000);  // the first open window
+        click(w, find(c, "addApp"));
+        grab(w, "page-apps-add");
+        click(w, find(c, "always-0"));
+        // the Editor on desktop 2 (floating): its desktop, monitor and spot
+        QTRY_VERIFY_WITH_TIMEOUT(sent("ruleNewAt", R"(["org.example.Editor","Example Corp EX27",2,"0.063 0.052 0.438 0.825"])"), 5000);
         click(w, byText(c, "Remove"));
         auto *confirm = win.engine.rootObjects().first()->findChild<QObject *>("confirm");
         QTRY_VERIFY_WITH_TIMEOUT(confirm->property("visible").toBool(), 3000);
@@ -417,16 +428,14 @@ private slots:
 
         // Restore: restore at login, the snapshot switch, an older session (this login's own cannot be restored)
         click(w, find(c, "nav3"));
-        click(w, byText(c, "Automatic"));
+        click(w, byText(c, "Bring them back"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["restore_at_login","auto"])"), 5000);
-        click(w, byText(c, "Keep a session snapshot"));
+        click(w, find(c, "earlier"));
+        click(w, find(c, "sessionSwitch"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["session","off"])"), 5000);
-        QList<QQuickItem *> restores;
-        for (auto *i : all(c)) if (i->isVisible() && i->property("text").toString() == "Restore" && i->inherits("QQuickAbstractButton") && !i->objectName().startsWith("nav")) restores << i;
-        QCOMPARE(restores.size(), 2);
-        QCOMPARE(restores.at(0)->isEnabled(), false);
-        click(w, restores.at(1));
-        QTRY_VERIFY_WITH_TIMEOUT(sent("restore", R"(["abc_1699900000_1"])"), 5000);
+        click(w, find(c, "restoreLast"));  // one earlier session: the big button brings it back
+        QTRY_VERIFY_WITH_TIMEOUT(sent("restore", R"([""])"), 5000);
+        grab(w, "page-restore");
 
         // General: a timing
         click(w, find(c, "nav4"));
@@ -468,16 +477,17 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"login",false,"floating"])"), 5000);
         QTRY_COMPARE_WITH_TIMEOUT(inTools(w, c, "openAtLogin")->property("checked").toBool(), true, 3000);
         click(w, find(c, "nav1"));
+        click(w, find(c, "ruleOpen-editor"));
         click(w, find(c, "ruleOn-editor"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setRule", R"(["editor","enabled",false])"), 5000);
         QTRY_COMPARE_WITH_TIMEOUT(find(c, "ruleOn-editor")->property("checked").toBool(), true, 3000);
-        click(w, byText(c, "Where you left it"));
+        click(w, byText(c, "Where you left them"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["app_memory","last_place"])"), 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(byText(c, "Where you left it")->property("checked").toBool(), false, 3000);
-        QCOMPARE(byText(c, "Where a scene put it")->property("checked").toBool(), true);
-        typeIn(w, find(c, "ignoreField"), "mpv");
-        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["ignore","mpv"])"), 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(find(c, "ignoreField")->property("text").toString(), QString("steam"), 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(byText(c, "Where you left them")->property("checked").toBool(), false, 3000);
+        QCOMPARE(byText(c, "To their remembered desktop")->property("checked").toBool(), true);
+        click(w, find(c, "unignore-steam"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["ignore",""])"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(find(c, "unignore-steam"), 3000);  // refused: still left alone
         click(w, find(c, "nav2"));
         typeIn(w, find(c, "sceneName-work"), "work-2");
         QTRY_VERIFY_WITH_TIMEOUT(sent("rename", R"(["work","work-2"])"), 5000);
@@ -567,8 +577,9 @@ private slots:
         QVERIFY2(f && f->objectName() == "zoneApp-2", qPrintable(QString("focus on %1").arg(f ? f->objectName() + " " + f->metaObject()->className() : "nothing")));
         // and a rule made from a window asks the service, which waits for the click
         click(w, find(c, "nav1"));
-        click(w, find(c, "ruleFromWindow"));
-        QTRY_VERIFY_WITH_TIMEOUT(sent("ruleFromFocus"), 5000);
+        click(w, find(c, "addApp"));
+        click(w, find(c, "always-0"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("ruleNewAt"), 5000);
     }
 
     // The feature animations (OMAPLACE_DEMO_OUT=<folder>): made-up data, offscreen, the real QML. Each scene saves its

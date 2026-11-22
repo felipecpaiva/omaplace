@@ -438,11 +438,13 @@ Item {
     root.finish(err === "" ? { ok: true, rule: rule.name } : root.fail("failed", err))
   }
 
+  property var appRun: null
   function onStatus(text) {
     let r = root.req
     if (!r || r.kind !== "open" || !r.evaluated) return
     let st = Summary.parseJson(text)
     if (!st) return
+    if (st.run === r.run && root.appAttached) { root.appRun = st; root.pushModel() } // the app's progress list (D49)
     if (st.run !== r.run) { r.other = st.state === "running"; return }
     r.seen = true
     luaCheck.stop()
@@ -828,7 +830,9 @@ Item {
   }
 
   function modelNow() {
-    return AppSeam.model(root.panelData(), root.desktopCards(), root.appChoices(), root.liveMonitors, root.req !== null, ++root.appSeq, root.appStarted)
+    let m = AppSeam.model(root.panelData(), root.desktopCards(), root.appChoices(), root.liveMonitors, root.req !== null, ++root.appSeq, root.appStarted)
+    if (root.appRun) m.run = root.appRun
+    return m
   }
 
   function pushModel() {
@@ -862,6 +866,8 @@ Item {
     case "rename": return root.renameScene(a[0], a[1])
     case "removeScene": root.armUndo(); { let r = root.removeScene(a[0]); root.undoArmed = false; return r }
     case "rememberAll": return root.startRememberAll()
+    case "ruleNewAt": return root.ruleNewAt(a[0], a[1], a[2], a[3])
+    case "sceneHome": return root.sceneHome(a[0], a[1], a[2], a[3], a[4])
     case "undo": return root.undoLast()
     case "setWindow": return root.setSceneWindow(a[0], a[1], a[2], a[3], a[4])
     case "pickFolder": return root.pickFolder(a[0], a[1], a[2])
@@ -915,6 +921,40 @@ Item {
       if (!cls) return Summary.answer(root.fail("failed", "no window class for that app"))
       let err = root.writeConfig(text, ConfigIO.setRule(text, name, { app: cls, monitor: monitor, slot: slot, follow: false }))
       return Summary.answer(err === "" ? { ok: true, rule: name } : root.fail("failed", err))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  function ruleNewAt(cls, monitor, slot, rect) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    if (cls === "" || !Number.isInteger(slot) || slot < 1 || slot > 10) return Summary.answer(root.fail("failed", "pick an app and a desktop from 1 to 10"))
+    if (rect !== "" && !/^[0-9.]+ [0-9.]+ [0-9.]+ [0-9.]+$/.test(rect)) return Summary.answer(root.fail("failed", "bad place"))
+    try {
+      let text = root.readNow(configFile)
+      let cfg = ConfigIO.parse(text)
+      for (let n in cfg.rules) if (String(cfg.rules[n].app).toLowerCase() === cls.toLowerCase()) return Summary.answer(root.fail("failed", "this app has its own place already"))
+      let name = AppSeam.ruleName(cls, cfg.rules)
+      if (name === "") return Summary.answer(root.fail("failed", "no free rule name"))
+      let rule = { app: cls, monitor: monitor, slot: slot, follow: false }
+      if (rect !== "") { rule.rect = rect; rule.keep_rect = true }
+      let err = root.writeConfig(text, ConfigIO.setRule(text, name, rule))
+      return Summary.answer(err === "" ? { ok: true, rule: name } : root.fail("failed", err))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  // A saved desktop with no home gets one (D48): its windows become that desktop's plan, the name kept.
+  function sceneHome(name, identity, slot, focused, mode) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    try {
+      let w = root.writableScenes()
+      if (w.error) return Summary.answer(w.error)
+      let s = w.doc.scenes[name]
+      if (!s || s.plan === true) return Summary.answer(root.fail("not_found"))
+      if (Desktops.findPlan(w.doc.scenes, identity, slot, focused)) return Summary.answer(root.fail("failed", "that desktop is remembered already; forget it first"))
+      root.armUndo()
+      w.doc.scenes[name] = Desktops.planFromScene(s, identity, slot, mode)
+      let err = root.writeScenes(w.text, SceneStore.serialize(w.doc))
+      root.undoArmed = false
+      return Summary.answer(err === "" ? { ok: true, undo: true, text: "It now lives on desktop " + slot } : root.fail("failed", err))
     } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
   }
 
@@ -1009,7 +1049,7 @@ Item {
           }
           return out
         })
-        return { name: name, windows: wins }
+        return { name: name, windows: wins, plan: doc.scenes[name].plan === true }
       })
       let rules = Object.keys(cfg.rules).map(function (name) { return Object.assign({ name: name }, cfg.rules[name]) })
       return {

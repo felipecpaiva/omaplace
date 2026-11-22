@@ -24,7 +24,7 @@ ApplicationWindow {
     readonly property var model: backend.model
     readonly property var panel: model.panel || Settings.emptyData()
     readonly property bool ready: backend.connected
-    readonly property var pages: [qsTr("Desktops"), qsTr("Apps"), qsTr("Scenes"), qsTr("Restore"), qsTr("General")]
+    readonly property var pages: [qsTr("Desktops"), qsTr("Apps"), qsTr("Saved"), qsTr("After a restart"), qsTr("General")]
     property int page: 0
     property string toast: ""
     property bool toastBad: false
@@ -192,6 +192,29 @@ ApplicationWindow {
                 GeneralPage { app: win }
             }
 
+            // While windows move (D49): each app, in the order omaplace handles it, waiting, in place, or not opened.
+            Pane {
+                objectName: "progress"
+                readonly property var run: win.model.run || null
+                visible: run !== null && run.state === "running" && (run.items || []).length > 0
+                Layout.fillWidth: true
+                padding: 10
+                background: Rectangle { color: ui.surface; radius: ui.radius; border.width: 1; border.color: ui.edge }
+                contentItem: Flow {
+                    spacing: 14
+                    Label { text: qsTr("Putting windows back:"); font.bold: true }
+                    Repeater {
+                        model: parent.parent.run ? parent.parent.run.items : []
+                        Label {
+                            required property var modelData
+                            readonly property var app: (win.model.apps || []).find(function (a) { return (a.startupWMClass || "").toLowerCase() === String(modelData.class).toLowerCase() || a.value.toLowerCase() === String(modelData.class).toLowerCase() })
+                            textFormat: Text.PlainText
+                            color: modelData.state === "waiting" ? ui.secondary : modelData.state === "placed" || modelData.state === "moved" ? ui.text : ui.warn
+                            text: (app ? app.label : modelData.class) + "  " + (modelData.state === "waiting" ? qsTr("waiting") : modelData.state === "placed" || modelData.state === "moved" ? qsTr("in place") : qsTr("did not open"))
+                        }
+                    }
+                }
+            }
             Pane {
                 objectName: "toast"
                 visible: win.toast !== ""
