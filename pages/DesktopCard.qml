@@ -23,7 +23,7 @@ ColumnLayout {
   readonly property bool drawing: !!editor.view && editor.view.drawKey === editor.model.key
   // omagnet's own layouts, while omagnet is loaded (D31): offered by name, stored as their zones (works without omagnet)
   readonly property var omagnet: editor.view && editor.view.desks.omagnet ? editor.view.desks.omagnet : ({ loaded: false, layouts: [] })
-  readonly property var layoutOptions: [{ value: "", label: "No plan" }].concat(Desktops.LAYOUT_CHOICES,
+  readonly property var layoutOptions: editor.model.options || [{ value: "", label: "No plan" }].concat(Desktops.LAYOUT_CHOICES,
     editor.omagnet.layouts.map(function (l) { return { value: l.zones, label: "omagnet: " + l.name } }), [{ value: "custom", label: "Custom zones" }])
 
   spacing: Style.spacing.sm

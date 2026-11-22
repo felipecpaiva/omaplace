@@ -1371,6 +1371,22 @@ function M.desktops(req_id)
     end
     table.sort(list, function(a, b) return a.name < b.name end)
     d.omagnet = { loaded = true, layouts = list }
+    -- D35: the layout omagnet's own config gives each desktop (workspace entry, else the monitor's), never its key override
+    local ws_l = type(cfg.workspace_layouts) == "table" and cfg.workspace_layouts or {}
+    local mon_l = type(cfg.zone_layouts) == "table" and cfg.zone_layouts or {}
+    for _, m in ipairs(d.monitors or {}) do
+      for _, s in ipairs(m.slots or {}) do
+        local name = ws_l[tostring(s.workspace)] or mon_l[m.name]
+        if type(name) == "string" and type(om.resolve_layout) == "function" then
+          local ok, zones = pcall(om.resolve_layout, name)
+          local parts = {}
+          for _, z in ipairs(ok and type(zones) == "table" and zones or {}) do
+            if type(z) == "table" and #z == 4 then parts[#parts + 1] = string.format("%.4f %.4f %.4f %.4f", z[1], z[2], z[3], z[4]) end
+          end
+          if #parts > 0 then s.omagnet = { name = name, zones = table.concat(parts, "; ") } end
+        end
+      end
+    end
   end
   if req_id == nil then return d end
   if type(req_id) ~= "string" or #req_id > 64 or not req_id:match("^[%w_%-]+$") then return nil, "bad_req" end

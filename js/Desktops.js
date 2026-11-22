@@ -64,6 +64,32 @@ function layoutChoice(layout, om) {
   return mine ? mine.zones : "custom"
 }
 
+// The layout picker's options (D34, D35): "No plan", then the layouts that keep the desktop's mode now (marked "(now)"),
+// omagnet's layout for this desktop first on a floating one, then the rest, omagnet's layouts and "Custom zones".
+// mode: tiled | scrolling | floating | ""; om: omagnetLayouts(); desk: the slot's { name, zones } from omagnet, or null.
+function layoutOptions(mode, om, desk) {
+  const rest = LAYOUT_CHOICES.map((c) => ({ value: c.value, label: c.label }))
+    .concat(((om && om.layouts) || []).map((l) => ({ value: l.zones, label: "omagnet: " + l.name })))
+  let first = []
+  if (mode === "floating" && desk && typeof desk.name === "string" && /^[A-Za-z0-9_:-]{1,40}$/.test(desk.name)) {
+    const builtIn = LAYOUT_CHOICES.find((c) => c.value === desk.name && isZoneLayout(c.value))
+    const z = Zones.parse(String(desk.zones || ""))
+    const value = builtIn ? builtIn.value : (z.error ? "" : Zones.toText(z.zones))
+    if (value !== "") first.push({ value, label: (builtIn ? builtIn.label : desk.name) + " (omagnet, this desktop)" })
+  }
+  const taken = {}
+  for (const o of first) taken[o.value] = true
+  const fits = [], others = []
+  for (const o of rest) {
+    if (taken[o.value]) continue
+    taken[o.value] = true
+    if (mode !== "" && Plan.planMode(o.value) === mode) fits.push(o)
+    else others.push(o)
+  }
+  if (mode === "tiled" || mode === "scrolling") for (const o of fits) o.label += " (now)"
+  return [{ value: "", label: "No plan" }].concat(first, fits, others, [{ value: "custom", label: "Custom zones" }])
+}
+
 function modeLabel(mode) { return MODE_WORDS[mode] || "" }
 
 function storable(s) { return typeof s === "string" && !/["\r\n]/.test(s) }
@@ -101,9 +127,39 @@ function appChoices(values) {
     const e = values[i]
     if (!e || !e.id || e.noDisplay) continue
     const id = String(e.id).replace(/\.desktop$/i, "")
-    out.push({ value: id, label: String(e.name || id), icon: String(e.icon || ""), startupWMClass: String(e.startupClass || "") })
+    const exec = String(e.execString || "")
+    out.push({ value: id, label: String(e.name || id), icon: String(e.icon || ""),
+      startupWMClass: String(e.startupClass || "") || execClass(exec), terminal: e.runInTerminal === true || TERMINAL.test(exec),
+      shared: 0 })
   }
+  // D32: same name (any case) gets a hint, unique inside the group, the desktop id as the last resort
+  const groups = {}
+  for (const a of out) (groups[a.label.toLowerCase()] = groups[a.label.toLowerCase()] || []).push(a)
+  for (const g of Object.values(groups)) {
+    if (g.length < 2) continue
+    const hints = g.map((a) => a.terminal ? "terminal" : a.value)
+    const unique = new Set(hints).size === hints.length
+    g.forEach((a, i) => { a.label += " (" + (unique ? hints[i] : a.value) + ")" })
+  }
+  // D33: how many other apps open with the same window class
+  const byClass = {}
+  for (const a of out) if (a.startupWMClass !== "") byClass[a.startupWMClass.toLowerCase()] = (byClass[a.startupWMClass.toLowerCase()] || 0) + 1
+  for (const a of out) if (a.startupWMClass !== "") a.shared = byClass[a.startupWMClass.toLowerCase()] - 1
   return out.sort((a, b) => a.label.toLowerCase() < b.label.toLowerCase() ? -1 : a.label.toLowerCase() > b.label.toLowerCase() ? 1 : 0)
+}
+
+const TERMINAL = /^\s*(\S*\/)?(xdg-terminal-exec|alacritty|kitty|ghostty|foot|wezterm|konsole|gnome-terminal)(\s|$)/
+
+// The window class an Exec sets with --app-id or --class, before any -e (after it the flags belong to the program), or "".
+function execClass(exec) {
+  const words = String(exec || "").trim().split(/\s+/)
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]
+    if (w === "-e" || w === "--") break
+    const m = /^--(app-id|class)(=(.*))?$/.exec(w)
+    if (m) return m[2] !== undefined ? m[3] : (words[i + 1] || "")
+  }
+  return ""
 }
 
 // Classes seen for an app id: open windows first (liveClasses from `hyprctl clients -j`, each mapped to its entry with
@@ -194,6 +250,7 @@ function rowsOf(name, scene, ctx) {
     const c = AppResolve.classFor({ id: w.app, startupWMClass: a ? a.startupWMClass : "" }, ctx.seen)
     // want: the class a pick would store now; a row whose stored class differs is picked again to fix it (ZoneRow)
     row.want = c.class
+    if (a && a.shared > 0) row.notes.push(a.shared + (a.shared === 1 ? " other app opens" : " other apps open") + " with the same window class (" + c.class + "). omaplace cannot tell them apart, so any of them opened by hand can take this zone. Open all starts the right one.")
     if (!c.confirmed) row.notes.push("Class is a guess (" + w.class + "). Open the app once, then pick it again here.")
     else if (c.class !== w.class) row.notes.push("Class is a guess (" + w.class + "); the app's real class is " + c.class + " now: pick it again here.")
     const others = (ctx.holders[w.class + "\n" + (w.context || "")] || []).filter((n) => n !== name)
@@ -207,7 +264,8 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   const card = {
     key: mon.identity + "\n" + slot, identity: mon.identity, focused: mon.focused === true, monitorName: mon.name, slot, workspace: ws,
     windows: (live.windows || {})[ws] || 0, mode, plan: !!found, name: "", layout: "", choice: "", openAtLogin: false,
-    error: "", badge: "No plan" + (mode ? ", now " + modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback
+    error: "", badge: "No plan" + (mode ? ", now " + modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback,
+    options: layoutOptions(mode, ctx.omagnet, (ctx.omDesks || {})[ws] || null)
   }
   if (!found) return card
   const s = found.scene
@@ -246,6 +304,8 @@ function cards(live, doc, ctx) {
     c.fallback = true
     mons = c.liveNames.map((n) => ({ identity: n, name: n, focused: false, slots: [] }))
   }
+  c.omDesks = {}
+  for (const m of mons) for (const s of (m.slots || [])) if (s && s.omagnet && Number.isInteger(s.workspace)) c.omDesks[s.workspace] = s.omagnet
   const shown = {}
   const groups = mons.map((m) => {
     const list = []

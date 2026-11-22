@@ -898,3 +898,37 @@ the target). All commands through async `Process`. Move notifications are sent b
 | WP18 | Update plan for twins and full (D28) | `js/PlanMoves.js` | Node tests |
 | WP20 | omagnet layouts (D31) | `lua/omaplace.lua` (desktops), `js/Desktops.js`, `Service.qml`, `pages/DesktopCard.qml` | Lua and Node tests; live: a layout made in omagnet shows by name |
 | WP19 | Zone editor (D29) | `js/LayoutOps.js`, `pages/ZoneEditor.qml`, `pages/DesktopCard.qml`, `pages/DesktopsPage.qml` | qmllint; live: draw, save, Open all |
+
+## 16. Feedback from daily use (2026-11-22, `feedback.md` items 1 and 2)
+
+### 16.1 Decisions
+
+| # | Decision | Status |
+|---|---|---|
+| D32 | Apps with the same name in the app picker (feedback 1) get a hint after the name: "terminal" for an entry that runs in a terminal (`Terminal=true`, or an Exec starting with `xdg-terminal-exec` or a known terminal), else the entry's desktop id. If two hints in one group are still the same, every app in that group shows its desktop id (ids are unique). Names compare without case. The hint is part of the label, so the zone row shows it too. Apps with a unique name get no hint | decided |
+| D33 | An entry with no `StartupWMClass` whose Exec sets the window class before any `-e` (`--app-id=X`, `--app-id X`, `--class=X`, `--class X`) has class X, confirmed (Omarchy's TUI launchers run `xdg-terminal-exec --app-id=TUI.tile -e ...`). When two or more entries share one class (case-insensitive), the zone row says so: omaplace tells windows apart by class only (D3), so a hand-opened window of any of them can take that zone; Open all still starts the right app | decided |
+| D34 | The layout picker follows the desktop's mode (Omarchy's saved mode, already read for the badge): the choices that keep the mode come first. Tiled: "Tiled (now)". Scrolling: "Scrolling (now)". Floating (no "(now)", many choices fit): the omagnet layout for that desktop if one is set, then the zone layouts and Free floating. Unknown mode: the usual order. Picking a layout of another mode still shows today's note ("Open all switches this desktop from X to Y"); Open all keeps switching (v0.2.0 behaviour, unchanged) | decided |
+| D35 | omagnet's layout for a desktop (feedback 2): `desktops()` adds `omagnet = { name, zones }` per slot from omagnet's config only: `[workspace_layouts]` by workspace id then name, else `[zone_layouts]` for the monitor. omagnet's key-picked override (temporary, per monitor) and its screen-shape default are left out, so ten cards are never all coloured by one key press. Zones come from `_G.omagnet.resolve_layout(name)` as rects and are written as zones text; a name omaplace also has (`columns:2`, `grid:2x2` ...) is offered as that built-in. Every omagnet call is in `pcall`; any failure gives no hint. Needs omagnet 0.2.3 or newer (`resolve_layout` and `cfg` on `_G.omagnet`) | decided |
+
+### 16.2 Edge cases
+
+| Case | What happens |
+|---|---|
+| Two apps with one name, one a terminal UI | "Name (terminal)" and "Name (its-desktop-id)" |
+| Three apps with one name, two of them terminal | all three show their desktop id |
+| Same name, different case ("Notes", "notes") | treated as the same name |
+| An entry hidden (`NoDisplay`) | not listed, never counted as a duplicate |
+| A TUI app sharing `TUI.tile` with other TUI apps | class `TUI.tile`, confirmed; the row note names the shared class |
+| `--app-id` after `-e` (an argument of the program, not the terminal) | ignored: only flags before `-e` count |
+| omagnet not loaded, or an older omagnet without `resolve_layout` | no omagnet hint, picker as before |
+| omagnet's layout name cannot be resolved | no hint for that desktop |
+| A desktop with a plan already | the picker shows the plan's choice; the order still follows the mode |
+| Mode unknown (Omarchy command missing or failed) | usual order, no "(now)" |
+| A run on an empty desktop (Lua `start_run`) | unchanged: Open all sets the plan's mode first; reading Omarchy's saved mode there is left for later |
+
+### 16.3 Work packages
+
+| WP | What | Files | Checks |
+|---|---|---|---|
+| WP21 | Picker labels and exec class (D32, D33) | `js/Desktops.js` | Node tests with made-up entries |
+| WP22 | Picker order and omagnet per desktop (D34, D35) | `js/Desktops.js`, `lua/omaplace.lua` (desktops), `pages/DesktopCard.qml` | Node tests, a fake-`hl` Lua test with a fake omagnet, qmllint |

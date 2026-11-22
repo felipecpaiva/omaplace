@@ -334,3 +334,69 @@ test("omagnet layouts (D31): read, recognized by their zones, offered by name", 
   assert.equal(D.layoutLabel("0 0 0.7 1; 0.7 0 0.3 1"), "Zones: custom (2)", "without omagnet: custom")
   assert.deepEqual(D.omagnetLayouts(undefined), { loaded: false, layouts: [] })
 })
+
+// D32, D33: same-name apps get a hint; an Exec's --app-id is the class; a shared class is counted (made-up apps)
+test("app picker: same names get a hint, exec class, shared class", () => {
+  const apps = D.appChoices([
+    { id: "Pad.desktop", name: "Pad", execString: "xdg-terminal-exec --app-id=TUI.tile -e pad", icon: "t" },
+    { id: "pad-app.desktop", name: "Pad", execString: "/opt/pad/pad-app", startupClass: "pad-app", icon: "p" },
+    { id: "Other.desktop", name: "Other", execString: "xdg-terminal-exec --app-id TUI.tile -e other" },
+    { id: "Odd.desktop", name: "Odd", execString: "kitty -e tool --class=Inner" },
+    { id: "hidden.desktop", name: "Pad", noDisplay: true },
+    { id: "a.one.desktop", name: "Notes", runInTerminal: true }, { id: "a.two.desktop", name: "notes", runInTerminal: true },
+    { id: "a.three.desktop", name: "NOTES" }
+  ])
+  const by = (id) => apps.find((a) => a.value === id)
+  assert.equal(by("Pad").label, "Pad (terminal)")
+  assert.equal(by("pad-app").label, "Pad (pad-app)")
+  assert.equal(by("Other").label, "Other", "a unique name gets no hint")
+  assert.equal(by("hidden"), undefined, "hidden entries are not listed")
+  assert.equal(by("Pad").startupWMClass, "TUI.tile", "--app-id=X is the class")
+  assert.equal(by("Other").startupWMClass, "TUI.tile", "--app-id X too")
+  assert.equal(by("Odd").startupWMClass, "", "a flag after -e belongs to the program")
+  assert.equal(by("Pad").shared, 1, "one other app has TUI.tile")
+  assert.equal(by("pad-app").shared, 0)
+  assert.equal(by("a.one").label, "Notes (a.one)", "two terminal hints alike: every one shows its id")
+  assert.equal(by("a.three").label, "NOTES (a.three)", "names compare without case")
+})
+
+test("a zone row warns when its app shares a window class", () => {
+  const apps = D.appChoices([{ id: "Pad.desktop", name: "Pad", execString: "xdg-terminal-exec --app-id=TUI.tile -e pad" },
+    { id: "Other.desktop", name: "Other", execString: "xdg-terminal-exec --app-id=TUI.tile -e other" }])
+  const d = doc({ p: plan("columns:2", [win("TUI.tile", 1, { app: "Pad" })]) })
+  const m = D.cards(live, d, { apps })
+  const row = m.groups[0].cards[1].rows[0]
+  assert.equal(row.label, "Pad")
+  assert.ok(row.notes.some((n) => n.startsWith("1 other app opens with the same window class (TUI.tile)")))
+})
+
+// D34, D35: the picker follows the desktop's mode, omagnet's layout for a floating desktop first
+test("layout picker order follows the mode", () => {
+  const vals = (o) => o.map((x) => x.value)
+  const tiled = D.layoutOptions("tiled", null, null)
+  assert.deepEqual(vals(tiled).slice(0, 2), ["", "tiled"])
+  assert.equal(tiled[1].label, "Tiled (now)")
+  assert.equal(tiled[tiled.length - 1].value, "custom")
+  assert.equal(D.layoutOptions("scrolling", null, null)[1].label, "Scrolling (now)")
+  const none = D.layoutOptions("", null, null)
+  assert.deepEqual(vals(none).slice(0, 3), ["", "tiled", "scrolling"], "unknown mode: usual order")
+  assert.ok(none.every((o) => !o.label.includes("(now)")))
+  const om = D.omagnetLayouts({ loaded: true, layouts: [{ name: "coding", zones: "0 0 0.7 1; 0.7 0 0.3 1" }] })
+  const fl = D.layoutOptions("floating", om, { name: "coding", zones: "0.0000 0.0000 0.7000 1.0000; 0.7000 0.0000 0.3000 1.0000" })
+  assert.equal(fl[1].label, "coding (omagnet, this desktop)")
+  assert.equal(fl[1].value, om.layouts[0].zones, "same value as the named omagnet layout, so a saved plan shows it")
+  assert.equal(fl.filter((o) => o.value === fl[1].value).length, 1, "listed once")
+  assert.equal(fl[2].value, "free", "then the floating layouts")
+  const two = D.layoutOptions("floating", om, { name: "columns:2", zones: "0 0 0.5 1; 0.5 0 0.5 1" })
+  assert.equal(two[1].value, "columns:2")
+  assert.equal(two[1].label, "2 columns (omagnet, this desktop)")
+  assert.equal(D.layoutOptions("floating", om, { name: "bad name!", zones: "0 0 1 1" })[1].value, "free", "a bad name is ignored")
+  assert.equal(D.layoutOptions("tiled", om, { name: "coding", zones: "0 0 1 1" })[1].value, "tiled", "omagnet only on floating")
+})
+
+test("cards carry the picker options with omagnet's desktop layout", () => {
+  const l2 = { ...live, monitors: [{ ...live.monitors[0], slots: [{ slot: 1, workspace: 1 }, { slot: 2, workspace: 2, omagnet: { name: "columns:2", zones: "0 0 0.5 1; 0.5 0 0.5 1" } }] }] }
+  const m = D.cards(l2, doc({}), {})
+  assert.equal(m.groups[0].cards[0].options[1].value, "tiled", "desktop 1 is tiled")
+  assert.equal(m.groups[0].cards[1].options[1].label, "2 columns (omagnet, this desktop)", "desktop 2 floating with omagnet")
+})
