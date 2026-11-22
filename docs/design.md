@@ -312,7 +312,8 @@ follow = false                  # true: switch to the workspace when it opens
 enabled = true
 ```
 
-Rules place on a workspace only. Exact size and place on open is a later option (`keep_rect`), done by dispatch after open,
+`rect = "x y w h"` (fractions of the usable area) and `keep_rect = true` (D27) also put the rule's first window at that
+rect once it floats on the rule's desktop; "Add rule" from a floating window fills both. Exact size and place are done by dispatch after open,
 never by a rule `move`/`size` effect, so Omarchy's own open rules can never fight it (they are rebuilt at runtime,
 `workspace-modes.lua:279,387,409`, so rule order is not stable).
 

@@ -78,6 +78,8 @@ app = "org.example.Editor"      # the app's initial class
 monitor = "Example Corp EX27"    # the monitor's name as Omarchy knows it; "laptop" = any laptop panel; empty = the focused monitor
 slot = 3                        # desktop 1 to 10 on that monitor
 follow = false                  # true: switch to that desktop when the app opens
+rect = "0.5 0 0.5 1"            # optional: x y w h as fractions of the screen (here the right half)
+keep_rect = true                # put the window there when it floats (a floating desktop); "Add rule" fills both
 ```
 
 The rule follows the monitor, not the port. If the monitor is unplugged, the rule switches itself off and the app opens

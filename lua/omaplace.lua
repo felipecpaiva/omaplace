@@ -106,9 +106,10 @@ function M.rebuild()
   local ok, live = pcall(hl.get_monitors)
   if not ok or type(live) ~= "table" then return nil, "no monitors" end
   local slots = Slots.with(rawget(_G, "o"))
-  local specs, vanished, homes = Rules.build(
+  local specs, vanished, places = Rules.build(
     M.rules, live, Monitors.resolve, slots.workspace_id, focused_of(live), M.applied, M.settings.missing_monitor_rule)
-  M.rule_homes = homes
+  M.rule_places, M.rule_homes = places, {}
+  for _, p in pairs(places) do M.rule_homes[p.ws] = p.monitor end
   M.enabled = {}
   M.applied = {}
   for _, spec in ipairs(specs) do
@@ -737,6 +738,36 @@ local function has_rule(cls)
   return false
 end
 
+-- A rule with keep_rect (D27): its first window, once on the rule's desktop, is put at the rule's rect after settle_ms,
+-- only when it floats there (D13). True when the rule owns the rect, so plans and app memory keep out of it.
+local function place_from_rule(w)
+  local cls = w.initial_class or ""
+  if cls == "" or not M.rule_places then return false end
+  for name, rule in pairs(M.rules) do
+    local p, rect = M.rule_places[name], Rules.rect_of(rule)
+    if rule.app == cls and p and rect and M.enabled["omaplace-rule-" .. name] then
+      local ws = w.workspace
+      if not ws or ws.id ~= p.ws or others_of(cls, w.address) > 0 then return false end
+      local address = w.address
+      later(M.settings.settle_ms, function()
+        local now_w = Place.find(address)
+        if not (now_w and now_w.floating and has_tag(now_w, M.FLOAT_TAG)) then return end
+        local mon
+        for _, m in ipairs(hl.get_monitors()) do
+          if m.name == p.monitor then mon = m end
+        end
+        if not mon then return end
+        Place.put(now_w, Geometry.place_frac(Geometry.usable(mon), rect), function(ok, reason)
+          if not ok then log("rule place of " .. cls .. " failed: " .. tostring(reason)) end
+        end)
+      end)
+      return true
+    end
+  end
+  return false
+end
+M.place_from_rule = place_from_rule
+
 -- A window opened by hand while no run is live goes to its remembered place when it is the first window of its
 -- class, not on a special workspace. A rule's desktop wins (D9); the rect only on a floating desktop (D13).
 local function place_from_memory(w)
@@ -941,6 +972,7 @@ function M.on_window_open(w)
   track(w)
   if w.workspace then Place.home(w.workspace.id, (M.rule_homes or {})[w.workspace.id]) end -- a rule's desktop
   if not (run and run.live) then
+    if place_from_rule(w) then return end -- a rule's own rect wins over a plan and app memory (D9, D27)
     if M.place_from_plan(w) then return end -- a planned app is the plan's, never memory's (D20)
     return place_from_memory(w)
   end

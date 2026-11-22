@@ -35,17 +35,18 @@ end
 --   focused    the focused monitor now (used when a rule has no monitor), or nil
 --   previous   optional list of spec names from the last build
 --   policy     missing_monitor_rule, "skip" (default) or "focused"
--- Returns specs sorted by name, the names in `previous` that are not in `specs` any more, and homes: workspace id ->
--- monitor name of every enabled rule (the glue moves a rule's desktop to its monitor, Place.home).
+-- Returns specs sorted by name, the names in `previous` that are not in `specs` any more, and places: rule name ->
+-- { ws, monitor } (monitor name) of every enabled rule (the glue sends a rule's desktop to its monitor, Place.home,
+-- and puts a keep_rect window at its rect there).
 function R.build(cfg_rules, live, resolve, ws_id, focused, previous, policy)
   local names = {}
   for name in pairs(cfg_rules or {}) do names[#names + 1] = name end
   table.sort(names)
 
-  local specs, current, homes = {}, {}, {}
+  local specs, current, places = {}, {}, {}
   for _, name in ipairs(names) do
     local spec, id, mon_name = spec_for(name, cfg_rules[name], live, resolve, ws_id, focused, policy or "skip")
-    if id then homes[id] = mon_name end
+    if id then places[name] = { ws = id, monitor = mon_name } end
     specs[#specs + 1] = spec
     current[spec.name] = true
   end
@@ -55,7 +56,19 @@ function R.build(cfg_rules, live, resolve, ws_id, focused, previous, policy)
     if not current[old] then vanished[#vanished + 1] = old end
   end
   table.sort(vanished)
-  return specs, vanished, homes
+  return specs, vanished, places
+end
+
+-- A rule's kept rect: { x, y, w, h } fractions when keep_rect is on and `rect` holds four numbers that fit the area,
+-- else nil (a bad rect is ignored, the window then opens where the desktop puts it).
+function R.rect_of(rule)
+  if type(rule) ~= "table" or rule.keep_rect ~= true or type(rule.rect) ~= "string" then return nil end
+  local v = {}
+  for n in rule.rect:gmatch("%S+") do v[#v + 1] = tonumber(n) end
+  if #v ~= 4 then return nil end
+  local x, y, w, h = v[1], v[2], v[3], v[4]
+  if not (x and y and w and h) or x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > 1.001 or y + h > 1.001 then return nil end
+  return v
 end
 
 return R

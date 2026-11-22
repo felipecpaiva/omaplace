@@ -121,8 +121,10 @@ test("runResult waits for its own final run and counts items", () => {
 test("ruleFromCapture uses the window's monitor identity and slot", () => {
   assert.deepEqual(S.ruleFromCapture(capture, "org.example.Editor"), {
     name: "org-example-editor",
-    rule: { app: "org.example.Editor", monitor: "Example Corp EX24", slot: 2, follow: false, enabled: true }
+    rule: { app: "org.example.Editor", monitor: "Example Corp EX24", slot: 2, follow: false, enabled: true, rect: "0 0 0.5 1", keep_rect: true }
   })
+  const tiled = { monitors: capture.monitors, windows: [{ class: "x", monitor: 0, slot: 1, rect: [0, 0, 0.5, 1], floating: false }] }
+  assert.equal(S.ruleFromCapture(tiled, "x").rule.rect, undefined, "a tiled window has no spot to keep")
   assert.equal(S.ruleFromCapture(capture, "org.example.Missing"), null)
   assert.equal(S.ruleFromCapture({ monitors: [], windows: [{ class: "x", monitor: 0, slot: 0 }] }, "x"), null)
 })

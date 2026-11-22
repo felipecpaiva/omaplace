@@ -30,7 +30,9 @@ const RULE_SPECS = {
   monitor: { type: "string", def: "" },
   slot: { type: "int", min: 1, max: 10, def: 1 },
   follow: { type: "bool", def: false },
-  enabled: { type: "bool", def: true }
+  enabled: { type: "bool", def: true },
+  rect: { type: "string", def: "" },      // "x y w h" fractions of the usable area (lua/rules.lua rect_of)
+  keep_rect: { type: "bool", def: false } // put the first window at rect when it floats there (D27)
 }
 const STRATEGY_SPECS = {
   match: { type: "string", def: "" },

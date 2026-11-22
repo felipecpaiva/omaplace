@@ -36,10 +36,21 @@ eq(specs[1].name, "omaplace-rule-editor", "name")
 eq(specs[1].match.initial_class, "org.example.Editor", "match")
 eq(specs[1].workspace, "13 silent", "second block slot 3, silent")
 eq(specs[1].enabled, true, "enabled")
-local _, _, homes = build({ editor = rule({ app = "org.example.Editor", monitor = "Example Corp EX27", slot = 3 }),
+local _, _, places = build({ editor = rule({ app = "org.example.Editor", monitor = "Example Corp EX27", slot = 3 }),
   off = rule({ enabled = false, slot = 5 }) })
-eq(homes[13], "DP-2", "home of the rule's desktop")
-eq(homes[5], nil, "a disabled rule has no home")
+eq(places.editor.ws, 13, "place of the rule: desktop")
+eq(places.editor.monitor, "DP-2", "place of the rule: monitor")
+eq(places.off, nil, "a disabled rule has no place")
+
+-- keep_rect: four fractions that fit, and only when keep_rect is on
+local r = Rules.rect_of({ keep_rect = true, rect = "0.5 0 0.5 1" })
+eq(r and r[1], 0.5, "rect x")
+eq(r and r[4], 1, "rect h")
+eq(Rules.rect_of({ keep_rect = false, rect = "0.5 0 0.5 1" }), nil, "keep_rect off")
+eq(Rules.rect_of({ keep_rect = true, rect = "0.5 0 0.6 1" }), nil, "wider than the area")
+eq(Rules.rect_of({ keep_rect = true, rect = "0 0 1" }), nil, "three numbers")
+eq(Rules.rect_of({ keep_rect = true, rect = "a b c d" }), nil, "not numbers")
+eq(Rules.rect_of({ keep_rect = true, rect = "0 0 0 1" }), nil, "zero width")
 
 -- follow = true switches to the workspace
 specs = build({ a = rule({ monitor = "Example Corp EX27", slot = 3, follow = true }) })

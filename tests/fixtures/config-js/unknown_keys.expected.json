@@ -25,6 +25,8 @@
       "slot": 2,
       "follow": false,
       "enabled": true,
+      "rect": "",
+      "keep_rect": false,
       "extra": {
         "color": "red"
       }

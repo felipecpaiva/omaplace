@@ -24,14 +24,18 @@
       "monitor": "Example Corp EX27 #1",
       "slot": 3,
       "follow": true,
-      "enabled": true
+      "enabled": true,
+      "rect": "",
+      "keep_rect": false
     },
     "mail": {
       "app": "org.example.Mail",
       "monitor": "",
       "slot": 10,
       "follow": false,
-      "enabled": false
+      "enabled": false,
+      "rect": "",
+      "keep_rect": false
     }
   },
   "strategies": {},

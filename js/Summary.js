@@ -161,7 +161,11 @@ function ruleFromCapture(capture, cls) {
   if (!w || name === "" || !(w.slot >= 1 && w.slot <= 10)) return null
   const m = listOf(capture.monitors)[w.monitor]
   const monitor = m && m.fp && typeof m.fp.identity === "string" && !/["\r\n]/.test(m.fp.identity) ? m.fp.identity : ""
-  return { name, rule: { app: cls, monitor, slot: w.slot, follow: false, enabled: true } }
+  const rule = { app: cls, monitor, slot: w.slot, follow: false, enabled: true }
+  // a floating window keeps its size and spot (D27); a tiled one has none to keep
+  const r = Array.isArray(w.rect) && w.rect.length === 4 && w.rect.every((n) => typeof n === "number" && isFinite(n)) ? w.rect : null
+  if (w.floating === true && r) { rule.rect = r.map((n) => String(Math.round(n * 10000) / 10000)).join(" "); rule.keep_rect = true }
+  return { name, rule }
 }
 
 function sceneList(doc) {

@@ -24,14 +24,18 @@
       "monitor": "",
       "slot": 1,
       "follow": false,
-      "enabled": true
+      "enabled": true,
+      "rect": "",
+      "keep_rect": false
     },
     "twoquotes": {
       "app": "",
       "monitor": "",
       "slot": 2,
       "follow": false,
-      "enabled": true
+      "enabled": true,
+      "rect": "",
+      "keep_rect": false
     }
   },
   "strategies": {},

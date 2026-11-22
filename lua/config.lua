@@ -29,6 +29,8 @@ C.rule_spec = {
   slot = { default = 1, kind = "int", min = 1, max = 10 },
   follow = { default = false, kind = "bool" },
   enabled = { default = true, kind = "bool" },
+  rect = { default = "", kind = "string" }, -- "x y w h", fractions of the usable area (rules.rect_of)
+  keep_rect = { default = false, kind = "bool" },
 }
 
 C.strategy_names = { "desktop", "webapp", "terminal", "tui", "context", "place_only", "command", "skip" }

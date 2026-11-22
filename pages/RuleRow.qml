@@ -80,6 +80,19 @@ ColumnLayout {
       checked: row.rule.follow
       onToggled: row.panel.setRule(row.rule.name, "follow", !row.rule.follow)
     }
+    Text {
+      visible: (row.rule.rect || "") !== ""
+      textFormat: Text.PlainText
+      text: "Same spot"
+      color: row.panel.foreground
+      font.family: row.panel.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+    ToggleSwitch {
+      visible: (row.rule.rect || "") !== ""
+      checked: row.rule.keep_rect === true
+      onToggled: row.panel.setRule(row.rule.name, "keep_rect", !row.rule.keep_rect)
+    }
   }
 
   PanelSeparator { Layout.fillWidth: true; foreground: row.panel.foreground }

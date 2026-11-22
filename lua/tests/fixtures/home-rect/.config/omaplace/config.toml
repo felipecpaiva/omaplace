@@ -1,0 +1,8 @@
+# made-up rule with a kept rect for the glue test
+session = "off"
+[rule.chat]
+app = "org.example.Chat"
+monitor = "Example Corp EX27"
+slot = 2
+keep_rect = true
+rect = "0.5 0 0.5 1"

@@ -821,7 +821,7 @@ Item {
 
   function setRuleField(name, field, value) {
     if (root.req) return Summary.answer(root.fail("busy"))
-    if (["monitor", "slot", "follow", "enabled"].indexOf(field) === -1) return Summary.answer(root.fail("failed", "that rule field cannot be changed here"))
+    if (["monitor", "slot", "follow", "enabled", "keep_rect"].indexOf(field) === -1) return Summary.answer(root.fail("failed", "that rule field cannot be changed here"))
     try {
       let text = root.readNow(configFile)
       if (!ConfigIO.parse(text).rules[name]) return Summary.answer(root.fail("not_found"))
