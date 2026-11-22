@@ -1,0 +1,5 @@
+#!/bin/bash
+# Build the package and install it (asks for your password through pacman). The app then shows in the launcher.
+set -euo pipefail
+cd "$(dirname "$0")/../pkgbuild"
+makepkg -fsi

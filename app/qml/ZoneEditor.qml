@@ -134,12 +134,12 @@ Item {
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
-      Button {
-        text: "Grid"; highlighted: root.mode === "grid"
+      ActionButton {
+        text: "Grid"; primary: root.mode === "grid"
         onClicked: root.setMode("grid")
       }
-      Button {
-        text: "Canvas"; highlighted: root.mode === "canvas"
+      ActionButton {
+        text: "Canvas"; primary: root.mode === "canvas"
         onClicked: root.setMode("canvas")
       }
     }
@@ -259,27 +259,27 @@ Item {
       Layout.fillWidth: true
       spacing: 8
       visible: root.mode === "grid"
-      Button {
+      ActionButton {
         text: "Split vertical"
         onClicked: root.splitSel("x")
       }
-      Button {
+      ActionButton {
         text: "Split horizontal"
         onClicked: root.splitSel("y")
       }
-      Button {
-        text: "Click to split"; highlighted: root.armed
+      ActionButton {
+        text: "Click to split"; primary: root.armed
         onClicked: root.armed = !root.armed
       }
-      Button {
+      ActionButton {
         text: root.cutVertical ? "Line: vertical" : "Line: horizontal"
         onClicked: root.cutVertical = !root.cutVertical
       }
-      Button {
-        text: "Select several"; highlighted: root.several
+      ActionButton {
+        text: "Select several"; primary: root.several
         onClicked: root.toggleSeveral()
       }
-      Button {
+      ActionButton {
         text: "Merge"; enabled: root.multiCount >= 2
         onClicked: root.mergeSel()
       }
@@ -288,12 +288,12 @@ Item {
     Flow {
       Layout.fillWidth: true
       spacing: 8
-      Button {
+      ActionButton {
         visible: root.mode === "canvas"
         text: "Add zone"
         onClicked: root.addZone()
       }
-      Button {
+      ActionButton {
         text: "Delete zone"; enabled: root.selected >= 0
         onClicked: root.deleteSelected()
       }
@@ -340,11 +340,11 @@ Item {
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
-      Button {
+      ActionButton {
         text: "Save"
         onClicked: root.save()
       }
-      Button {
+      ActionButton {
         text: "Cancel"
         onClicked: root.canceled()
       }

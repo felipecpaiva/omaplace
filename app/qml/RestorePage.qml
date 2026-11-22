@@ -18,10 +18,10 @@ ScrollView {
         Card {
             title: qsTr("Bring your windows back")
             help: qsTr("Opens the apps of your last session again, each on its own monitor and desktop. Windows that are open already are moved.")
-            Button {
+            ActionButton {
                 objectName: "restoreLast"
                 text: qsTr("Restore last session")
-                highlighted: true
+                primary: true
                 onClicked: page.app.act("restore", [""], qsTr("Restoring the last session"))
             }
             Choice {
@@ -42,6 +42,7 @@ ScrollView {
         }
 
         Card {
+            objectName: "olderSessions"
             title: qsTr("Older sessions")
             Hint { visible: page.sessions.length === 0; text: qsTr("Nothing saved yet. omaplace saves after your windows change.") }
             Repeater {
@@ -59,9 +60,9 @@ ScrollView {
                     }
                     Label {
                         color: ui.secondary
-                        text: modelData.windows < 0 ? qsTr("unreadable") : qsTr("%n window(s)", "", modelData.windows)
+                        text: modelData.windows < 0 ? qsTr("unreadable") : (modelData.windows === 1 ? qsTr("1 window") : qsTr("%1 windows").arg(modelData.windows))
                     }
-                    Button {
+                    ActionButton {
                         text: qsTr("Restore")
                         enabled: !modelData.current && modelData.windows > 0
                         Accessible.name: qsTr("Restore the session of %1").arg(modelData.savedAt)

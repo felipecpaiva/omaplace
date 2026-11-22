@@ -20,7 +20,7 @@ ScrollView {
         Card {
             title: qsTr("Omarchy menu")
             help: qsTr("Adds a Scenes menu: save this desktop, open a scene, restore, always open here, settings. The menu file is backed up first, as omarchy-menu.jsonc.omaplace.bak.")
-            Button {
+            ActionButton {
                 objectName: "menuButton"
                 text: page.app.panel.menu ? qsTr("Remove from the Omarchy menu") : qsTr("Add omaplace to the Omarchy menu")
                 enabled: page.app.panel.ok === true
@@ -31,7 +31,7 @@ ScrollView {
 
         Card {
             title: qsTr("Advanced")
-            Button {
+            ActionButton {
                 objectName: "advancedButton"
                 text: page.advanced ? qsTr("Hide the timings") : qsTr("Show the timings")
                 onClicked: page.advanced = !page.advanced
@@ -58,7 +58,7 @@ ScrollView {
         Card {
             title: qsTr("About")
             Hint { text: qsTr("omaplace settings %1. Your settings are in ~/.config/omaplace (config.toml and scenes.toml); more options are in config.toml.").arg(Qt.application.version) }
-            Button { text: qsTr("Open the settings folder"); onClicked: backend.openConfigFolder() }
+            ActionButton { text: qsTr("Open the settings folder"); onClicked: backend.openConfigFolder() }
         }
     }
 }

@@ -15,7 +15,15 @@ Button {
     text: current ? current.label : placeholder
     icon.source: current && current.icon ? backend.iconSource(current.icon) : ""
     icon.color: "transparent"
-    flat: false
+    leftPadding: 10
+    rightPadding: 10
+    background: Rectangle {
+        implicitHeight: 36
+        radius: Math.min(6, ui.radius)
+        color: picker.hovered ? ui.off : "transparent"
+        border.width: 1
+        border.color: picker.activeFocus ? ui.accent : ui.edge
+    }
     Accessible.name: qsTr("App: %1").arg(text)
     onClicked: { filter.text = ""; popup.open(); filter.forceActiveFocus() }
 

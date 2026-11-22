@@ -1,0 +1,9 @@
+#!/bin/bash
+# Build build/omaplace-settings (qmake6 and make).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+mkdir -p build
+cd build
+qmake6 ../omaplace-settings.pro >/dev/null
+make -j"$(nproc)" >/dev/null
+echo "built app/build/omaplace-settings"

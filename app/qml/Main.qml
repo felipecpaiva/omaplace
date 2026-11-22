@@ -16,7 +16,6 @@ ApplicationWindow {
     Material.theme: ui.light ? Material.Light : Material.Dark
     Material.accent: ui.accent
     Material.foreground: ui.text
-    Material.background: ui.background
     Material.roundedScale: desktopTheme.radius
 
     AppTheme { id: ui }
@@ -59,7 +58,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+4"; context: Qt.ApplicationShortcut; onActivated: win.page = 3 }
     Shortcut { sequence: "Ctrl+5"; context: Qt.ApplicationShortcut; onActivated: win.page = 4 }
     Shortcut { sequence: "F5"; context: Qt.ApplicationShortcut; onActivated: win.act("refresh", []) }
-    Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; onActivated: help.open() }
+    Shortcut { sequences: ["?", "Shift+?", "F1"]; context: Qt.ApplicationShortcut; onActivated: help.open() }
 
     Dialog {
         id: help
@@ -70,7 +69,7 @@ ApplicationWindow {
         standardButtons: Dialog.Ok
         Label {
             textFormat: Text.PlainText
-            text: qsTr("Ctrl+1 to Ctrl+5: the pages\nTab, Shift+Tab: move between controls\nEnter or Space: press the control\nF5: read the desktops again\nCtrl+W or Ctrl+Q: close\n?: this list")
+            text: qsTr("Ctrl+1 to Ctrl+5: the pages\nTab, Shift+Tab: move between controls\nEnter or Space: press the control\n? or F1: this list\nF5: read the desktops again\nCtrl+W or Ctrl+Q: close")
         }
     }
 
@@ -137,7 +136,7 @@ ApplicationWindow {
                 contentItem: RowLayout {
                     spacing: 10
                     Hint { warn: backend.problem !== ""; text: backend.problem !== "" ? backend.problem : qsTr("Connecting to omaplace...") }
-                    Button { visible: backend.problem !== ""; text: qsTr("Try again"); onClicked: backend.start() }
+                    ActionButton { visible: backend.problem !== ""; text: qsTr("Try again"); onClicked: backend.start() }
                 }
             }
             Hint {
@@ -151,7 +150,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 currentIndex: win.page
-                enabled: win.ready
+                visible: win.ready
                 DesktopsPage { app: win }
                 AppsPage { app: win }
                 ScenesPage { app: win }

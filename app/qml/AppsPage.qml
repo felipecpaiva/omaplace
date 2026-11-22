@@ -56,10 +56,10 @@ ScrollView {
                     Accessible.name: qsTr("Monitor")
                 }
                 SpinBox { id: newSlot; objectName: "newRuleSlot"; from: 1; to: 10; value: 1; editable: true; Accessible.name: qsTr("Desktop") }
-                Button {
+                ActionButton {
                     objectName: "newRuleAdd"
                     text: qsTr("Add")
-                    highlighted: true
+                    primary: true
                     enabled: page.newApp !== ""
                     onClicked: { page.app.act("ruleNew", [page.newApp, String(newMonitor.currentValue || ""), newSlot.value]); page.newApp = "" }
                 }
@@ -86,12 +86,13 @@ ScrollView {
                             text: ruleRow.rule.app !== "" ? page.appLabel(ruleRow.rule.app) : qsTr("%1 (no app)").arg(ruleRow.rule.name)
                         }
                         Switch {
+                            objectName: "ruleOn-" + ruleRow.rule.name
                             text: qsTr("On")
                             checked: ruleRow.rule.enabled !== false
                             Accessible.name: qsTr("Rule %1 on").arg(ruleRow.rule.name)
                             onToggled: page.app.act("setRule", [ruleRow.rule.name, "enabled", checked])
                         }
-                        Button {
+                        ActionButton {
                             text: qsTr("Remove")
                             onClicked: page.app.ask(qsTr("Remove the rule for %1? The file before the change is kept as config.toml.bak.").arg(page.appLabel(ruleRow.rule.app)),
                                 "removeRule", [ruleRow.rule.name], qsTr("Removed"))
@@ -101,6 +102,7 @@ ScrollView {
                         Layout.fillWidth: true
                         spacing: 10
                         ComboBox {
+                            objectName: "ruleMonitor-" + ruleRow.rule.name
                             width: 240
                             model: Settings.monitorChoices(page.monitors, ruleRow.rule.monitor)
                             textRole: "label"
@@ -112,17 +114,20 @@ ScrollView {
                         RowLayout {
                             Label { text: qsTr("Desktop") }
                             SpinBox {
+                                objectName: "ruleSlot-" + ruleRow.rule.name
                                 from: 1; to: 10; value: ruleRow.rule.slot || 1; editable: true
                                 Accessible.name: qsTr("Desktop")
                                 onValueModified: if (value !== ruleRow.rule.slot) page.app.act("setRule", [ruleRow.rule.name, "slot", value])
                             }
                         }
                         Switch {
+                            objectName: "ruleFollow-" + ruleRow.rule.name
                             text: qsTr("Switch to that desktop when it opens")
                             checked: ruleRow.rule.follow === true
                             onToggled: page.app.act("setRule", [ruleRow.rule.name, "follow", checked])
                         }
                         Switch {
+                            objectName: "ruleSpot-" + ruleRow.rule.name
                             visible: (ruleRow.rule.rect || "") !== ""
                             text: qsTr("Open in the same spot")
                             checked: ruleRow.rule.keep_rect === true

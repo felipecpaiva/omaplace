@@ -1,0 +1,11 @@
+#!/bin/bash
+# Build and run the Qt tests offscreen, against a fake omarchy-shell and made-up data (never the live desktop).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+node tests/make_fixture.mjs >/dev/null
+python3 prepare.py
+mkdir -p build-tests
+cd build-tests
+qmake6 ../tests/settings_tests.pro >/dev/null
+make -j"$(nproc)" >/dev/null
+QT_QPA_PLATFORM=offscreen ./settings-tests -silent

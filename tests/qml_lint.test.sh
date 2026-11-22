@@ -13,8 +13,8 @@ imports=$(mktemp -d)
 trap 'rm -f "$imports/qs"; rmdir "$imports"' EXIT
 ln -s "$shell_dir" "$imports/qs"
 shopt -s nullglob
-files=(*.qml pages/*.qml)
-out=$("$lint" -I "$imports" -I pages "${files[@]}" 2>&1 || true)
+files=(*.qml)
+out=$("$lint" -I "$imports" "${files[@]}" 2>&1 || true)
 bad=$(printf '%s\n' "$out" | grep -E '^(Error|Warning):' \
   | grep -v -E 'not found on type "QObject"|\[unqualified\]|Unused import|Type PanelWindow is not creatable' || true)
 if [ -n "$bad" ]; then printf '%s\n' "$bad"; exit 1; fi

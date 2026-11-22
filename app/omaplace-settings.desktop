@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=omaplace
+GenericName=App Placement
+Comment=Plan your desktops, app placement rules, scenes and session restore
+Exec=omaplace-settings open
+Icon=omaplace-settings
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=omarchy;window;scene;session;restore;rules;placement;desktop;
+StartupWMClass=omaplace-settings

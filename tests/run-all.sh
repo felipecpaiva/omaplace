@@ -40,6 +40,9 @@ if have /usr/lib/qt6/bin/qmllint && [ ${#qml_files[@]} -gt 0 ]; then
   step qmllint /usr/lib/qt6/bin/qmllint "${qml_files[@]}"
 fi
 
+# the settings app (design 17): Qt tests offscreen against a fake shell
+if have qmake6; then step "app tests" bash app/bin/test; fi
+
 step scrub bash tests/scrub.sh
 step validate omarchy-plugin-validate .
 

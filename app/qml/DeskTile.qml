@@ -12,9 +12,6 @@ AbstractButton {
     activeFocusOnTab: true
     padding: 3
     Accessible.name: qsTr("Desktop %1, %2").arg(tile.card.slot).arg(tile.card.badge)
-    ToolTip.visible: hovered
-    ToolTip.delay: 600
-    ToolTip.text: tile.card.badge || ""
     Keys.onReturnPressed: tile.clicked()
     Keys.onEnterPressed: tile.clicked()
 

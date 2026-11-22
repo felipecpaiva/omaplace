@@ -45,6 +45,7 @@ ScrollView {
                         Layout.fillWidth: true
                         spacing: 8
                         TextField {
+                            objectName: "sceneName-" + sceneRow.modelData.name
                             Layout.fillWidth: true
                             maximumLength: 40
                             enabled: page.writable
@@ -52,13 +53,14 @@ ScrollView {
                             Accessible.name: qsTr("Scene name")
                             onEditingFinished: if (text.trim() !== "" && text.trim() !== sceneRow.modelData.name) page.app.act("rename", [sceneRow.modelData.name, text.trim()], qsTr("Renamed"))
                         }
-                        Label { color: ui.secondary; text: qsTr("%n window(s)", "", sceneRow.modelData.windows.length) }
-                        Button { text: qsTr("Open"); highlighted: true; onClicked: page.app.act("open", [sceneRow.modelData.name], qsTr("Opened %1").arg(sceneRow.modelData.name)) }
-                        Button {
+                        Label { color: ui.secondary; text: (sceneRow.modelData.windows.length === 1 ? qsTr("1 window") : qsTr("%1 windows").arg(sceneRow.modelData.windows.length)) }
+                        ActionButton { text: qsTr("Open"); primary: true; onClicked: page.app.act("open", [sceneRow.modelData.name], qsTr("Opened %1").arg(sceneRow.modelData.name)) }
+                        ActionButton {
+                            objectName: "sceneWindows-" + sceneRow.modelData.name
                             text: sceneRow.open ? qsTr("Hide windows") : qsTr("Windows")
                             onClicked: { const o = Object.assign({}, page.expanded); o[sceneRow.modelData.name] = !sceneRow.open; page.expanded = o }
                         }
-                        Button {
+                        ActionButton {
                             text: qsTr("Delete")
                             enabled: page.writable
                             onClicked: page.app.ask(qsTr("Delete the scene %1? The file before the change is kept as scenes.toml.bak.").arg(sceneRow.modelData.name),

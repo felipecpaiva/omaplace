@@ -68,7 +68,8 @@ ColumnLayout {
                 else if (v !== "custom" && v !== editor.card.layout) editor.edit("layout", v)
             }
         }
-        Button {
+        ActionButton {
+            objectName: "drawZones"
             visible: editor.writable && !editor.drawing && (editor.custom || editor.zoned) && !editor.omagnet.loaded
             text: qsTr("Draw zones")
             onClicked: {
@@ -77,7 +78,7 @@ ColumnLayout {
                 editor.drawing = true
             }
         }
-        Button {
+        ActionButton {
             visible: editor.omagnet.loaded
             text: qsTr("Edit in omagnet")
             onClicked: editor.app.act("openOmagnet", [], qsTr("Opened omagnet's settings"))
@@ -133,6 +134,7 @@ ColumnLayout {
                 spacing: 8
                 Label { Layout.preferredWidth: 90; elide: Text.ElideRight; textFormat: Text.PlainText; text: Desktops.rowTitle(editor.card.layout, place.modelData.pos) }
                 AppPicker {
+                    objectName: "zoneApp-" + place.modelData.pos
                     Layout.fillWidth: true
                     apps: editor.apps
                     value: place.modelData.app
@@ -143,12 +145,12 @@ ColumnLayout {
                         editor.edit("app", { pos: place.modelData.pos, id: id })
                     }
                 }
-                Button {
+                ActionButton {
                     visible: !place.modelData.empty
                     text: place.more ? qsTr("Less") : qsTr("More")
                     onClicked: { const o = Object.assign({}, editor.openRows); o[place.rowKey] = !place.more; editor.openRows = o }
                 }
-                Button {
+                ActionButton {
                     visible: !place.modelData.empty
                     text: qsTr("Clear")
                     enabled: editor.writable
@@ -176,21 +178,22 @@ ColumnLayout {
         visible: editor.card.plan === true
         Layout.fillWidth: true
         spacing: 8
-        Button {
+        ActionButton {
             objectName: "openAll"
             text: qsTr("Open all")
-            highlighted: true
+            primary: true
             enabled: !editor.card.error && (editor.card.rows || []).some(function (r) { return !r.empty })
             onClicked: editor.app.act("open", [editor.card.name], qsTr("Opened desktop %1").arg(editor.card.slot))
         }
         Item { Layout.fillWidth: true }
         Switch {
+            objectName: "openAtLogin"
             text: qsTr("Open at login")
             checked: editor.card.openAtLogin === true
             enabled: editor.writable && !editor.card.error
             onToggled: editor.edit("login", checked)
         }
-        Button { text: qsTr("Remove plan"); enabled: editor.writable; onClicked: editor.removePlan() }
+        ActionButton { text: qsTr("Remove plan"); enabled: editor.writable; onClicked: editor.removePlan() }
     }
     Hint {
         text: editor.card.plan ? qsTr("Open all starts the planned apps that are missing and moves open ones into place. A planned app you open by hand goes to its place too, unless a note above says otherwise.")

@@ -22,6 +22,7 @@ GridLayout {
 
     Label { text: Settings.isEdited(row.win, "folder") ? qsTr("Folder (edited)") : qsTr("Folder"); color: ui.secondary }
     TextField {
+        objectName: "folderField"
         Layout.fillWidth: true
         enabled: row.writable
         text: row.win.folder || ""
@@ -60,7 +61,8 @@ GridLayout {
             Accessible.name: qsTr("Browser profile")
             onActivated: if (currentValue !== "") row.save("context", currentValue)
         }
-        Button {
+        ActionButton {
+            objectName: "chooseFolder"
             visible: row.need.kind === "folder"
             text: qsTr("Choose folder...")
             enabled: row.writable
