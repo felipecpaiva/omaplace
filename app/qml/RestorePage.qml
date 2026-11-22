@@ -36,7 +36,7 @@ ScrollView {
                 objectName: "sessionSwitch"
                 text: qsTr("Keep a session snapshot")
                 checked: page.settings.session === "on"
-                onToggled: page.app.act("setSetting", ["session", checked ? "on" : "off"])
+                onToggled: { page.app.act("setSetting", ["session", checked ? "on" : "off"]); checked = Qt.binding(function () { return page.settings.session === "on" }) }
             }
             Hint { text: qsTr("After your windows change, omaplace notes each window's app, monitor and desktop (never window titles), so a reboot can bring them back.") }
         }

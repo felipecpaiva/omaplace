@@ -10,6 +10,9 @@ Button {
     property string value: ""
     property string placeholder: qsTr("Pick an app")
     signal picked(string id)
+    // close the list and give the focus back to this button first, so the edit is made from here (Main gives the
+    // focus back to it after the page is rebuilt)
+    function choose(id) { popup.close(); picker.forceActiveFocus(); picker.picked(id) }
 
     readonly property var current: apps.find(function (a) { return a.value === picker.value }) || null
     text: current ? current.label : placeholder
@@ -46,7 +49,7 @@ Button {
                 Layout.fillWidth: true
                 placeholderText: qsTr("Search apps")
                 Keys.onDownPressed: list.forceActiveFocus()
-                Keys.onReturnPressed: if (popup.shown.length > 0) { picker.picked(popup.shown[0].value); popup.close() }
+                Keys.onReturnPressed: if (popup.shown.length > 0) picker.choose(popup.shown[0].value)
                 Keys.onEscapePressed: popup.close()
             }
             ListView {
@@ -56,7 +59,7 @@ Button {
                 clip: true
                 model: popup.shown
                 keyNavigationWraps: true
-                Keys.onReturnPressed: if (currentIndex >= 0) { picker.picked(popup.shown[currentIndex].value); popup.close() }
+                Keys.onReturnPressed: if (currentIndex >= 0) picker.choose(popup.shown[currentIndex].value)
                 Keys.onEscapePressed: popup.close()
                 ScrollBar.vertical: ScrollBar {}
                 delegate: ItemDelegate {
@@ -69,7 +72,7 @@ Button {
                     icon.color: "transparent"
                     icon.width: 22
                     icon.height: 22
-                    onClicked: { picker.picked(modelData.value); popup.close() }
+                    onClicked: picker.choose(modelData.value)
                 }
             }
             Hint { visible: popup.shown.length === 0; text: qsTr("No app matches.") }

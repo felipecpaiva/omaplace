@@ -65,6 +65,15 @@ ScrollView {
                 }
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                ActionButton {
+                    objectName: "ruleFromWindow"
+                    text: qsTr("From a window...")
+                    onClicked: page.app.act("ruleFromFocus", [], "")
+                }
+                Hint { text: qsTr("Then click the app's window within 4 seconds. Its desktop, monitor and, on a floating desktop, its size and spot are saved.") }
+            }
             Hint { visible: page.rules.length === 0; text: qsTr("No app has a fixed place yet.") }
             Repeater {
                 model: page.rules
@@ -90,7 +99,7 @@ ScrollView {
                             text: qsTr("On")
                             checked: ruleRow.rule.enabled !== false
                             Accessible.name: qsTr("Rule %1 on").arg(ruleRow.rule.name)
-                            onToggled: page.app.act("setRule", [ruleRow.rule.name, "enabled", checked])
+                            onToggled: { page.app.act("setRule", [ruleRow.rule.name, "enabled", checked]); checked = Qt.binding(function () { return ruleRow.rule.enabled !== false }) }
                         }
                         ActionButton {
                             text: qsTr("Remove")
@@ -109,7 +118,10 @@ ScrollView {
                             valueRole: "value"
                             currentIndex: Math.max(0, model.findIndex(function (o) { return o.value === (ruleRow.rule.monitor || "") }))
                             Accessible.name: qsTr("Monitor")
-                            onActivated: if (currentValue !== ruleRow.rule.monitor) page.app.act("setRule", [ruleRow.rule.name, "monitor", currentValue])
+                            onActivated: {
+                                if (currentValue !== ruleRow.rule.monitor) page.app.act("setRule", [ruleRow.rule.name, "monitor", currentValue])
+                                currentIndex = Qt.binding(function () { return Math.max(0, model.findIndex(function (o) { return o.value === (ruleRow.rule.monitor || "") })) })
+                            }
                         }
                         RowLayout {
                             Label { text: qsTr("Desktop") }
@@ -117,21 +129,21 @@ ScrollView {
                                 objectName: "ruleSlot-" + ruleRow.rule.name
                                 from: 1; to: 10; value: ruleRow.rule.slot || 1; editable: true
                                 Accessible.name: qsTr("Desktop")
-                                onValueModified: if (value !== ruleRow.rule.slot) page.app.act("setRule", [ruleRow.rule.name, "slot", value])
+                                onValueModified: { if (value !== ruleRow.rule.slot) page.app.act("setRule", [ruleRow.rule.name, "slot", value]); value = Qt.binding(function () { return ruleRow.rule.slot || 1 }) }
                             }
                         }
                         Switch {
                             objectName: "ruleFollow-" + ruleRow.rule.name
                             text: qsTr("Switch to that desktop when it opens")
                             checked: ruleRow.rule.follow === true
-                            onToggled: page.app.act("setRule", [ruleRow.rule.name, "follow", checked])
+                            onToggled: { page.app.act("setRule", [ruleRow.rule.name, "follow", checked]); checked = Qt.binding(function () { return ruleRow.rule.follow === true }) }
                         }
                         Switch {
                             objectName: "ruleSpot-" + ruleRow.rule.name
                             visible: (ruleRow.rule.rect || "") !== ""
                             text: qsTr("Open in the same spot")
                             checked: ruleRow.rule.keep_rect === true
-                            onToggled: page.app.act("setRule", [ruleRow.rule.name, "keep_rect", checked])
+                            onToggled: { page.app.act("setRule", [ruleRow.rule.name, "keep_rect", checked]); checked = Qt.binding(function () { return ruleRow.rule.keep_rect === true }) }
                         }
                     }
                     Hint { visible: (ruleRow.rule.rect || "") !== ""; text: qsTr("Same spot works on a floating desktop.") }
@@ -168,7 +180,7 @@ ScrollView {
                 placeholderText: "steam, mpv"
                 text: page.settings.ignore || ""
                 Accessible.name: qsTr("Apps to leave alone")
-                onEditingFinished: if (text.trim() !== (page.settings.ignore || "")) page.app.act("setSetting", ["ignore", text])
+                onEditingFinished: { if (text.trim() !== (page.settings.ignore || "")) page.app.act("setSetting", ["ignore", text]); text = Qt.binding(function () { return page.settings.ignore || "" }) }
             }
         }
     }

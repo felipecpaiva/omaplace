@@ -53,6 +53,7 @@ private:
     QString m_runtime, m_shell, m_problem;
     QVariantMap m_model;
     qint64 m_seq = -1;
+    qint64 m_started = -1; // the service's start time: a new one (shell restart) counts seq from 1 again
     int m_counter = 0;
     QFileSystemWatcher m_watcher;
     QTimer m_poll;

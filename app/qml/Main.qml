@@ -31,7 +31,17 @@ ApplicationWindow {
     property var okTexts: ({})           // request id -> the text shown when it works
 
     // One action through the service; the reply's text goes to the toast.
+    // The control that made an edit gets the keyboard focus back after the page is rebuilt from the reply (by its
+    // objectName, since a rebuilt list makes new controls).
+    property string focusName: ""
+    function findNamed(item, name) {
+        if (!item || name === "") return null
+        if (item.objectName === name && item.visible) return item
+        for (let i = 0; i < item.children.length; i++) { const f = win.findNamed(item.children[i], name); if (f) return f }
+        return null
+    }
     function act(op, args, okText) {
+        win.focusName = win.activeFocusItem ? win.activeFocusItem.objectName : ""
         const id = backend.request(op, args || [])
         const t = Object.assign({}, win.okTexts); t[id] = okText || qsTr("Saved"); win.okTexts = t
         return id
@@ -41,6 +51,13 @@ ApplicationWindow {
 
     Connections {
         target: backend
+        function onModelChanged() {
+            if (win.focusName === "") return
+            Qt.callLater(function () {
+                const f = win.findNamed(win.contentItem, win.focusName)
+                if (f && !f.activeFocus) f.forceActiveFocus()
+            })
+        }
         function onReplied(id, op, answer) {
             const key = id.indexOf("done-") === 0 ? "" : id
             const okText = win.okTexts[key] || (op === "open" ? qsTr("Opened") : op === "restore" ? qsTr("Restored") : qsTr("Saved"))

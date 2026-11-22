@@ -51,7 +51,10 @@ ScrollView {
                             enabled: page.writable
                             text: sceneRow.modelData.name
                             Accessible.name: qsTr("Scene name")
-                            onEditingFinished: if (text.trim() !== "" && text.trim() !== sceneRow.modelData.name) page.app.act("rename", [sceneRow.modelData.name, text.trim()], qsTr("Renamed"))
+                            onEditingFinished: {
+                                if (text.trim() !== "" && text.trim() !== sceneRow.modelData.name) page.app.act("rename", [sceneRow.modelData.name, text.trim()], qsTr("Renamed"))
+                                text = Qt.binding(function () { return sceneRow.modelData.name })
+                            }
                         }
                         Label { color: ui.secondary; text: (sceneRow.modelData.windows.length === 1 ? qsTr("1 window") : qsTr("%1 windows").arg(sceneRow.modelData.windows.length)) }
                         ActionButton { text: qsTr("Open"); primary: true; onClicked: page.app.act("open", [sceneRow.modelData.name], qsTr("Opened %1").arg(sceneRow.modelData.name)) }

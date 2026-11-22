@@ -28,7 +28,7 @@ GridLayout {
         text: row.win.folder || ""
         placeholderText: qsTr("none")
         Accessible.name: qsTr("Folder")
-        onEditingFinished: if (text !== (row.win.folder || "")) row.save("folder", text)
+        onEditingFinished: { if (text !== (row.win.folder || "")) row.save("folder", text); text = Qt.binding(function () { return row.win.folder || "" }) }
     }
     Label { text: Settings.isEdited(row.win, "launch") ? qsTr("Program (edited)") : qsTr("Program"); color: ui.secondary }
     TextField {
@@ -37,7 +37,7 @@ GridLayout {
         text: row.win.launch || ""
         placeholderText: qsTr("none")
         Accessible.name: qsTr("Program")
-        onEditingFinished: if (text !== (row.win.launch || "")) row.save("launch", text)
+        onEditingFinished: { if (text !== (row.win.launch || "")) row.save("launch", text); text = Qt.binding(function () { return row.win.launch || "" }) }
     }
     Label { text: qsTr("Profile or project"); color: ui.secondary }
     TextField {
@@ -47,7 +47,7 @@ GridLayout {
         text: row.win.context || ""
         placeholderText: qsTr("none")
         Accessible.name: qsTr("Profile or project")
-        onEditingFinished: if (text !== (row.win.context || "")) row.save("context", text)
+        onEditingFinished: { if (text !== (row.win.context || "")) row.save("context", text); text = Qt.binding(function () { return row.win.context || "" }) }
     }
     RowLayout {
         visible: row.unknown

@@ -774,6 +774,7 @@ Item {
 
   property bool appAttached: false
   property int appSeq: 0
+  readonly property real appStarted: Date.now()
 
   function appModelNow() {
     root.appAttached = true
@@ -786,7 +787,7 @@ Item {
   }
 
   function modelNow() {
-    return AppSeam.model(root.panelData(), root.desktopCards(), root.appChoices(), root.liveMonitors, root.req !== null, ++root.appSeq)
+    return AppSeam.model(root.panelData(), root.desktopCards(), root.appChoices(), root.liveMonitors, root.req !== null, ++root.appSeq, root.appStarted)
   }
 
   function pushModel() {
@@ -822,6 +823,11 @@ Item {
     case "setWindow": return root.setSceneWindow(a[0], a[1], a[2], a[3], a[4])
     case "pickFolder": return root.pickFolder(a[0], a[1], a[2])
     case "ruleNew": return root.ruleNew(a[0], a[1], a[2])
+    case "ruleFromFocus":
+      // the settings window has the focus now; the person clicks the app's window, then "rule add" reads it (D39)
+      if (root.req || appRuleTimer.running) return Summary.answer(root.fail("busy"))
+      appRuleTimer.restart()
+      return Summary.answer({ ok: true, text: "Click the window of the app now. omaplace reads it in 4 seconds." })
     case "setRule": return root.setRuleField(a[0], a[1], a[2])
     case "removeRule": return root.removeRule(a[0])
     case "setSetting": return root.setSetting(a[0], a[1])
@@ -855,7 +861,22 @@ Item {
   }
 
   onRevisionChanged: root.pushModel()
-  onReqChanged: if (root.req === null) Qt.callLater(root.pushModel)
+  onReqChanged: if (root.req === null) Qt.callLater(root.appRuleDone)
+  property string appRuleReq: ""
+  Timer {
+    id: appRuleTimer
+    interval: 4000
+    onTriggered: {
+      let a = Summary.parseJson(root.startRuleAdd()) || {}
+      if (a.pending && a.req) root.appRuleReq = a.req
+      else { root.lastAnswer = JSON.stringify(a); root.pushModel() }
+    }
+  }
+  // A rule from a window ended: its result rides on the next model as a late answer (Backend shows it).
+  function appRuleDone() {
+    if (root.appRuleReq !== "") { root.lastAnswer = root.resultOf(root.appRuleReq) || '{"ok":true}'; root.appRuleReq = "" }
+    root.pushModel()
+  }
 
   // Everything the window shows, read now. Windows with an unknown context carry what the picker needs (`need`).
   function panelData() {

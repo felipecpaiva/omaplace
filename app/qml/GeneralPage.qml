@@ -49,7 +49,7 @@ ScrollView {
                         value: modelData.value
                         editable: true
                         Accessible.name: modelData.label
-                        onValueModified: if (value !== modelData.value) page.app.act("setSetting", [modelData.key, value])
+                        onValueModified: { if (value !== modelData.value) page.app.act("setSetting", [modelData.key, value]); value = Qt.binding(function () { return modelData.value }) }
                     }
                 }
             }

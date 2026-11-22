@@ -23,9 +23,13 @@ ColumnLayout {
                 required property var modelData
                 text: modelData.label
                 checked: modelData.value === row.current
+                autoExclusive: false // the saved value decides which one is on, never a click alone
                 enabled: row.enabledAll
                 Accessible.name: row.title + ": " + modelData.label
-                onClicked: if (modelData.value !== row.current) row.picked(modelData.value)
+                onClicked: {
+                    if (modelData.value !== row.current) row.picked(modelData.value)
+                    checked = Qt.binding(function () { return modelData.value === row.current })
+                }
             }
         }
     }

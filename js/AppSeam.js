@@ -9,7 +9,7 @@ var CONTRACT = 1
 var OPS = {
   refresh: [], open: ["s"], rename: ["s", "s"], removeScene: ["s"],
   setWindow: ["s", "i", "s", "s", "v"], pickFolder: ["s", "i", "s"],
-  ruleNew: ["s", "s", "i"], setRule: ["s", "s", "v"], removeRule: ["s"],
+  ruleNew: ["s", "s", "i"], ruleFromFocus: [], setRule: ["s", "s", "v"], removeRule: ["s"],
   setSetting: ["s", "v"], menuAdd: [], menuRemove: [], restore: ["s"],
   editPlan: ["s", "i", "b", "s", "j", "s"], openOmagnet: [], result: ["s"]
 }
@@ -60,6 +60,7 @@ function reply(id, answerText, model) {
   return JSON.stringify({ contract: CONTRACT, id: id, answer: a, model: model }) + "\n"
 }
 
-function model(panel, desks, apps, monitors, busy, seq) {
-  return { contract: CONTRACT, seq: seq, busy: busy === true, panel: panel, desks: desks, apps: apps, monitors: monitors || [] }
+// started: when this service started (ms); seq counts again from 1 after a shell restart, so the app goes by both.
+function model(panel, desks, apps, monitors, busy, seq, started) {
+  return { contract: CONTRACT, started: started, seq: seq, busy: busy === true, panel: panel, desks: desks, apps: apps, monitors: monitors || [] }
 }

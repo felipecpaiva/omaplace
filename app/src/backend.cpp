@@ -112,7 +112,10 @@ bool Backend::applyModel(const QVariantMap &model) {
     if (model.isEmpty()) return false;
     if (model.value("contract").toInt() != Contract) { setProblem(problemFor(0, QStringLiteral("contract"))); return false; }
     const qint64 seq = model.value("seq").toLongLong();
-    if (seq <= m_seq) return false; // an older model (a reply raced a push)
+    const qint64 started = model.value("started").toLongLong();
+    if (started == m_started && seq <= m_seq) return false; // an older model (a reply raced a push)
+    if (started != m_started && started < m_started) return false; // a file left by a service that has gone
+    m_started = started;
     m_seq = seq;
     m_model = model;
     emit modelChanged();

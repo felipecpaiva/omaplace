@@ -1,7 +1,8 @@
 #!/bin/bash
 # A stand-in for omarchy-shell in the tests: answers appModel and app <id> like the omaplace service, from the made-up
 # fixture model, and logs each request's op and args to $FAKE_RT/requests.log. FAKE_MODE: missing (no plugin), old (no
-# app method), contract (another contract), pending (open answers pending, then the model goes idle).
+# app method), contract (another contract), pending (open answers pending, then the model goes idle), refuse (every
+# change is refused). $FAKE_RT/started, when present, is the service's start time (a shell restart writes a new one).
 set -u
 rt=$FAKE_RT
 fixture=$FAKE_FIXTURE
@@ -13,7 +14,7 @@ target=$1 method=$2
 seqfile=$rt/seq
 seq=$(( $(cat "$seqfile" 2>/dev/null || echo 1) + 1 ))
 echo $seq > "$seqfile"
-model() { python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); m["seq"]=int(sys.argv[2]); m["busy"]=sys.argv[3]=="1"; m["contract"]=int(sys.argv[4]); print(json.dumps(m))' "$fixture" "$1" "$2" "${3:-1}"; }
+model() { python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); m["seq"]=int(sys.argv[2]); import os; m["started"]=int(open(sys.argv[5]).read()) if os.path.exists(sys.argv[5]) else 1000; m["busy"]=sys.argv[3]=="1"; m["contract"]=int(sys.argv[4]); print(json.dumps(m))' "$fixture" "$1" "$2" "${3:-1}" "$rt/started"; }
 contract=1
 [ "$mode" = contract ] && contract=2
 case $method in
@@ -33,6 +34,8 @@ case $method in
       # the service finishes later and pushes an idle model
       ( sleep 0.4; model $((seq + 50)) 0 > "$rt/app-model.json.tmp" && mv "$rt/app-model.json.tmp" "$rt/app-model.json" ) &
     fi
+    # refuse: the service says no to every change (the window must show the saved values again)
+    if [ "$mode" = refuse ] && [ "$op" != refresh ] && [ "$op" != result ]; then answer='{"ok":false,"code":"failed","reason":"refused by the test"}'; fi
     [ "$op" = result ] && answer='{"ok":true,"state":"done","placed":2}'
     python3 -c 'import json,sys; print(json.dumps({"contract":1,"id":sys.argv[1],"answer":json.loads(sys.argv[2]),"model":json.loads(sys.argv[3])}))' \
       "$id" "$answer" "$(model $seq $busy)" > "$rt/app-$id-reply.json"

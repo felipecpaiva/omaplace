@@ -14,12 +14,15 @@ ColumnLayout {
     property var card: ({})
     property var apps: []
     property var omagnet: ({ loaded: false, layouts: [] })
-    property bool customOpen: false
-    property bool drawing: false
+    // Which desktop has the custom zones field open and which one is being drawn: by card key, so another desktop
+    // picked meanwhile never gets them (and a Save always writes the desktop it was drawn for).
+    property string customKey: ""
+    property string drawKey: ""
     property string drawText: ""
+    readonly property bool drawing: drawKey !== "" && drawKey === card.key
     property var openRows: ({})
     readonly property bool writable: app.panel.scenesWritable === true && card.editable !== false
-    readonly property bool custom: customOpen || card.choice === "custom"
+    readonly property bool custom: customKey === card.key || card.choice === "custom"
     readonly property var options: card.options || [{ value: "", label: qsTr("No plan") }].concat(Desktops.LAYOUT_CHOICES, [{ value: "custom", label: qsTr("Custom zones") }])
     readonly property bool zoned: !!Zones.ofLayout(card.layout || "").zones
 
@@ -27,7 +30,6 @@ ColumnLayout {
     function removePlan() {
         if (card.plan) app.ask(qsTr("Remove the plan of desktop %1? The file before the change is kept as scenes.toml.bak.").arg(card.slot), "removeScene", [card.name], qsTr("Plan removed"))
     }
-    onCardChanged: if (card.choice !== "custom" && card.key !== undefined) customOpen = customOpen && card.layout === ""
 
     spacing: 10
 
@@ -63,9 +65,11 @@ ColumnLayout {
             Accessible.name: qsTr("Layout of desktop %1").arg(editor.card.slot)
             onActivated: {
                 const v = currentValue
-                editor.customOpen = v === "custom"
+                editor.customKey = v === "custom" ? editor.card.key : ""
                 if (v === "") editor.removePlan()
                 else if (v !== "custom" && v !== editor.card.layout) editor.edit("layout", v)
+                // show the saved layout until the reply (and after a Cancel or a refusal)
+                currentIndex = Qt.binding(function () { return Math.max(0, editor.options.findIndex(function (o) { return o.value === (editor.custom ? "custom" : (editor.card.choice || "")) })) })
             }
         }
         ActionButton {
@@ -75,7 +79,7 @@ ColumnLayout {
             onClicked: {
                 const z = Zones.ofLayout(editor.card.layout || "")
                 editor.drawText = z.zones ? LayoutOps.toText(z.zones) : "0 0 0.5 1; 0.5 0 0.5 1"
-                editor.drawing = true
+                editor.drawKey = editor.card.key
             }
         }
         ActionButton {
@@ -92,7 +96,7 @@ ColumnLayout {
         text: editor.card.choice === "custom" ? editor.card.layout : ""
         placeholderText: "0 0 0.5 1; 0.5 0 0.5 1"
         Accessible.name: qsTr("Custom zones")
-        onEditingFinished: if (text.trim() !== "" && text.trim() !== editor.card.layout) editor.edit("layout", text.trim())
+        onEditingFinished: if (text.trim() !== "" && text.trim() !== editor.card.layout) editor.edit("layout", text.trim()) // kept as typed when refused, to fix it
     }
     Hint {
         text: qsTr("A zone layout or Free floating switches this desktop to floating when you press Open all. Custom zones are x y w h fractions, separated by ;.")
@@ -108,8 +112,8 @@ ColumnLayout {
             width: drawLoader.width
             zonesText: editor.drawText
             onEdited: function (text) { editor.drawText = text }
-            onCanceled: editor.drawing = false
-            onSaved: function (text) { editor.drawing = false; editor.customOpen = true; editor.edit("layout", text) }
+            onCanceled: editor.drawKey = ""
+            onSaved: function (text) { editor.drawKey = ""; editor.customKey = editor.card.key; editor.edit("layout", text) }
         }
     }
     Hint { visible: (editor.card.modeNote || "") !== ""; text: editor.card.modeNote || "" }
@@ -191,7 +195,7 @@ ColumnLayout {
             text: qsTr("Open at login")
             checked: editor.card.openAtLogin === true
             enabled: editor.writable && !editor.card.error
-            onToggled: editor.edit("login", checked)
+            onToggled: { editor.edit("login", checked); checked = Qt.binding(function () { return editor.card.openAtLogin === true }) }
         }
         ActionButton { text: qsTr("Remove plan"); enabled: editor.writable; onClicked: editor.removePlan() }
     }

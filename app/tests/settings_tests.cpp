@@ -433,6 +433,152 @@ private slots:
         QVERIFY2(qmlWarnings.isEmpty(), qPrintable(qmlWarnings.join("\n")));
     }
 
+    // A refused change leaves every control on the saved value, and the toast says why.
+    void refusedChangesShowSavedValues() {
+        reset("refuse");
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QTest::qWait(300);
+        auto *c = w->contentItem();
+        auto *root = win.engine.rootObjects().first();
+        click(w, all(c, "tile-2").at(0));
+        choose(find(c, "layoutPicker"), "columns:3");
+        QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(find(c, "layoutPicker")->property("displayText").toString(), QString("2 columns"), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(root->property("toastBad").toBool(), 3000);
+        click(w, find(c, "openAtLogin"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"login",false,"floating"])"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(find(c, "openAtLogin")->property("checked").toBool(), true, 3000);
+        click(w, find(c, "nav1"));
+        click(w, find(c, "ruleOn-editor"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("setRule", R"(["editor","enabled",false])"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(find(c, "ruleOn-editor")->property("checked").toBool(), true, 3000);
+        click(w, byText(c, "Where you left it"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["app_memory","last_place"])"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(byText(c, "Where you left it")->property("checked").toBool(), false, 3000);
+        QCOMPARE(byText(c, "Where a scene put it")->property("checked").toBool(), true);
+        typeIn(w, find(c, "ignoreField"), "mpv");
+        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["ignore","mpv"])"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(find(c, "ignoreField")->property("text").toString(), QString("steam"), 3000);
+        click(w, find(c, "nav2"));
+        typeIn(w, find(c, "sceneName-work"), "work-2");
+        QTRY_VERIFY_WITH_TIMEOUT(sent("rename", R"(["work","work-2"])"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(find(c, "sceneName-work")->property("text").toString(), QString("work"), 3000);
+        reset();
+    }
+
+    // "No plan" on a plan asks first; Cancel keeps the plan's layout in the list.
+    void cancelKeepsThePlan() {
+        reset();
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QTest::qWait(300);
+        auto *c = w->contentItem();
+        click(w, all(c, "tile-2").at(0));
+        choose(find(c, "layoutPicker"), "");
+        auto *confirm = win.engine.rootObjects().first()->findChild<QObject *>("confirm");
+        QTRY_VERIFY_WITH_TIMEOUT(confirm->property("visible").toBool(), 3000);
+        QMetaObject::invokeMethod(confirm, "reject");
+        QTRY_VERIFY_WITH_TIMEOUT(!confirm->property("visible").toBool(), 3000);
+        QCOMPARE(find(c, "layoutPicker")->property("displayText").toString(), QString("2 columns"));
+        QVERIFY(!sent("removeScene"));
+    }
+
+    // A drawing belongs to its desktop: another desktop picked meanwhile never gets it, and Save writes the right one.
+    void drawingStaysWithItsDesktop() {
+        reset();
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QVariantMap m = win.backend.model();
+        QVariantMap desks = m.value("desks").toMap();
+        desks.insert("omagnet", QVariantMap{{"loaded", false}, {"layouts", QVariantList{}}});
+        m.insert("desks", desks);
+        m.insert("seq", 100000);
+        QVERIFY(win.backend.applyModel(m));
+        QTest::qWait(300);
+        auto *c = w->contentItem();
+        click(w, all(c, "tile-2").at(0));
+        click(w, find(c, "drawZones"));
+        QVERIFY(byText(c, "Split horizontal"));
+        click(w, all(c, "tile-3").at(0));
+        QTest::qWait(100);
+        for (auto *i : all(c)) QVERIFY2(!(i->isVisible() && i->property("text").toString() == "Split horizontal"), "the drawing does not follow to desktop 3");
+        click(w, all(c, "tile-2").at(0));
+        click(w, byText(c, "Save"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"layout","0 0 0.5 1; 0.5 0 0.5 1","floating"])"), 5000);
+        QVERIFY(!sent("editPlan", R"(["Example Corp EX27",3,true,"layout","0 0 0.5 1; 0.5 0 0.5 1","tiled"])"));
+    }
+
+    // After a shell restart the service counts its models from 1 again: the window keeps following it.
+    void shellRestartIsFollowed() {
+        reset();
+        Window win(m_rt, m_shell);
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        for (int i = 0; i < 5; ++i) { win.backend.request("refresh"); QTest::qWait(150); }
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.model().value("seq").toInt() >= 6, 5000);
+        QFile started(m_rt + "/started");
+        QVERIFY(started.open(QIODevice::WriteOnly));
+        started.write("2000");
+        started.close();
+        QFile seq(m_rt + "/seq");
+        QVERIFY(seq.open(QIODevice::WriteOnly));
+        seq.write("1");
+        seq.close();
+        win.backend.request("refresh");
+        QTRY_COMPARE_WITH_TIMEOUT(win.backend.model().value("started").toInt(), 2000, 5000);
+        QVERIFY(win.backend.model().value("seq").toInt() < 6);
+    }
+
+    // The control that made an edit has the keyboard focus after the page is rebuilt.
+    void focusComesBack() {
+        reset();
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QTest::qWait(300);
+        auto *c = w->contentItem();
+        click(w, all(c, "tile-2").at(0));
+        click(w, find(c, "zoneApp-2"));
+        for (const QChar ch : QString("calc")) QTest::keyClick(w, ch.toLatin1());
+        QTest::keyClick(w, Qt::Key_Return);
+        QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan"), 5000);
+        QTest::qWait(400);
+        QQuickItem *f = w->activeFocusItem();
+        QVERIFY2(f && f->objectName() == "zoneApp-2", qPrintable(QString("focus on %1").arg(f ? f->objectName() + " " + f->metaObject()->className() : "nothing")));
+        // and a rule made from a window asks the service, which waits for the click
+        click(w, find(c, "nav1"));
+        click(w, find(c, "ruleFromWindow"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("ruleFromFocus"), 5000);
+    }
+
+    // Read only, against the real service (OMAPLACE_LIVE=1 and OMAPLACE_LIVE_OUT=<folder for the pictures>): the app
+    // connects, gets a model, shows every page without a QML warning. It sends appModel only, never a change.
+    void liveReadOnly() {
+        if (qEnvironmentVariable("OMAPLACE_LIVE") != "1") QSKIP("set OMAPLACE_LIVE=1 to read the real service");
+        const QString out = qEnvironmentVariable("OMAPLACE_LIVE_OUT");
+        QVERIFY2(!out.isEmpty(), "OMAPLACE_LIVE_OUT: a folder outside the repo (the pictures show real app names)");
+        g_warnings.clear();
+        g_previous = qInstallMessageHandler(collect);
+        Window win{QString(), QString()};
+        QVERIFY(win.w);
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 8000);
+        QTRY_VERIFY_WITH_TIMEOUT(!win.backend.model().value("desks").toMap().value("groups").toList().isEmpty(), 8000);
+        const QVariantMap m = win.backend.model();
+        qDebug() << "live:" << m.value("desks").toMap().value("groups").toList().size() << "monitors,"
+                 << m.value("apps").toList().size() << "apps," << m.value("panel").toMap().value("rules").toList().size() << "rules";
+        for (int i = 0; i < 5; ++i) {
+            win.engine.rootObjects().first()->setProperty("page", i);
+            QTest::qWait(400);
+            win.w->grabWindow().save(out + QString("/live-page-%1.png").arg(i));
+        }
+        qInstallMessageHandler(g_previous);
+        const QStringList qmlWarnings = g_warnings.filter(QRegularExpression("qml|QML|\\.js:"));
+        QVERIFY2(qmlWarnings.isEmpty(), qPrintable(qmlWarnings.join("\n")));
+    }
+
     // The window says why it cannot work, never shows an empty page.
     void problemBanner() {
         reset("missing");
