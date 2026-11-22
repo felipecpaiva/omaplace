@@ -386,8 +386,25 @@ function liveRect(e, area) {
 }
 
 // The preview rows of a desktop with no plan: its open apps where they are (D42), drawn like plan rows.
+// How much of the smaller of two rects the other one covers (0 to 1).
+function overlap(p, q) {
+  const w = Math.min(p[0] + p[2], q[0] + q[2]) - Math.max(p[0], q[0]), h = Math.min(p[1] + p[3], q[1] + q[3]) - Math.max(p[1], q[1])
+  return w > 0 && h > 0 ? (w * h) / Math.min(p[2] * p[3], q[2] * q[3]) : 0
+}
+
+// Windows stacked on (mostly) the same spot are drawn as a small pile, each one shifted down and right, so every name shows.
 function liveRows(live) {
-  return (live || []).filter((a) => a.rect).map((a, i) => ({ pos: i + 1, rect: a.rect, empty: false, label: a.label, icon: a.icon, live: true }))
+  const rows = []
+  for (const a of (live || []).filter((x) => x.rect)) {
+    // mostly covered and centred near the same point: the names would print on top of each other
+    const cx = (r) => [r[0] + r[2] / 2, r[1] + r[3] / 2]
+    const near = rows.filter((r) => overlap(r.base, a.rect) > 0.6 && Math.hypot(cx(r.base)[0] - cx(a.rect)[0], cx(r.base)[1] - cx(a.rect)[1]) < 0.12).length
+    const d = Math.min(0.3, near * 0.1)
+    const r = a.rect
+    const rect = near ? [Math.min(r[0] + d, 0.9), Math.min(r[1] + d, 0.9), Math.max(0.1, r[2] - d), Math.max(0.1, r[3] - d)] : r
+    rows.push({ pos: rows.length + 1, rect, base: r, empty: false, label: a.label, icon: a.icon, live: true })
+  }
+  return rows.map((x) => { const o = Object.assign({}, x); delete o.base; return o })
 }
 
 // A captured scene of one desktop as that desktop's plan (D41). The mode Omarchy has now decides the layout, so Open

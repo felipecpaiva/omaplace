@@ -451,3 +451,13 @@ test("open apps get their place on the monitor", () => {
   assert.equal(D.liveApps([{ cls: "x", at: [0, 0], size: [10, 10] }], [], null)[0].rect, undefined, "no area: no rect")
   assert.equal(D.liveApps(["org.example.Editor"], [], area)[0].class, "org.example.Editor", "plain classes still work")
 })
+
+test("windows on the same spot are drawn as a pile", () => {
+  const rows = D.liveRows([{ label: "A", rect: [0, 0, 1, 1] }, { label: "B", rect: [0, 0, 1, 1] }, { label: "C", rect: [0.5, 0, 0.5, 1] }])
+  assert.deepEqual(rows[0].rect, [0, 0, 1, 1])
+  assert.deepEqual(rows[1].rect, [0.1, 0.1, 0.9, 0.9], "the second one is shifted")
+  assert.deepEqual(rows[2].rect, [0.5, 0, 0.5, 1], "a window elsewhere stays")
+  assert.equal(rows[1].base, undefined)
+  const near = D.liveRows([{ label: "A", rect: [0, 0, 1, 1] }, { label: "B", rect: [0.02, 0.05, 0.9, 0.9] }])
+  assert.deepEqual(near[1].rect.map((v) => Math.round(v * 100) / 100), [0.12, 0.15, 0.8, 0.8], "mostly covered: shifted too")
+})
