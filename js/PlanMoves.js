@@ -61,7 +61,9 @@ function joinPlan(target, win, to) {
     if (rectOk(to.rect)) win.rect = to.rect.slice()
     if (typeof to.floating === "boolean") win.floating = to.floating
   } else if (layout === "tiled" || layout === "scrolling" || layout === "full") {
-    win.zone = target.windows.reduce((n, w) => Math.max(n, w.zone || 0), 0) + 1 // last in order; full refuses a second
+    // a full plan getting a second window becomes tiled: both stay, side by side (D28)
+    if (layout === "full" && target.windows.length > 0) target.layout = "tiled"
+    win.zone = target.windows.reduce((n, w) => Math.max(n, w.zone || 0), 0) + 1 // last in order
   } else {
     const z = zoneAt(layout, to.rect)
     if (z === 0) return "the window is outside every zone of the plan there"
@@ -82,7 +84,7 @@ function toFree(scene, moved, rect) {
   scene.layout = "free"
 }
 
-// The scene edit for "Update plan" (design 14.8, D24). doc is a SceneStore doc and is never changed.
+// The scene edit for "Update plan" (design 14.8, D24, D28). doc is a SceneStore doc and is never changed.
 // Returns { doc, changed (false: the plan already says so), replace? (true: place the plan's open windows again),
 // created? (the name of a new plan), scene? (the plan that now holds the window, when another),
 // removed? (the name of a plan left empty) } or { code: "not_found" | "not_possible", reason }.
@@ -118,8 +120,8 @@ function edit(scenesDoc, m) {
     // plan keeps "" and only its slot changes.
     const anyMonitor = (scene.home_monitor || "") === ""
     if ((anyMonitor || scene.home_monitor === m.to.identity) && scene.home_slot === m.to.slot) return { doc, changed: false }
-    const twin = scene.windows.filter((w) => w.class === m.class && (w.context || "") === (m.context || "")).length > 1
-    if (twin) return no("not_possible", "plan " + m.scene + " holds more than one " + m.class + " window, so the moved one is not known")
+    // Two windows of one app in a plan are told apart by m.window: Lua matched each placed window to its plan index by
+    // rect (plans.lua match_run), so the moved one is known (D28).
     // the plan of the target desktop; a plan on the focused monitor ("") is that desktop's plan too
     const name = Object.keys(doc.scenes).find((n) => n !== m.scene && doc.scenes[n].plan === true && ["", m.to.identity].indexOf(doc.scenes[n].home_monitor || "") !== -1 && doc.scenes[n].home_slot === m.to.slot)
     scene.windows.splice(m.window - 1, 1)

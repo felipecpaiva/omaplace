@@ -211,7 +211,8 @@ test("desktop move of a single-window plan onto a desktop with a plan joins it, 
   // taken zone, outside every zone, a full plan: not possible, nothing removed
   assert.match(P.edit(doc(), mv(1, { ...mail, ...toDesk(2, [0.6, 0.1, 0.3, 0.3]) })).reason, /used twice/)
   assert.match(P.edit(doc(), mv(1, { ...mail, ...toDesk(2) })).reason, /outside every zone/)
-  assert.match(P.edit(doc(), mv(1, { ...mail, ...toDesk(4) })).reason, /full holds one window/)
+  const full = P.edit(doc(), mv(1, { ...mail, ...toDesk(4) }))
+  assert.equal(full.doc.scenes["desk-4"].layout, "tiled", "a full plan with a second window becomes tiled (D28)")
 })
 
 test("desktop move from a many-window plan joins the target plan by its layout", () => {
@@ -236,8 +237,11 @@ test("desktop move from a many-window plan joins the target plan by its layout",
   assert.deepEqual(fKeep.doc.scenes["desk-6"].windows[1].rect, [0, 0, 0.5, 1])
 })
 
-test("desktop move from a many-window plan: a full plan, a taken or missing zone of the target plan are not possible", () => {
-  assert.match(P.edit(doc(), mv(1, toDesk(4))).reason, /full holds one window/)
+test("desktop move from a many-window plan: a full plan becomes tiled; a taken or missing zone is not possible", () => {
+  const f = P.edit(doc(), mv(1, toDesk(4)))
+  assert.deepEqual([f.doc.scenes["desk-4"].layout, f.doc.scenes["desk-4"].windows.map((w) => [w.class, w.zone])],
+    ["tiled", [["org.example.Music", 1], ["org.example.Editor", 2]]])
+  assert.deepEqual(S.planProblems(f.doc.scenes), {})
   assert.match(P.edit(doc(), mv(1, toDesk(3, [0, 0, 0.3, 0.3]))).reason, /used twice/)
   assert.match(P.edit(doc(), mv(1, toDesk(3))).reason, /outside every zone/)
 })
@@ -282,15 +286,15 @@ test("a plan on the focused monitor (\"\") moving a window to a desktop with no 
   assert.deepEqual(j.doc.scenes["desk-6"].windows.map((w) => w.class), ["org.example.Notes", "org.example.Editor"])
 })
 
-test("desktop move out of a plan holding two windows of that class and context is not possible", () => {
+test("desktop move of one of two windows of one app: the moved one is known by its index (D28)", () => {
   const d = doc()
   d.scenes["desk-5"].windows.push({ ...d.scenes["desk-5"].windows[0], zone: 3 })
-  const r = P.edit(d, mv(1, { scene: "desk-5", class: "org.example.Term", ...toDesk(6) }))
-  assert.equal(r.code, "not_possible")
-  assert.match(r.reason, /more than one org\.example\.Term window/)
-  // a different context is a different app (D18): not a twin
-  d.scenes["desk-5"].windows[2].context = "~/made-up"
-  assert.equal(P.edit(d, mv(1, { scene: "desk-5", class: "org.example.Term", ...toDesk(6) })).changed, true)
+  const r = P.edit(d, mv(1, { scene: "desk-5", window: 3, class: "org.example.Term", ...toDesk(6) }))
+  assert.equal(r.changed, true)
+  assert.deepEqual(r.doc.scenes["desk-5"].windows.map((w) => [w.class, w.zone]), [["org.example.Term", 1], ["org.example.Files", 2]])
+  assert.deepEqual(r.doc.scenes["desk-6"].windows.map((w) => w.class), ["org.example.Notes", "org.example.Term"])
+  // the index must still name that app
+  assert.equal(P.edit(d, mv(1, { scene: "desk-5", window: 2, class: "org.example.Term", ...toDesk(6) })).code, "not_found")
 })
 
 test("a one-window plan on the focused monitor (home_monitor empty) keeps it empty and only changes its slot", () => {
