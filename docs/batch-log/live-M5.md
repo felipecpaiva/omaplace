@@ -123,3 +123,9 @@ shell restart. Felipe agreed to both checks right before them.
 
 Not checked live: "From a window..." (the 4 second wait for a click needs a hand), the folder chooser, and the
 package installed with pacman (Felipe installs it with his password).
+
+## Make these the plan (D41), live 2026-11-22
+
+Through the real service, files backed up first and put back byte for byte after: the laptop panel's desktop 1
+(floating, 3 windows) became a Free floating plan for that desktop with the windows' spots; 2 saved, 1 left out (a
+floating terminal app omaplace cannot start again), 1 browser window needing its profile. Pass.

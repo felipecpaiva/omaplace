@@ -63,6 +63,14 @@ ApplicationWindow {
             const okText = win.okTexts[key] || (op === "open" ? qsTr("Opened") : op === "restore" ? qsTr("Restored") : qsTr("Saved"))
             const a = Settings.answerText(JSON.stringify(answer), okText)
             if (op === "refresh" && a.ok) return
+            // a capture (Make these the plan) says what it saved, skipped, and what still needs a browser profile
+            if (a.ok && answer.saved !== undefined) {
+                let t = (answer.saved === 1 ? qsTr("Saved 1 app") : qsTr("Saved %1 apps").arg(answer.saved))
+                if (answer.skipped > 0) t += ", " + qsTr("%1 left out (omaplace cannot start them)").arg(answer.skipped)
+                if (answer.need_profile > 0) t += ". " + qsTr("Pick the browser profile under More.")
+                win.show(t, false)
+                return
+            }
             win.show(answer.text && a.ok ? answer.text : a.text, !a.ok)
         }
     }
