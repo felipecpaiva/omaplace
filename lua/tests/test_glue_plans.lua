@@ -285,7 +285,7 @@ user_move(ed, 13)
 eq(n_moves(), 1, "desktop move reported")
 eq(#fake.exec_log, 1, "one notification for the move")
 eq(fake.exec_log[1], "'omarchy-notification-send' '-g' '" .. M.NOTIFY_GLYPH .. "' 'omaplace' "
-  .. "'org.example.Editor moved. Update the plan desk-2?' '--action' 'Update plan' '" .. M.PLUGIN_DIR
+  .. "'org.example.Editor moved. Update the remembered desktop?' '--action' 'Update it' '" .. M.PLUGIN_DIR
   .. "/bin/omaplace' 'plan-update' '1'", "notification argv, every part quoted, the move id last")
 eq(fake.exec_log[1]:find("Made up title", 1, true), nil, "no title in the notification")
 local mf = moves_file()

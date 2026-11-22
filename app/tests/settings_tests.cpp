@@ -262,7 +262,7 @@ private slots:
         click(w, tiles.at(1));
         auto *picker = inTools(w, w->contentItem(), "layoutPicker");
         QVERIFY(picker);
-        QCOMPARE(picker->property("displayText").toString(), QString("No plan"));
+        QCOMPARE(picker->property("displayText").toString(), QString("None"));
         QVariantList opts = picker->property("model").toList();
         QCOMPARE(opts.at(1).toMap().value("label").toString(), QString("2 columns (omagnet, this desktop)"));
         grab(w, "page-desktops-laptop");

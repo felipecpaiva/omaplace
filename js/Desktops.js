@@ -87,7 +87,7 @@ function layoutOptions(mode, om, desk) {
     else others.push(o)
   }
   if (mode === "tiled" || mode === "scrolling") for (const o of fits) o.label += " (now)"
-  return [{ value: "", label: "No plan" }].concat(first, fits, others, [{ value: "custom", label: "Custom zones" }])
+  return [{ value: "", label: "None" }].concat(first, fits, others, [{ value: "custom", label: "Custom zones" }])
 }
 
 function modeLabel(mode) { return MODE_WORDS[mode] || "" }
@@ -227,10 +227,10 @@ function positions(scene) {
 // Why a planned window will not snap when opened by hand (design 14.7). snapOff: PlansFile said snap = false.
 function snapNotes(win, snapOff, rules, others) {
   const notes = []
-  if (snapOff) notes.push("Also in plan " + others.join(", ") + ": it will not snap when you open it by hand. Open all still places it.")
+  if (snapOff) notes.push("Also remembered on " + others.join(", ") + ": opened by hand it stays where it opens. Put windows back still places it.")
   const rule = Plan.ruleFor(win.class, rules)
-  if (rule) notes.push("It has a placement rule (desktop " + rule.slot + "): the rule decides where it opens by hand. Open all still places it.")
-  if (win.context) notes.push("Only a window omaplace opens gets this profile or folder: one you open from the app itself is not snapped.")
+  if (rule) notes.push("It has its own place on Apps (desktop " + rule.slot + "): that decides where it opens by hand. Put windows back still places it.")
+  if (win.context) notes.push("Only a window omaplace opens gets this profile or folder: one you open from the app itself stays where it opens.")
   return notes
 }
 
@@ -264,7 +264,7 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   const card = {
     key: mon.identity + "\n" + slot, identity: mon.identity, focused: mon.focused === true, monitorName: mon.name, slot, workspace: ws,
     windows: (live.windows || {})[ws] || 0, mode, plan: !!found, name: "", layout: "", choice: "", openAtLogin: false,
-    error: "", badge: "No plan" + (mode ? ", now " + modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback,
+    error: "", badge: (mode ? modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback,
     options: layoutOptions(mode, ctx.omagnet, (ctx.omDesks || {})[ws] || null),
     live: liveApps((live.wsClasses || {})[ws], ctx.apps, mon.area)
   }
@@ -279,10 +279,10 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   card.choice = layoutChoice(card.layout, ctx.omagnet)
   card.openAtLogin = s.open_at_login === true
   card.error = s.planError || ""
-  card.badge = card.error ? "Bad plan" : layoutLabel(card.layout, ctx.omagnet)
+  card.badge = card.error ? "Problem" : layoutLabel(card.layout, ctx.omagnet)
   card.rows = card.error ? [] : rowsOf(found.name, s, ctx)
   const want = card.error ? "" : Plan.planMode(card.layout)
-  if (want !== "" && mode !== "" && want !== mode) card.modeNote = "Open all switches this desktop from " + modeLabel(mode) + " to " + modeLabel(want) + "."
+  if (want !== "" && mode !== "" && want !== mode) card.modeNote = "Putting the windows back switches this desktop from " + modeLabel(mode) + " to " + modeLabel(want) + "."
   Object.assign(card, stateOf(card))
   card.title = titleOf(card)
   return card
@@ -545,7 +545,7 @@ function edit(doc, desk, op, arg) {
       scene = newPlan(d.identity, d.slot, layout)
     }
   } else {
-    if (!found) return { error: "this desktop has no plan yet, pick a layout first" }
+    if (!found) return { error: "this desktop is not remembered yet, pick a layout first" }
     name = found.name
     scene = clone(found.scene)
     const free = scene.layout === "free"
@@ -582,7 +582,7 @@ function edit(doc, desk, op, arg) {
 function layoutSavedText(layout, mode, dropped) {
   const want = Plan.planMode(layout)
   let t = "Saved"
-  if (want !== "" && want !== mode) t += ". Open all switches this desktop to " + modeLabel(want)
+  if (want !== "" && want !== mode) t += ". Putting the windows back switches this desktop to " + modeLabel(want)
   if (dropped && dropped.length) t += ". Taken out (no room): " + dropped.join(", ")
   return t
 }

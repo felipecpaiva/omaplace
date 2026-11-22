@@ -1160,8 +1160,8 @@ local function report_plan_move(e, kind, w)
   if write_atomic("plan-moves.json", text .. "\n") ~= true then return false end
   -- Lua sends the notification itself: the service's watch can miss a renamed-in file. Async, class and scene only.
   local cmd = Shellquote.join({ "omarchy-notification-send", "-g", M.NOTIFY_GLYPH, "omaplace",
-    e.class .. " moved. Update the plan " .. e.scene .. "?",
-    "--action", "Update plan", M.PLUGIN_DIR .. "/bin/omaplace", "plan-update", tostring(mv.seq) })
+    e.class .. " moved. Update the remembered desktop?",
+    "--action", "Update it", M.PLUGIN_DIR .. "/bin/omaplace", "plan-update", tostring(mv.seq) })
   if cmd then pcall(hl.exec_cmd, cmd) end
   return true
 end

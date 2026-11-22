@@ -20,6 +20,8 @@ ApplicationWindow {
     Material.roundedScale: desktopTheme.radius
 
     AppTheme { id: ui }
+    // back to the window: read the desktops again, so "Now" is never stale (no timer while it sits unused)
+    onActiveChanged: if (active && backend.connected) backend.request("refresh", [])
 
     readonly property var model: backend.model
     readonly property var panel: model.panel || Settings.emptyData()

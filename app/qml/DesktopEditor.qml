@@ -25,7 +25,7 @@ ColumnLayout {
     property var openRows: ({})
     readonly property bool writable: app.panel.scenesWritable === true && card.editable !== false
     readonly property bool custom: customKey === card.key || card.choice === "custom"
-    readonly property var options: card.options || [{ value: "", label: qsTr("No plan") }].concat(Desktops.LAYOUT_CHOICES, [{ value: "custom", label: qsTr("Custom zones") }])
+    readonly property var options: card.options || [{ value: "", label: qsTr("None") }].concat(Desktops.LAYOUT_CHOICES, [{ value: "custom", label: qsTr("Custom zones") }])
     readonly property bool zoned: !!Zones.ofLayout(card.layout || "").zones
     readonly property var live: card.live || []
     readonly property bool hasLive: live.length > 0

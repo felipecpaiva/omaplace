@@ -73,9 +73,9 @@ test("cards: ten per monitor, badge with Omarchy's mode when there is no plan", 
   const cards = m.groups[0].cards
   assert.equal(cards.length, 10)
   assert.deepEqual(cards.map((c) => c.slot), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-  assert.equal(cards[0].badge, "No plan, now Tiled")
+  assert.equal(cards[0].badge, "Tiled")
   assert.equal(cards[1].windows, 3)
-  assert.equal(cards[4].badge, "No plan")
+  assert.equal(cards[4].badge, "")
   assert.equal(cards[4].workspace, 0)
   assert.equal(cards[0].plan, false)
 })
@@ -102,17 +102,17 @@ test("cards: a zone plan shows its zones with apps, notes, and the mode switch i
   assert.equal(c.name, "a")
   assert.equal(c.badge, "Zones: 2 columns")
   assert.equal(c.choice, "columns:2")
-  assert.equal(c.modeNote, "Open all switches this desktop from Tiled to Floating.")
+  assert.equal(c.modeNote, "Putting the windows back switches this desktop from Tiled to Floating.")
   assert.deepEqual(c.rows.map((r) => [r.pos, r.rect, r.label, r.empty]), [[1, [0, 0, 0.5, 1], "Editor", false], [2, [0.5, 0, 0.5, 1], "", true]])
   assert.equal(c.rows[0].icon, "ed")
-  assert.match(c.rows[0].notes[0], /Also in plan b/)
+  assert.match(c.rows[0].notes[0], /Also remembered on b/)
   const t = m.groups[0].cards[2]
   assert.equal(t.badge, "Tiled")
   assert.equal(t.modeNote, "") // mode unknown for a desktop Lua gave no workspace for
   const chrome = t.rows.find((r) => r.cls === "chromium")
   assert.ok(chrome.notes.some((n) => /^Class is a guess \(chromium\)\. Open the app once/.test(n)))
   assert.equal(chrome.want, "chromium")
-  assert.ok(chrome.notes.some((n) => /placement rule \(desktop 7\)/.test(n)))
+  assert.ok(chrome.notes.some((n) => /its own place on Apps \(desktop 7\)/.test(n)))
   assert.ok(chrome.notes.some((n) => /profile or folder/.test(n)))
   assert.deepEqual(t.rows.map((r) => [r.pos, r.rect]), [[1, [0, 0, 0.5, 1]], [2, [0.5, 0, 0.5, 1]], [3, null]])
 })
@@ -130,7 +130,7 @@ test("cards: full, free and empty tiled plans; a bad plan shows its reason and n
   assert.equal(cards[0].modeNote, "") // full leaves the mode as it is
   assert.deepEqual(cards[1].rows.map((r) => [r.pos, r.rect, r.empty]), [[1, [0.1, 0.1, 0.5, 0.5], false], [2, null, true]])
   assert.deepEqual(cards[2].rows.map((r) => [r.pos, r.rect, r.empty]), [[1, [0, 0, 1, 1], true]])
-  assert.equal(cards[3].badge, "Bad plan")
+  assert.equal(cards[3].badge, "Problem")
   assert.match(cards[3].error, /zone 3/)
   assert.deepEqual(cards[3].rows, [])
 })
@@ -160,7 +160,7 @@ test("edit layout: a desktop without a plan gets a new plan, named for its deskt
 test("edit: bad desktops and unknown edits", () => {
   assert.match(D.edit(doc({}), desk(0), "layout", "tiled").error, /1 to 10/)
   assert.match(D.edit(doc({}), { identity: 'a"b', slot: 1 }, "layout", "tiled").error, /monitor/)
-  assert.match(D.edit(doc({}), desk(2), "app", { pos: 1, id: "x", class: "x" }).error, /no plan yet/)
+  assert.match(D.edit(doc({}), desk(2), "app", { pos: 1, id: "x", class: "x" }).error, /not remembered yet/)
   assert.match(D.edit(doc({ a: plan("tiled", []) }), desk(2), "zap", 1).error, /unknown edit/)
 })
 
@@ -234,7 +234,7 @@ test("edit: an edit that leaves a bad plan is refused, the doc is untouched", ()
 })
 
 test("layoutSavedText: the floating switch (D19) and what was taken out", () => {
-  assert.equal(D.layoutSavedText("columns:2", "tiled", []), "Saved. Open all switches this desktop to Floating")
+  assert.equal(D.layoutSavedText("columns:2", "tiled", []), "Saved. Putting the windows back switches this desktop to Floating")
   assert.equal(D.layoutSavedText("tiled", "tiled", []), "Saved")
   assert.equal(D.layoutSavedText("full", "floating", ["b"]), "Saved. Taken out (no room): b")
 })
