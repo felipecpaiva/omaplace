@@ -3,11 +3,11 @@
 // profiles from a Chromium `Local State`, live monitor names, and the text the pages show. No files, no clock, no Qt:
 // Service.qml reads the files and hands the text in, so Node can test every function here.
 
-// The top-level keys the window writes, and values it shows but does not offer yet (WP10 and a later restore at login).
+// The top-level keys the window writes, and values it shows but does not offer yet (a later restore at login).
 const PANEL_KEYS = ["session", "restore_at_login", "app_memory", "existing_default", "missing_monitor_scene",
   "missing_monitor_rule", "ignore", "expiry_seconds", "settle_ms", "launch_tick_ms", "session_debounce_s", "session_keep",
   "context_quiet_ms", "request_timeout_s"]
-const NOT_YET = { restore_at_login: ["ask", "auto"], app_memory: ["auto"] }
+const NOT_YET = { restore_at_login: ["ask", "auto"] }
 const TIMING = [
   { key: "expiry_seconds", label: "Wait for a started app (seconds)" },
   { key: "settle_ms", label: "Settle time after an app opens (ms)" },
