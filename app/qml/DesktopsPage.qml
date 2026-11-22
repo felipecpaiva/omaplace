@@ -15,11 +15,59 @@ Item {
     readonly property var omagnet: desks.omagnet || ({ loaded: false, layouts: [] })
     readonly property var allCards: [].concat.apply([], groups.map(function (g) { return g.cards }))
     readonly property string current: page.selected !== "" && allCards.some(function (c) { return c.key === page.selected }) ? page.selected
-        : (allCards.find(function (c) { return c.focused === true }) || allCards[0] || { key: "" }).key   // the monitor in use first
+        // first a desktop with something to show (remembered or apps open), on the monitor in use when it has one
+        : (allCards.find(function (c) { return c.focused === true && (c.plan || (c.live || []).length > 0) })
+           || allCards.find(function (c) { return c.plan || (c.live || []).length > 0 })
+           || allCards.find(function (c) { return c.focused === true }) || allCards[0] || { key: "" }).key
     readonly property var chosen: allCards.find(function (c) { return c.key === page.current }) || null
+    // first use (D46): nothing remembered yet, apps open on some desktops
+    readonly property bool firstRun: allCards.length > 0 && !allCards.some(function (c) { return c.plan }) && allCards.some(function (c) { return (c.live || []).length > 0 })
+    readonly property bool askRestart: !page.app.restartAsked && allCards.some(function (c) { return c.plan }) && (page.app.panel.settings || {}).restore_at_login === "off"
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 12
+
+    Pane {
+        objectName: "firstRun"
+        visible: page.firstRun
+        Layout.fillWidth: true
+        padding: 14
+        background: Rectangle { color: ui.surface; radius: ui.radius; border.width: 1; border.color: ui.accent }
+        contentItem: RowLayout {
+            spacing: 12
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                Label { text: qsTr("omaplace can put your desktops back the way they are now."); font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Hint { text: qsTr("Each desktop keeps its apps and where they are. An app you open by hand then goes to its desktop too.") }
+            }
+            ActionButton {
+                objectName: "rememberAll"
+                primary: true
+                text: qsTr("Remember all my desktops")
+                onClicked: page.app.act("rememberAll", [], "")
+            }
+        }
+    }
+    Pane {
+        objectName: "askRestart"
+        visible: page.askRestart
+        Layout.fillWidth: true
+        padding: 14
+        background: Rectangle { color: ui.surface; radius: ui.radius; border.width: 1; border.color: ui.accent }
+        contentItem: RowLayout {
+            spacing: 10
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.bold: true; text: qsTr("After a restart, should your desktops come back?") }
+            ActionButton { objectName: "restartAsk"; primary: true; text: qsTr("Ask me"); onClicked: { page.app.act("setSetting", ["restore_at_login", "ask"], qsTr("After a restart, omaplace asks first")); page.app.restartAsked = true } }
+            ActionButton { objectName: "restartAuto"; text: qsTr("Bring them back"); onClicked: { page.app.act("setSetting", ["restore_at_login", "auto"], qsTr("After a restart, your desktops come back")); page.app.restartAsked = true } }
+            ActionButton { objectName: "restartNo"; text: qsTr("Not now"); onClicked: page.app.restartAsked = true }
+        }
+    }
 
     RowLayout {
-        anchors.fill: parent
+        Layout.fillWidth: true
+        Layout.fillHeight: true
         spacing: 16
 
         ScrollView {
@@ -104,5 +152,6 @@ Item {
                 }
             }
         }
+    }
     }
 }

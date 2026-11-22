@@ -1,6 +1,7 @@
 // Offscreen tests of the settings app: the Backend against a fake omarchy-shell (fake-shell.sh) and the real QML pages
 // driven with mouse and key events. Made-up data only (fixture-model.json, written by make_fixture.mjs).
 #include <QtTest>
+#include <QStandardPaths>
 #include <QQuickStyle>
 #include <QGuiApplication>
 #include <QIcon>
@@ -718,6 +719,58 @@ private slots:
         QVERIFY2(!find(c, "planFromDesktop"), "an empty desktop has nothing to remember");
     }
 
+    // D46: first use offers to remember every desktop; then the restart question once; remember and forget can be undone.
+    void firstUseRestartQuestionAndUndo() {
+        reset();
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        auto *root = win.engine.rootObjects().first();
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QTest::qWait(300);
+        auto *c = w->contentItem();
+        root->setProperty("restartAsked", false);
+        const QVariantMap base = win.backend.model();
+        auto withModel = [&](std::function<void(QVariantMap &)> change, int seq) {
+            QVariantMap m = base;
+            change(m);
+            m.insert("seq", seq);
+            QVERIFY(win.backend.applyModel(m));
+            QTest::qWait(200);
+        };
+        // nothing remembered, apps open: the banner and its one button
+        withModel([](QVariantMap &m) {
+            QVariantMap desks = m.value("desks").toMap();
+            QVariantList groups = desks.value("groups").toList();
+            for (int g = 0; g < groups.size(); ++g) {
+                QVariantMap gm = groups[g].toMap(); QVariantList cards = gm.value("cards").toList();
+                for (int i = 0; i < cards.size(); ++i) { QVariantMap cm = cards[i].toMap(); cm.insert("plan", false); cm.insert("state", "none"); cards[i] = cm; }
+                gm.insert("cards", cards); groups[g] = gm;
+            }
+            desks.insert("groups", groups); m.insert("desks", desks);
+        }, 500000);
+        QVERIFY(find(c, "firstRun"));
+        grab(w, "first-run");
+        click(w, find(c, "rememberAll"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("rememberAll"), 5000);
+        // remembered, restart not set yet: the question, answered once
+        withModel([](QVariantMap &m) {
+            QVariantMap p = m.value("panel").toMap(); QVariantMap st = p.value("settings").toMap();
+            st.insert("restore_at_login", "off"); p.insert("settings", st); m.insert("panel", p);
+        }, 500001);
+        QVERIFY2(!find(c, "firstRun"), "no first-use banner once something is remembered");
+        QVERIFY(find(c, "askRestart"));
+        grab(w, "restart-question");
+        click(w, find(c, "restartAsk"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("setSetting", R"(["restore_at_login","ask"])"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!find(c, "askRestart"), 3000);
+        // remember a desktop: the toast offers Undo
+        click(w, all(c, "tile-3").at(0));
+        click(w, find(c, "planFromDesktop"));
+        QTRY_VERIFY_WITH_TIMEOUT(find(c, "undo"), 5000);
+        click(w, find(c, "undo"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("undo"), 5000);
+    }
+
     // Read only, against the real service (OMAPLACE_LIVE=1 and OMAPLACE_LIVE_OUT=<folder for the pictures>): the app
     // connects, gets a model, shows every page without a QML warning. It sends appModel only, never a change.
     void liveReadOnly() {
@@ -758,7 +811,9 @@ private slots:
 
 int main(int argc, char **argv) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    QStandardPaths::setTestModeEnabled(true);  // the app's own small state (Core.Settings) never lands in the real home
     QGuiApplication app(argc, argv);
+    app.setOrganizationName("omaplace");
     {
         QSettings gtk(QDir::homePath() + "/.config/gtk-3.0/settings.ini", QSettings::IniFormat);
         const QString theme = gtk.value("Settings/gtk-icon-theme-name").toString();

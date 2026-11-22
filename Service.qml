@@ -143,6 +143,8 @@ Item {
     if (root.writeError === "") scenesFile.setText(text)
     if (root.writeError === "") root.writePlans(text)
     if (root.writeError === "") root.syncOmagnet(text)
+    // Undo (D46) covers one action the app started (remember, remember all, forget): any other write ends it
+    if (root.writeError === "") { if (root.undoArmed) root.undoAfter = text; else root.undoBefore = "" }
     return root.writeError
   }
 
@@ -858,7 +860,9 @@ Item {
     case "refresh": root.refreshMonitors(); root.desktopsInfo(); root.rescanScenes(); return Summary.answer({ ok: true })
     case "open": return root.startOpen(a[0])
     case "rename": return root.renameScene(a[0], a[1])
-    case "removeScene": return root.removeScene(a[0])
+    case "removeScene": root.armUndo(); { let r = root.removeScene(a[0]); root.undoArmed = false; return r }
+    case "rememberAll": return root.startRememberAll()
+    case "undo": return root.undoLast()
     case "setWindow": return root.setSceneWindow(a[0], a[1], a[2], a[3], a[4])
     case "pickFolder": return root.pickFolder(a[0], a[1], a[2])
     case "ruleNew": return root.ruleNew(a[0], a[1], a[2])
@@ -885,6 +889,7 @@ Item {
   // (its own name kept when it has one).
   function startPlanFromDesktop(identity, slot, focused, mode, ws) {
     if (root.req) return Summary.answer(root.fail("busy"))
+    if (!root.rememberQueue.length) root.armUndo()
     if (!Number.isInteger(ws) || ws < 1 || !Number.isInteger(slot) || slot < 1 || slot > 10) return Summary.answer(root.fail("failed", "no such desktop"))
     let w = root.writableScenes()
     if (w.error) return Summary.answer(w.error)
@@ -928,7 +933,64 @@ Item {
   // A rule from a window ended: its result rides on the next model as a late answer (Backend shows it).
   function appRuleDone() {
     if (root.appRuleReq !== "") { root.lastAnswer = root.resultOf(root.appRuleReq) || '{"ok":true}'; root.appRuleReq = "" }
+    if (root.rememberQueue.length > 0 || root.rememberDone > 0) { root.rememberNext(); return }
+    root.undoArmed = false
     root.pushModel()
+  }
+
+  // ---- remember all and undo (D46)
+
+  property var rememberQueue: []
+  property int rememberDone: 0
+  property string undoBefore: ""
+  property string undoAfter: ""
+  property bool undoArmed: false
+
+  function armUndo() { root.undoBefore = root.readNow(scenesFile); root.undoAfter = ""; root.undoArmed = true }
+
+  // Every desktop with apps open and nothing remembered yet is remembered, one after the other (one slow request at a time).
+  function startRememberAll() {
+    if (root.req || root.rememberQueue.length) return Summary.answer(root.fail("busy"))
+    let q = []
+    for (let g of (root.desktopCards().groups || [])) {
+      for (let c of g.cards) if (c.state === "none" && (c.live || []).length > 0 && c.workspace > 0)
+        q.push({ identity: c.identity, slot: c.slot, focused: c.focused === true, mode: c.mode || "", ws: c.workspace })
+    }
+    if (q.length === 0) return Summary.answer(root.fail("empty", "no open desktop to remember"))
+    root.armUndo()
+    root.rememberQueue = q
+    root.rememberDone = 0
+    root.rememberNext()
+    return Summary.answer({ ok: true, text: q.length === 1 ? "Remembering 1 desktop..." : "Remembering " + q.length + " desktops..." })
+  }
+
+  function rememberNext() {
+    let q = root.rememberQueue.slice()
+    if (q.length === 0) {
+      let n = root.rememberDone
+      root.rememberDone = 0
+      root.undoArmed = false
+      root.lastAnswer = JSON.stringify({ ok: true, undo: true, text: n === 1 ? "Remembered 1 desktop" : "Remembered " + n + " desktops" })
+      root.pushModel()
+      return
+    }
+    let t = q.shift()
+    root.rememberQueue = q
+    root.rememberDone++
+    let a = Summary.parseJson(root.startPlanFromDesktop(t.identity, t.slot, t.focused, t.mode, t.ws)) || {}
+    if (!a.pending) Qt.callLater(root.rememberNext)
+  }
+
+  // Put scenes.toml back as it was before the last remember or forget, if nothing else wrote it since.
+  function undoLast() {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    if (root.undoBefore === "" || root.undoAfter === "") return Summary.answer(root.fail("failed", "nothing to undo"))
+    let now = root.readNow(scenesFile)
+    if (now !== root.undoAfter) { root.undoBefore = ""; return Summary.answer(root.fail("failed", "scenes.toml changed since; nothing undone")) }
+    let before = root.undoBefore
+    root.undoBefore = ""
+    let err = root.writeScenes(now, before)
+    return Summary.answer(err === "" ? { ok: true, text: "Undone" } : root.fail("failed", err))
   }
 
   // Everything the window shows, read now. Windows with an unknown context carry what the picker needs (`need`).

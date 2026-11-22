@@ -1,4 +1,5 @@
 import QtQuick
+import QtCore as Core
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
@@ -27,6 +28,10 @@ ApplicationWindow {
     property int page: 0
     property string toast: ""
     property bool toastBad: false
+    property bool toastUndo: false       // the last action can be undone for 10 seconds (D46)
+    // per person, not a setting: whether the restart question was answered or waved away (D46)
+    Core.Settings { id: seen; category: "seen"; property bool restartAsked: false }
+    property alias restartAsked: seen.restartAsked
     property var confirm: null           // { text, op, args, ok }
     property var okTexts: ({})           // request id -> the text shown when it works
 
@@ -47,7 +52,7 @@ ApplicationWindow {
         return id
     }
     function ask(text, op, args, okText) { win.confirm = { text: text, op: op, args: args, ok: okText }; confirmDialog.open() }
-    function show(text, bad) { win.toast = text; win.toastBad = bad; toastTimer.restart() }
+    function show(text, bad, undo) { win.toast = text; win.toastBad = bad; win.toastUndo = undo === true; toastTimer.restart() }
 
     Connections {
         target: backend
@@ -63,18 +68,20 @@ ApplicationWindow {
             const okText = win.okTexts[key] || (op === "open" ? qsTr("Opened") : op === "restore" ? qsTr("Restored") : qsTr("Saved"))
             const a = Settings.answerText(JSON.stringify(answer), okText)
             if (op === "refresh" && a.ok) return
+            const undo = a.ok && (op === "planFromDesktop" || op === "removeScene" || answer.undo === true)
             // a capture (Make these the plan) says what it saved, skipped, and what still needs a browser profile
             if (a.ok && answer.saved !== undefined) {
                 let t = (answer.saved === 1 ? qsTr("Saved 1 app") : qsTr("Saved %1 apps").arg(answer.saved))
                 if (answer.skipped > 0) t += ", " + qsTr("%1 left out (omaplace cannot start them)").arg(answer.skipped)
-                if (answer.need_profile > 0) t += ". " + qsTr("Pick the browser profile under More.")
-                win.show(t, false)
+                if (answer.need_profile > 0) t += ". " + qsTr("Pick the browser profile under More options.")
+                win.show(t, false, undo)
                 return
             }
-            win.show(answer.text && a.ok ? answer.text : a.text, !a.ok)
+            if (op === "planFromDesktop" && answer.pending) return  // the result says what was remembered
+            win.show(answer.text && a.ok ? answer.text : a.text, !a.ok, undo)
         }
     }
-    Timer { id: toastTimer; interval: win.toastBad ? 8000 : 3500; onTriggered: win.toast = "" }
+    Timer { id: toastTimer; interval: win.toastUndo ? 10000 : win.toastBad ? 8000 : 3500; onTriggered: { win.toast = ""; win.toastUndo = false } }
 
     Shortcut { sequences: ["Ctrl+Q", "Ctrl+W"]; context: Qt.ApplicationShortcut; onActivated: win.close() }
     Shortcut { sequence: "Ctrl+1"; context: Qt.ApplicationShortcut; onActivated: win.page = 0 }
@@ -191,7 +198,15 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 padding: 10
                 background: Rectangle { color: win.toastBad ? ui.warn : ui.surface; radius: ui.radius; opacity: win.toastBad ? 0.25 : 1 }
-                contentItem: Label { text: win.toast; textFormat: Text.PlainText; wrapMode: Text.WordWrap; color: ui.text }
+                contentItem: RowLayout {
+                    Label { Layout.fillWidth: true; text: win.toast; textFormat: Text.PlainText; wrapMode: Text.WordWrap; color: ui.text }
+                    ActionButton {
+                        objectName: "undo"
+                        visible: win.toastUndo
+                        text: qsTr("Undo")
+                        onClicked: { win.toastUndo = false; win.act("undo", [], qsTr("Undone")) }
+                    }
+                }
             }
         }
     }

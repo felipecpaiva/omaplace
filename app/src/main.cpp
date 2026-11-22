@@ -48,6 +48,7 @@ int main(int argc, char **argv) {
     }
     QGuiApplication app(argc, argv);
     app.setApplicationName("omaplace-settings");
+    app.setOrganizationName("omaplace");
     app.setApplicationVersion("0.3.0");
     app.setDesktopFileName("omaplace-settings");
 
