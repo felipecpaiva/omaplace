@@ -177,4 +177,12 @@ do
   eq(b.slots[1].state, "expired", "slot expired by claim")
 end
 
+-- Classes compare without case: a plan picked "aether" from the app list, the window is "Aether" (live 2026-11-22).
+do
+  local b = T.new({ { class = "aether", mode = "launch" } }, 0, opts)
+  T.next_launches(b, 0)
+  eq(T.claim(b, { class = "Aether" }, 10).n, 1, "claimed whatever the case")
+  eq(b.slots[1].class, "aether", "the slot keeps its own spelling")
+end
+
 print(string.format("test_tickets: %d checks ok", checks))

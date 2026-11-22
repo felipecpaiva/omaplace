@@ -19,8 +19,10 @@ local function clean_rect(r)
   return { r[1], r[2], r[3], r[4] }
 end
 
+-- Without case, like tickets.lua: a plan picked from the app list may hold the desktop id's lower case class.
 local function key(class, context)
   local ctx = type(context) == "string" and context or ""
+  class = tostring(class or ""):lower()
   return ctx == "" and class or (class .. "\n" .. ctx)
 end
 
@@ -110,7 +112,7 @@ function M.match_run(plan, items)
   local out, taken = {}, {}
   local function pick(it, want_rect)
     for i, w in ipairs(plan.windows) do
-      if not taken[i] and w.class == it.class and key(w.class, w.context) == key(it.class, it.context)
+      if not taken[i] and key(w.class, w.context) == key(it.class, it.context)
         and (not want_rect or same_rect(w.rect, it.rect)) then
         return i
       end

@@ -1186,7 +1186,7 @@ function M.place_from_plan(w)
   local mon, target = plan_target(plan)
   if not target then log("plan " .. plan.scene .. ": desktop not found, " .. cls .. " not snapped"); return true end
   local address = w.address
-  local e = { scene = plan.scene, window = index, class = cls, context = pw.context, ws = target, rect = pw.rect,
+  local e = { scene = plan.scene, window = index, class = pw.class, context = pw.context, ws = target, rect = pw.rect,
     floating = pw.floating }
   M.snapped[address] = e
   if ws.id ~= target then

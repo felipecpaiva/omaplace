@@ -27,7 +27,7 @@ function T.new(plan_windows, now, opts)
       mode = mode, state = "waiting", existing = false, started = false }
     if mode == "skip" or s.class == "" or s.context == "?" then s.state, s.started = "skipped", true end
     book.slots[i] = s
-    if s.context ~= "" and s.state ~= "skipped" then book.gated[s.class] = true end
+    if s.context ~= "" and s.state ~= "skipped" then book.gated[s.class:lower()] = true end
   end
   return book
 end
@@ -46,10 +46,11 @@ local function done(s) return FINAL[s.state] and (not s.existing or s.started) e
 -- Returns the slot, or nil (the window is not ours).
 function T.claim(book, window, now)
   T.expire(book, now)
-  local cls = window.class
+  -- classes compare without case: an app picked by its desktop id ("aether") opens as "Aether" (live 2026-11-22)
+  local cls = tostring(window.class or ""):lower()
   local function first(pred)
     for _, s in ipairs(book.slots) do
-      if s.class == cls and pred(s) then return s end
+      if s.class:lower() == cls and pred(s) then return s end
     end
   end
   local s
@@ -98,14 +99,14 @@ local function start(book, s, now, list)
   s.started, s.started_at = true, now
   if s.state == "waiting" then
     s.state = "launched"
-    if s.mode == "launch" and book.gated[s.class] then book.gates[s.class] = { ctx = s.context, pending = s, last = now } end
+    if s.mode == "launch" and book.gated[s.class:lower()] then book.gates[s.class:lower()] = { ctx = s.context, pending = s, last = now } end
   end
   list[#list + 1] = s
 end
 
 -- May this slot launch now? Context classes wait for their gate; floating launches wait for the tick.
 local function can_launch(book, s, now)
-  if s.mode == "launch" and book.gated[s.class] and gate_open(book, s.class, now) then return false end
+  if s.mode == "launch" and book.gated[s.class:lower()] and gate_open(book, s.class:lower(), now) then return false end
   return true
 end
 
@@ -151,8 +152,8 @@ function T.next_wake(book, now)
   for _, s in ipairs(book.slots) do
     if s.state == "launched" then at(s.started_at + book.expiry_ms) end
     if s.state == "waiting" and not s.existing then
-      local g = book.gated[s.class] and s.mode == "launch" and book.gates[s.class]
-      if g and gate_open(book, s.class, now) then
+      local g = book.gated[s.class:lower()] and s.mode == "launch" and book.gates[s.class:lower()]
+      if g and gate_open(book, s.class:lower(), now) then
         if not (g.pending and g.pending.state == "launched") then at(g.last + book.quiet_ms) end
       elseif not book.sequential then
         at(book.next_tick)

@@ -1028,8 +1028,8 @@ Item {
       // reload_plans at every start, even with plans.lua unchanged (Lua's retry of its login.json write): the first write
       // of a start always happens (plansText is empty) and reloads; only a build that failed needs the call here
       if (!root.writePlans()) root.reloadPlans()
+      root.checkRestore() // first: a restore queued before the login plans runs before them (D26)
       root.checkLogin()
-      root.checkRestore()
       if (root.deskAgain) root.desktopsInfo() // the Desktops page asked before the runtime folder existed
     }
   }
