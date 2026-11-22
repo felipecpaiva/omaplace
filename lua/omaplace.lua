@@ -1378,7 +1378,8 @@ function M.desktops(req_id)
     local list = {}
     local cfg = type(om.cfg) == "table" and om.cfg or {}
     for name, text in pairs(type(cfg.layouts) == "table" and cfg.layouts or {}) do
-      if type(name) == "string" and type(text) == "string" then list[#list + 1] = { name = name, zones = text } end
+      -- omaplace's own layouts (D43, the bridge) are its plans already: never offered back as omagnet's
+      if type(name) == "string" and type(text) == "string" and not name:match("^omaplace_") then list[#list + 1] = { name = name, zones = text } end
     end
     table.sort(list, function(a, b) return a.name < b.name end)
     d.omagnet = { loaded = true, layouts = list, config = type(om.config_path) == "string" and om.config_path or "" }
@@ -1388,7 +1389,7 @@ function M.desktops(req_id)
     for _, m in ipairs(d.monitors or {}) do
       for _, s in ipairs(m.slots or {}) do
         local name = ws_l[tostring(s.workspace)] or mon_l[m.name]
-        if type(name) == "string" and type(om.resolve_layout) == "function" then
+        if type(name) == "string" and not name:match("^omaplace_") and type(om.resolve_layout) == "function" then
           local ok, zones = pcall(om.resolve_layout, name)
           local parts = {}
           for _, z in ipairs(ok and type(zones) == "table" and zones or {}) do

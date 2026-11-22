@@ -171,7 +171,9 @@ function answerText(text, okText) {
     bad_name: "Names use a to z, 0 to 9, dash and underscore, up to 40 characters",
     no_lua: "The omaplace Lua module is not loaded in Hyprland",
     empty: "Nothing to save on this desktop",
-    failed: "That did not work"
+    failed: "That did not work",
+    // a settings app newer than the plugin asks for something the plugin does not know yet
+    unknown_op: "The omaplace plugin is older than this app. Update it: omarchy plugin update, then omarchy restart shell"
   }
   const base = words[a.code] || "That did not work"
   return { ok: false, text: a.reason ? base + ": " + a.reason : base, req: "" }

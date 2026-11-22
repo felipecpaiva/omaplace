@@ -1,11 +1,11 @@
 .pragma library
 .import "ConfigIO.js" as ConfigIO
 // The bridge to omagnet (D43): a desktop plan with zones is also written into omagnet's config.toml, so dragging a window
-// on that desktop snaps to the same zones. omaplace owns only what it names: the section [layout_omaplace-<ws>] and the
+// on that desktop snaps to the same zones. omaplace owns only what it names: the section [layout_omaplace_<ws>] and the
 // line "<ws> = ..." in [workspace_layouts] when it points at that section. A layout the user made in omagnet, or a line
 // that points elsewhere, is never changed. Pure: Node tested in tests/omagnet_bridge.test.mjs.
 
-function layoutName(ws) { return "omaplace-" + ws }
+function layoutName(ws) { return "omaplace_" + ws } // omagnet takes only [layout_<letters, digits, _>]
 
 function sectionLines(lines, header) {
   const r = ConfigIO.sectionRange(lines, header)

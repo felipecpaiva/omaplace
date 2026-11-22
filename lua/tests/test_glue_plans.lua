@@ -605,7 +605,7 @@ eq(#dm.omagnet.layouts, 2, "its two named layouts")
 eq(dm.omagnet.layouts[1].name, "coding", "sorted by name")
 eq(dm.monitors[1].slots[2].omagnet, nil, "no resolve_layout (older omagnet): no per-desktop layout")
 -- D35: per desktop from omagnet's config (workspace first, then the monitor), never its key override
-_G.omagnet = { cfg = { layouts = { coding = "0 0 0.7 1; 0.7 0 0.3 1" }, workspace_layouts = { ["12"] = "coding", ["13"] = "broken" },
+_G.omagnet = { cfg = { layouts = { coding = "0 0 0.7 1; 0.7 0 0.3 1", omaplace_14 = "0 0 1 1" }, workspace_layouts = { ["12"] = "coding", ["13"] = "broken", ["14"] = "omaplace_14" },
     zone_layouts = { ["eDP-1"] = "columns:2" } },
   layout_override = { ["DP-2"] = "grid:2x2" },
   resolve_layout = function(name)
@@ -619,6 +619,8 @@ eq(dm.monitors[1].slots[2].omagnet.zones, "0.0000 0.0000 0.7000 1.0000; 0.7000 0
 eq(dm.monitors[1].slots[3].omagnet, nil, "a layout that fails to resolve gives no hint")
 eq(dm.monitors[1].slots[1].omagnet, nil, "the key override is not a desktop's layout")
 eq(dm.monitors[2].slots[1].omagnet.name, "columns:2", "the panel's monitor layout")
+eq(#dm.omagnet.layouts, 1, "omaplace's own layout is not offered back")
+eq(dm.monitors[1].slots[4].omagnet, nil, "nor shown as the desktop's omagnet layout")
 _G.omagnet = nil
 
 clean()
