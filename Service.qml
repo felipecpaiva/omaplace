@@ -79,6 +79,11 @@ Item {
   property var notices: []
   property bool noticeBusy: false
   property var loginQueue: []
+  // Login work in flight in this service. The markers are written only once that work is done: the shell can rebuild
+  // its plugins right after login (seen live 2026-11-22, 0.5 s after start), and a marker written first would leave the
+  // new service copy with nothing to do.
+  property bool loginBusy: false
+  property bool restoreBusy: false
   property var chainNext: null
   property int chainToken: 0
   readonly property string instance: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
@@ -433,6 +438,7 @@ Item {
   function finish(res) {
     let r = root.req
     if (!r) return
+    if (r.loginRestore) restoreMarker.setText("auto\n")
     deadline.stop()
     luaCheck.stop()
     root.watching = false
@@ -584,11 +590,9 @@ Item {
     if (!root.dirsReady || !/^[A-Za-z0-9_]{1,128}$/.test(root.instance)) return
     let login = Summary.parseJson(root.readNow(loginFile))
     if (!login || login.instance !== root.instance || !Array.isArray(login.plans)) return
-    if (root.readNow(markerFile) !== "") return
-    root.writeError = ""
-    markerFile.setText("done\n")
-    if (root.writeError !== "") { console.warn("omaplace: login plans not opened: " + root.writeError); return }
-    root.loginQueue = login.plans.filter(function (n) { return typeof n === "string" && Summary.validName(n) })
+    if (root.loginBusy || root.readNow(markerFile) !== "") return
+    root.loginBusy = true
+    root.loginQueue = root.loginQueue.concat(login.plans.filter(function (n) { return typeof n === "string" && Summary.validName(n) }))
     root.nextLogin()
   }
 
@@ -597,35 +601,41 @@ Item {
   // "auto" queues the restore first, so login plans opened after it keep their own desktops.
   function checkRestore() {
     if (!root.dirsReady || !/^[A-Za-z0-9_]{1,128}$/.test(root.instance)) return
-    if (root.readNow(restoreMarker) !== "") return
+    if (root.restoreBusy || root.readNow(restoreMarker) !== "") return
     let mode = ""
     try { mode = root.config().settings.restore_at_login } catch (e) { return }
     let d = Summary.loginRestore(mode, root.instance, Math.floor(Date.now() / 1000), Summary.parseJson(root.readNow(sessionsFile)))
     if (d.action === "none") return
-    root.writeError = ""
-    restoreMarker.setText(d.action + "\n")
-    if (root.writeError !== "") { console.warn("omaplace: restore at login skipped: " + root.writeError); return }
+    root.restoreBusy = true
     if (d.action === "auto") {
       root.loginQueue = [{ restore: true }].concat(root.loginQueue)
       root.nextLogin()
       return
     }
     let bin = root.launcherSource.slice(0, root.launcherSource.lastIndexOf("/")) + "/bin/omaplace"
-    root.notices.push(["omarchy-notification-send", "-g", "\u{F0770}", "omaplace", "Restore the windows of your last session?",
-      "--action", "Restore", bin, "restore"])
-    root.nextNotice()
+    // its own process, so the marker is written only once the notification is out (the command returns at once; the
+    // shell runs the button's command)
+    restoreAsk.command = ["omarchy-notification-send", "-g", "\u{F0770}", "omaplace", "Restore the windows of your last session?",
+      "--action", "Restore", bin, "restore"]
+    restoreAsk.running = true
   }
 
   // The next login plan, when no request runs (finish() calls this again). Each is checked again against scenes.toml.
   function nextLogin() {
     while (!root.req && root.loginQueue.length > 0) {
       let name = root.loginQueue.shift()
-      if (typeof name === "object") { root.startRestore(""); if (root.req) return; continue } // the restore of D26
+      if (typeof name === "object") { // the restore of D26: its marker once it has run (finish), or now when it cannot
+        root.startRestore("")
+        if (root.req) { root.req.loginRestore = true; return }
+        restoreMarker.setText("auto\n")
+        continue
+      }
       let scene = SceneStore.parse(root.readNow(scenesFile)).scenes[name]
       if (!scene || scene.plan !== true || scene.open_at_login !== true || scene.planError) { console.log("omaplace: login plan skipped: " + name); continue }
       root.begin("open", { name: name, scene: scene, plan: true, user: false })
       return
     }
+    if (!root.req && root.loginQueue.length === 0 && root.loginBusy) { markerFile.setText("done\n"); root.loginBusy = false }
   }
 
   // ---- opening a plan: desktops(), then the mode switch (ModeSwitch.decide), then writePlan(). One command at a time;
@@ -1030,6 +1040,7 @@ Item {
   Process { id: catProc; stdout: StdioCollector { onStreamFinished: root.onCaptureText(text) } }
   Process { id: procProc; stdout: StdioCollector { onStreamFinished: root.onProcinfo(text) } }
   Process { id: reloadProc; command: ["hyprctl", "eval", "_G.omaplace.reload_config()"] }
+  Process { id: restoreAsk; onExited: (code) => { if (code === 0) restoreMarker.setText("ask\n"); else console.warn("omaplace: restore question not sent (" + code + ")") } }
   Process { id: noticeProc; onExited: { root.noticeBusy = false; root.nextNotice() } }
   Process { id: plansEval; onExited: { plansReply.command = ["cat", "--", root.runtimeDir + "/reply-plans.txt"]; plansReply.running = true } }
   Process { id: plansReply; stdout: StdioCollector { onStreamFinished: root.afterReloadPlans(text) } }
