@@ -698,6 +698,7 @@ private slots:
         }
         QVERIFY2(calc, "an installed app shows by its name");
         QVERIFY2(tui, "a shared class shows too");
+        QVERIFY2(find(c, "livePreview"), "a desktop with no plan draws its open apps");
         grab(w, "open-now");
         click(w, find(c, "planFromDesktop"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("planFromDesktop", R"(["Example Corp EX27",3,true,"tiled",13])"), 5000);

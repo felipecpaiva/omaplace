@@ -1364,6 +1364,14 @@ function M.desktops(req_id)
       function(m, all) return Monitors.fingerprint(m, all).identity end)
   end)
   if not ok then log("desktops failed: " .. tostring(d)); return nil, "failed" end
+  -- each monitor's usable area (logical px), so the settings app can draw open windows where they are (D42)
+  local byname = {}
+  for _, m in ipairs(hl.get_monitors()) do byname[m.name] = m end
+  for _, m in ipairs(d.monitors or {}) do
+    local live = byname[m.name]
+    local okA, area = pcall(Geometry.usable, live)
+    if live and okA and area then m.area = { x = area.x, y = area.y, w = area.w, h = area.h } end
+  end
   -- omagnet's own layouts ([layout_<name>] zones text), when omagnet is loaded: the page offers them by name (D31)
   local om = rawget(_G, "omagnet")
   if type(om) == "table" then

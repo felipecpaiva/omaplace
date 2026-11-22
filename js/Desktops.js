@@ -266,8 +266,9 @@ function cardOf(mon, slot, ws, found, live, ctx) {
     windows: (live.windows || {})[ws] || 0, mode, plan: !!found, name: "", layout: "", choice: "", openAtLogin: false,
     error: "", badge: "No plan" + (mode ? ", now " + modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback,
     options: layoutOptions(mode, ctx.omagnet, (ctx.omDesks || {})[ws] || null),
-    live: liveApps((live.wsClasses || {})[ws], ctx.apps)
+    live: liveApps((live.wsClasses || {})[ws], ctx.apps, mon.area)
   }
+  card.liveRows = liveRows(card.live)
   if (!found) return card
   const s = found.scene
   card.name = found.name
@@ -357,17 +358,36 @@ function clone(v) { return JSON.parse(JSON.stringify(v)) }
 
 // The apps open on a desktop now (D41), for the editor: { class, label, icon } per window, the installed app's name and
 // icon when its window class matches one, else the class. Classes only, never a title.
-function liveApps(classes, apps) {
+// entries: class strings, or { cls, at: [x, y], size: [w, h] } (logical px); area: the monitor's usable area { x, y, w, h }.
+// With both, each app also gets `rect` (fractions of the area, clamped), so the previews draw it where it is (D42).
+function liveApps(entries, apps, area) {
   const out = []
-  for (const cls of Array.isArray(classes) ? classes : []) {
-    if (typeof cls !== "string" || cls === "") continue
+  for (const e of Array.isArray(entries) ? entries : []) {
+    const cls = typeof e === "string" ? e : e && typeof e.cls === "string" ? e.cls : ""
+    if (cls === "") continue
     const lc = cls.toLowerCase()
     const all = (apps || []).filter((x) => (x.startupWMClass || "").toLowerCase() === lc || x.value.toLowerCase() === lc)
     // a class several apps share (a terminal app's TUI.tile) cannot name one of them
-    if (all.length > 1) out.push({ class: cls, label: cls + " (one of " + all.length + " apps)", icon: all[0].icon })
-    else out.push({ class: cls, label: all.length ? all[0].label : cls, icon: all.length ? all[0].icon : "" })
+    const app = all.length > 1 ? { class: cls, label: cls + " (one of " + all.length + " apps)", icon: all[0].icon }
+      : { class: cls, label: all.length ? all[0].label : cls, icon: all.length ? all[0].icon : "" }
+    const r = liveRect(e, area)
+    if (r) app.rect = r
+    out.push(app)
   }
   return out
+}
+
+function liveRect(e, area) {
+  if (!e || typeof e !== "object" || !Array.isArray(e.at) || !Array.isArray(e.size) || !area || !(area.w > 0) || !(area.h > 0)) return null
+  const c = (v) => Math.max(0, Math.min(1, v))
+  const x = c((e.at[0] - area.x) / area.w), y = c((e.at[1] - area.y) / area.h)
+  const w = Math.min(1 - x, Math.max(0, e.size[0] / area.w)), h = Math.min(1 - y, Math.max(0, e.size[1] / area.h))
+  return w > 0.005 && h > 0.005 ? [x, y, w, h] : null
+}
+
+// The preview rows of a desktop with no plan: its open apps where they are (D42), drawn like plan rows.
+function liveRows(live) {
+  return (live || []).filter((a) => a.rect).map((a, i) => ({ pos: i + 1, rect: a.rect, empty: false, label: a.label, icon: a.icon, live: true }))
 }
 
 // A captured scene of one desktop as that desktop's plan (D41). The mode Omarchy has now decides the layout, so Open

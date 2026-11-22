@@ -34,7 +34,7 @@ AbstractButton {
         }
         ZoneThumb {
             width: parent.width
-            rows: tile.card.rows || []
+            rows: tile.card.plan ? (tile.card.rows || []) : (tile.card.liveRows || []) // no plan: the apps open now (D42)
             showNames: false
             selected: tile.selected
         }

@@ -56,6 +56,12 @@ ColumnLayout {
         contentItem: ColumnLayout {
             spacing: 6
             Label { text: qsTr("Open on this desktop now"); font.bold: true }
+            ZoneThumb {
+                objectName: "livePreview"
+                visible: !editor.card.plan && (editor.card.liveRows || []).length > 0
+                Layout.preferredWidth: Math.min(editor.width - 20, 320)
+                rows: editor.card.liveRows || []
+            }
             Flow {
                 Layout.fillWidth: true
                 spacing: 10

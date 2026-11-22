@@ -1069,7 +1069,9 @@ Item {
       if (cls !== "") seen[cls] = true
       // the apps open on each desktop (D41), classes only; the settings window itself is never one of them
       let ws = w && w.workspace ? w.workspace.id : 0
-      if (cls !== "" && cls !== "omaplace-settings" && Number.isInteger(ws) && ws > 0 && !w.hidden) (byWs[ws] = byWs[ws] || []).push(cls)
+      // with where the window is (logical px, D42), so the previews draw it in place; never a title
+      if (cls !== "" && cls !== "omaplace-settings" && Number.isInteger(ws) && ws > 0 && !w.hidden)
+        (byWs[ws] = byWs[ws] || []).push({ cls: cls, at: Array.isArray(w.at) ? w.at : null, size: Array.isArray(w.size) ? w.size : null })
     }
     root.deskNext.classes = Object.keys(seen)
     root.deskNext.wsClasses = byWs

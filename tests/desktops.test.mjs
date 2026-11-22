@@ -434,3 +434,20 @@ test("a captured desktop becomes its plan, in the mode it has", () => {
   assert.equal(back.scenes.p.windows.length, 2)
   assert.equal(roundTrip(doc({ p: tiled })).errors.length, 0)
 })
+
+// D42: open apps drawn where they are, for desktops with no plan
+test("open apps get their place on the monitor", () => {
+  const area = { x: 0, y: 25, w: 1600, h: 975 }
+  const l = { ...live, monitors: [{ ...live.monitors[0], area }],
+    wsClasses: { 2: [{ cls: "org.example.Editor", at: [0, 25], size: [800, 975] }, { cls: "org.example.Chat", at: [800, 25], size: [800, 975] },
+      { cls: "org.example.Off", at: [-50, -50], size: [5000, 5000] }, { cls: "org.example.NoPlace" }] } }
+  const card = D.cards(l, doc({}), {}).groups[0].cards[1]
+  assert.deepEqual(card.live[0].rect, [0, 0, 0.5, 1])
+  assert.deepEqual(card.live[1].rect, [0.5, 0, 0.5, 1])
+  assert.deepEqual(card.live[2].rect, [0, 0, 1, 1], "clamped to the screen")
+  assert.equal(card.live[3].rect, undefined, "no place known: listed, not drawn")
+  assert.equal(card.liveRows.length, 3)
+  assert.equal(card.liveRows[0].live, true)
+  assert.equal(D.liveApps([{ cls: "x", at: [0, 0], size: [10, 10] }], [], null)[0].rect, undefined, "no area: no rect")
+  assert.equal(D.liveApps(["org.example.Editor"], [], area)[0].class, "org.example.Editor", "plain classes still work")
+})

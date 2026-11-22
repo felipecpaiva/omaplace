@@ -44,9 +44,11 @@ Item {
                 y: modelData.rect[1] * frame.height + 2
                 width: Math.max(1, modelData.rect[2] * frame.width - 4)
                 height: Math.max(1, modelData.rect[3] * frame.height - 4)
-                color: Qt.rgba(ui.accent.r, ui.accent.g, ui.accent.b, modelData.empty ? 0.08 : 0.22)
+                // a plan's zone in the accent; an app open now (no plan yet, D42) in the text colour, quieter
+                readonly property color tone: modelData.live ? ui.text : ui.accent
+                color: Qt.rgba(tone.r, tone.g, tone.b, modelData.empty ? 0.08 : modelData.live ? 0.10 : 0.22)
                 border.width: 1
-                border.color: ui.accent
+                border.color: modelData.live ? ui.edge : ui.accent
                 radius: Math.min(3, ui.radius)
                 clip: true
                 Column {
