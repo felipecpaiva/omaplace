@@ -134,9 +134,11 @@ test("a terminal reopens as the same terminal, so its class matches the slot (li
   assert.equal(A.resolve("foot", [], A.defaultStrategies(), { folder: "-rf" }).mode, "skip")
 })
 
-test("classFor: StartupWMClass first, then a class seen for the entry, else the id as an unconfirmed guess", () => {
+test("classFor: a class seen on a real window first, then StartupWMClass, else the id as an unconfirmed guess", () => {
   const C = new Function(src + "; return { classFor }")()
   assert.deepEqual(C.classFor({ id: "Example-Mail.desktop", startupWMClass: "Example-mail-client" }, { "Example-Mail": "other" }),
+    { class: "other", confirmed: true }, "a real window beats the file")
+  assert.deepEqual(C.classFor({ id: "Example-Mail.desktop", startupWMClass: "Example-mail-client" }, {}),
     { class: "Example-mail-client", confirmed: true })
   assert.deepEqual(C.classFor({ id: "org.example.Photos.desktop", startupWMClass: "" }, { "org.example.Photos": "photos" }),
     { class: "photos", confirmed: true })
