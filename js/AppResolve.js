@@ -30,7 +30,7 @@ function defaultStrategies() {
       match: "firefox|org.mozilla.firefox", use: "context",
       launch_context: "firefox -P {context} --new-window", context: "profile"
     },
-    place_only: { match: "obsidian|slack|spotify", use: "place_only", launch_context: "", context: "none" },
+    place_only: { match: "obsidian|spotify", use: "place_only", launch_context: "", context: "none" },
     command: { match: "", use: "command", launch_context: "", context: "none" }
   }
   // the code family: one entry each because each forks its own program name

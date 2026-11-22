@@ -81,7 +81,8 @@ test("context apps: unknown profile is skipped, no profile uses the plain entry"
 })
 
 test("place_only apps are never started", () => {
-  assert.deepEqual(r("Slack"), { strategy: "place_only", mode: "place_only", argv: null, contextKind: "none", reason: "" })
+  assert.deepEqual(r("Spotify"), { strategy: "place_only", mode: "place_only", argv: null, contextKind: "none", reason: "" })
+  assert.notEqual(r("Slack").strategy, "place_only", "Slack is started on restore (2026-11-22)")
 })
 
 test("a typed launch wins and is split with quotes, but not for terminals", () => {

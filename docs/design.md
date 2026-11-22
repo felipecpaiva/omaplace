@@ -425,7 +425,7 @@ Run states: `running`, `done`, `partial`, `interrupted` (Lua reloaded mid-run).
 | `terminal` | A terminal class; `folder` and foreground program captured (D12) | `uwsm-app -- xdg-terminal-exec --dir=<folder> <program argv>` |
 | `tui` | Class `org.omarchy.<cmd>` | `omarchy-launch-tui <cmd>` |
 | `context` | Multi-profile browsers and multi-folder IDEs (5.4a): google-chrome, chromium, brave, firefox, code and its forks | the entry's `launch_context` template, one context at a time per class |
-| `place_only` | Apps that restore their own windows and have one window identity (default list: obsidian, slack, spotify) | none |
+| `place_only` | Apps that restore their own windows and have one window identity (default list: obsidian, spotify; Slack left out 2026-11-22: it does not start itself at login here, so a restore starts it once from its desktop entry) | none |
 | `command` | A `launch` the user typed or edited | that argv through `uwsm-app --` |
 
 Users add `[strategy.<name>]` sections in config.toml (`match = "class pattern"`, `use = "<strategy>"`). Unknown classes with
