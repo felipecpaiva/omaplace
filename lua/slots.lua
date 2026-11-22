@@ -30,10 +30,11 @@ function M.with(o, plan)
   -- The workspace id of `slot` (1..10) on `monitor`. Returns nil and a reason when it cannot say.
   function S.workspace_id(monitor, slot)
     if math.type(slot) ~= "integer" or slot < 1 or slot > SLOTS then return nil, "slot must be 1 to 10" end
-    local list = has_rules and list_of(monitor)
-    if list then
+    if has_rules then
+      -- under the rules a monitor has only what they name; none named (hyprmoncfg's "max workspaces" ran out): none
+      local list = list_of(monitor) or {}
       if math.type(list[slot]) == "integer" then return list[slot] end
-      return nil, "that monitor has " .. #list .. " desktops"
+      return nil, #list == 0 and "the workspace rules give this monitor no desktops" or "that monitor has " .. #list .. " desktops"
     end
     if not per_monitor then return slot end
     local ok, id = pcall(ws.workspace_id, monitor, slot)

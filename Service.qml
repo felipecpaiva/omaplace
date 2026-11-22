@@ -1170,10 +1170,12 @@ Item {
   // ---- desktop numbering from Hyprland's workspace rules (D50): read, written for Lua, Lua told to reload; then `done`.
   // Every step is a process (never a blocking hyprctl); a failed step still calls `done`, with the numbering as it was.
   property var wsDone: []
+  property string wsStrategy: ""   // hyprmoncfg's active strategy (D51), read only
   property string wsText: ""
   function readWorkspaceRules(done) {
     if (done) root.wsDone = root.wsDone.concat([done])
     if (!wsRulesProc.running && !wsPlanEval.running) wsRulesProc.running = true
+    if (!hmcProc.running) hmcProc.running = true
   }
   function onWorkspaceRules(text) {
     let rules = Summary.parseJson(text)
@@ -1245,10 +1247,11 @@ Item {
   }
 
   function onDeskWorkspaces(text) {
-    let counts = {}
+    let counts = {}, where = {}
     let list = Summary.parseJson(text)
-    for (let w of (Array.isArray(list) ? list : [])) if (w && Number.isInteger(w.id) && w.id > 0) counts[w.id] = Number(w.windows) || 0
+    for (let w of (Array.isArray(list) ? list : [])) if (w && Number.isInteger(w.id) && w.id > 0) { counts[w.id] = Number(w.windows) || 0; where[w.id] = String(w.monitor || "") }
     root.deskNext.windows = counts
+    root.deskNext.wsMonitor = where
     let wsList = []
     for (let m of root.deskNext.monitors) {
       for (let s of (m && Array.isArray(m.slots) ? m.slots : [])) if (s && Number.isInteger(s.workspace) && s.workspace > 0) wsList.push(s.workspace)
@@ -1282,7 +1285,7 @@ Item {
   function desktopCards() {
     try {
       let doc = SceneStore.parse(root.readNow(scenesFile))
-      let m = Desktops.cards(root.desktopsLive, doc, { rules: root.config().rules, apps: root.appChoices(), entries: root.entries(), liveNames: root.liveMonitors })
+      let m = Desktops.cards(Object.assign({}, root.desktopsLive, { wsStrategy: root.wsStrategy }), doc, { rules: root.config().rules, apps: root.appChoices(), entries: root.entries(), liveNames: root.liveMonitors })
       m.reason = root.desktopsLive.reason || ""
       m.omagnet = Desktops.omagnetLayouts(root.desktopsLive.omagnet)
       m.loading = root.deskBusy && !root.desktopsLive.monitors
@@ -1355,6 +1358,12 @@ Item {
   Process { id: restoreAsk; onExited: (code) => { if (code === 0) restoreMarker.setText("ask\n"); else console.warn("omaplace: restore question not sent (" + code + ")") } }
   Process { id: wsRulesProc; command: ["hyprctl", "workspacerules", "-j"]; stdout: StdioCollector { onStreamFinished: root.onWorkspaceRules(text) }
     onExited: (code) => { if (code !== 0) root.wsFinished() } }
+  // hyprmoncfg's status and saved profiles, one JSON per line (D51): a fixed script, nothing of the user's in it
+  Process {
+    id: hmcProc
+    command: ["bash", "-c", "command -v hyprmoncfg >/dev/null || exit 0; hyprmoncfg status --json 2>/dev/null | tr -d '\\n'; echo; for f in \"$HOME\"/.config/hyprmoncfg/profiles/*.json; do [ -f \"$f\" ] && tr -d '\\n' < \"$f\" && echo; done"]
+    stdout: StdioCollector { onStreamFinished: { let s = Desktops.hyprmoncfgStrategy(text); if (s !== root.wsStrategy) { root.wsStrategy = s; root.revision++ } } }
+  }
   Process { id: wsPlanEval; command: ["hyprctl", "eval", "return _G.omaplace and _G.omaplace.reload_ws_plan()"]
     onExited: { root.wsFinished(); root.revision++ } }
   FileView { id: wsPlanFile; path: root.runtimeDir + "/workspace-plan.lua"; blockWrites: true; atomicWrites: true; printErrors: false }

@@ -44,7 +44,14 @@ eq(Slots.with(off).mode(), "global", "Omarchy numbering turned off and no rules:
 eq(Slots.with(off).workspace_id({ name = "DP-1" }, 2), 2, "not Omarchy's 12")
 eq(Slots.with(fake.o, { monitors = {} }).mode(), "per_monitor", "no rules: Omarchy's model")
 local mixed = Slots.with(fake.o, { monitors = { ["DP-1"] = { 7, 8 } } })
-eq(mixed.workspace_id({ name = "DP-2" }, 3), 13, "a monitor without rules keeps Omarchy's model")
+eq(mixed.workspace_id({ name = "DP-2" }, 3), nil, "under the rules a monitor they do not name has no desktops")
+-- hyprmoncfg's other strategies arrive as rules too: interleaved, and sequential wrapping around the monitors
+local inter = Slots.with(nil, { monitors = { ["A"] = { 1, 3, 5 }, ["B"] = { 2, 4 } } })
+eq(inter.workspace_id({ name = "A" }, 2), 3, "interleaved: A's second desktop is 3")
+eq(inter.slot_of(4), 2, "interleaved: 4 is B's second")
+local wrap = Slots.with(nil, { monitors = { ["A"] = { 1, 2, 7, 8 }, ["B"] = { 3, 4, 9 }, ["C"] = { 5, 6 } } })
+eq(wrap.workspace_id({ name = "A" }, 3), 7, "sequential groups of 2 wrap back to A at 7")
+eq(wrap.slot_of(9), 3, "9 is B's third")
 
 for _, bad in ipairs({ 0, 11, 1.5, "3" }) do
   local id, err = pm.workspace_id({ name = "eDP-1" }, bad)

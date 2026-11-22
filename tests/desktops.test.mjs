@@ -522,3 +522,22 @@ test("desktops carry the number people use (D50)", () => {
   assert.equal(cs.length, 2, "only the desktops its rules name")
   assert.equal(D.cards(live, doc({}), {}).groups[0].cards[1].number, 2, "Omarchy's model: the slot")
 })
+
+test("hyprmoncfg: per display numbers, the active strategy, monitors the rules leave out (D51)", () => {
+  const blocks = { ...live, numbering: "rules", wsStrategy: "per_display", monitors: [{ ...live.monitors[0], slots: [{ slot: 1, workspace: 11 }, { slot: 2, workspace: 12 }] }] }
+  assert.deepEqual(D.cards(blocks, doc({}), {}).groups[0].cards.map((c) => c.number), [1, 2], "per display: 1, 2 like the bar")
+  const none = { ...live, numbering: "rules", wsMonitor: { 9: "DP-1", 12: "DP-1", 3: "eDP-1" }, wsClasses: { 9: ["org.example.Editor"] },
+    monitors: [{ ...live.monitors[0], slots: [] }] }
+  const g = D.cards(none, doc({}), {}).groups[0]
+  assert.equal(g.noDesktops, true)
+  assert.deepEqual(g.cards.map((c) => c.number), [9, 12], "the workspaces on it, by id")
+  assert.equal(g.cards[0].loose, true)
+  assert.equal(g.cards[0].live.length, 1)
+  const st = JSON.stringify({ active_profile: { name: "Two" } })
+  const p1 = JSON.stringify({ name: "One", workspaces: { strategy: "interleave" } })
+  const p2 = JSON.stringify({ name: "Two", workspaces: { enabled: true, strategy: "per_display" } })
+  assert.equal(D.hyprmoncfgStrategy([st, p1, p2].join("\n")), "per_display")
+  assert.equal(D.hyprmoncfgStrategy([st, JSON.stringify({ name: "Two", workspaces: { enabled: false, strategy: "sequential" } })].join("\n")), "off")
+  assert.equal(D.hyprmoncfgStrategy(""), "", "no hyprmoncfg")
+  assert.equal(D.hyprmoncfgStrategy("not json"), "")
+})

@@ -30,7 +30,7 @@ ColumnLayout {
     readonly property var live: card.live || []
     readonly property bool hasLive: live.length > 0
     // the layout tools: open when asked, or by themselves on an empty desktop with no plan (nothing to remember there)
-    readonly property bool tools: moreKey === card.key || drawing || (!card.plan && !hasLive)
+    readonly property bool tools: !card.loose && (moreKey === card.key || drawing || (!card.plan && !hasLive))
 
     function edit(op, arg) { app.act("editPlan", [card.identity, card.slot, card.focused === true, op, arg, card.mode || ""]) }
     function removePlan() {
@@ -121,7 +121,7 @@ ColumnLayout {
         spacing: 8
         ActionButton {
             objectName: "planFromDesktop"
-            visible: !editor.card.plan && editor.hasLive
+            visible: !editor.card.plan && editor.hasLive && !editor.card.loose
             primary: true
             text: qsTr("Remember this desktop")
             enabled: editor.writable && (editor.card.workspace || 0) > 0
@@ -144,7 +144,12 @@ ColumnLayout {
         }
     }
     Hint {
-        visible: !editor.card.plan && editor.hasLive
+        objectName: "looseNote"
+        visible: editor.card.loose === true
+        text: qsTr("This workspace is not one of this monitor's desktops in your workspace rules (hyprmoncfg), so omaplace cannot remember it. Give the monitor desktops in hyprmoncfg (Workspaces), or move the windows to one of yours.")
+    }
+    Hint {
+        visible: !editor.card.plan && editor.hasLive && !editor.card.loose
         text: editor.card.mode === "floating" ? qsTr("Keeps every window where it is, and its size. After a reboot, or with Put windows back, they come back like this.")
             : qsTr("Keeps the apps in their order, left to right. After a reboot, or with Put windows back, they come back like this.")
     }
@@ -152,7 +157,7 @@ ColumnLayout {
     // Change layout: everything else, out of the way until asked.
     ActionButton {
         objectName: "changeLayout"
-        visible: editor.card.plan === true || editor.hasLive
+        visible: (editor.card.plan === true || editor.hasLive) && !editor.card.loose
         text: editor.tools ? qsTr("Hide the options") : qsTr("More options...")
         onClicked: editor.moreKey = editor.tools ? "" : editor.card.key
     }

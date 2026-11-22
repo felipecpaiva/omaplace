@@ -267,7 +267,8 @@ function cardOf(mon, slot, ws, found, live, ctx) {
     error: "", badge: (mode ? modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback,
     options: layoutOptions(mode, ctx.omagnet, (ctx.omDesks || {})[ws] || null),
     // the number a person uses (D50): the workspace id under Hyprland's rules (their keys go to it), else the slot
-    number: live.numbering === "rules" && ws > 0 ? ws : slot,
+    // per display (hyprmoncfg) numbers each display 1, 2, 3 like the bar, over blocks of global ids (D51)
+    number: live.numbering === "rules" && ws > 0 && live.wsStrategy !== "per_display" ? ws : slot,
     live: liveApps((live.wsClasses || {})[ws], ctx.apps, mon.area)
   }
   card.liveRows = liveRows(card.live)
@@ -319,7 +320,13 @@ function cards(live, doc, ctx) {
   const groups = mons.map((m) => {
     const list = []
     // under Hyprland's rules a monitor has only the desktops its rules name (D50); else always 1 to 10
-    const last = l.numbering === "rules" && (m.slots || []).length > 0 ? m.slots.length : 10
+    const last = l.numbering === "rules" ? (m.slots || []).length : 10
+    // none named (hyprmoncfg's max workspaces ran out): the workspaces that happen to be on it, as they are (D51)
+    if (l.numbering === "rules" && last === 0) {
+      const loose = Object.keys(l.wsMonitor || {}).map(Number).filter((id) => id > 0 && l.wsMonitor[id] === m.name).sort((a, b) => a - b)
+      const list = loose.map((id) => Object.assign(cardOf(m, 0, id, null, l, c), { key: m.identity + "\nws" + id, number: id, loose: true, editable: false }))
+      return { identity: m.identity, name: m.name || m.identity, label: monitorLabel(m.name, m.identity), connected: true, noDesktops: true, cards: list }
+    }
     for (let slot = 1; slot <= last; slot++) {
       const s = (m.slots || []).find((x) => x && x.slot === slot)
       const found = findPlan(scenes, m.identity, slot, m.focused)
@@ -488,6 +495,26 @@ function workspacePlan(rules) {
   }
   for (const k of Object.keys(monitors)) monitors[k] = Array.from(new Set(monitors[k])).sort((a, b) => a - b).slice(0, 10)
   return { monitors }
+}
+
+// hyprmoncfg's active workspace strategy (D51), from `hyprmoncfg status --json` (first line) and its saved profiles (one JSON
+// per line after it): "sequential", "interleave", "manual", "per_display", "off", or "" when hyprmoncfg is not there.
+// Read only; hyprmoncfg's own files are never written.
+function hyprmoncfgStrategy(text) {
+  const lines = String(text || "").split("\n").filter((l) => l.trim() !== "")
+  if (lines.length === 0) return ""
+  let status = null
+  try { status = JSON.parse(lines[0]) } catch (e) { return "" }
+  const name = status && status.active_profile && status.active_profile.name
+  if (!name) return ""
+  for (const l of lines.slice(1)) {
+    let p = null
+    try { p = JSON.parse(l) } catch (e) { continue }
+    if (!p || p.name !== name) continue
+    const w = p.workspaces || {}
+    return w.enabled === false ? "off" : String(w.strategy || "")
+  }
+  return ""
 }
 
 // One line about what is open on a desktop now, for the editor: "Reddit and Google Chrome, both full screen".

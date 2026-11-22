@@ -98,6 +98,11 @@ Item {
                             ToolTip.visible: tip.hovered; ToolTip.text: mon.modelData.name
                             HoverHandler { id: tip }
                         }
+                        Hint {
+                            visible: mon.modelData.noDesktops === true
+                            text: mon.modelData.cards.length > 0 ? qsTr("Your workspace rules (hyprmoncfg) give this monitor no desktops of its own. These are the workspaces on it now.")
+                                : qsTr("Your workspace rules (hyprmoncfg) give this monitor no desktops of its own.")
+                        }
                         GridLayout {
                             Layout.fillWidth: true
                             columns: mapScroll.availableWidth >= 300 ? 5 : 3
