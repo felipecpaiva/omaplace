@@ -19,7 +19,7 @@ function M.new()
   local fake = {
     handlers = {}, -- event -> list of fn
     rules = {}, rule_order = {}, -- window rules by name, in first-seen order
-    monitors = {}, windows = {},
+    monitors = {}, windows = {}, workspaces = {}, -- workspaces: id -> { id, monitor = { name } }
     exec_log = {}, dsp_calls = {}, dispatched = {},
     now = 0, timers = {}, next_timer = 0,
   }
@@ -54,6 +54,7 @@ function M.new()
 
   function hl.get_monitors() return fake.monitors end
   function hl.get_windows() return fake.windows end
+  function hl.get_workspace(id) return fake.workspaces[id] end
   function hl.exec_cmd(cmd) fake.exec_log[#fake.exec_log + 1] = cmd end
   function hl.dispatch(call) fake.dispatched[#fake.dispatched + 1] = call end
   hl.dsp = dsp_proxy(fake.dsp_calls, "")

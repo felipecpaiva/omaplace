@@ -36,6 +36,10 @@ eq(specs[1].name, "omaplace-rule-editor", "name")
 eq(specs[1].match.initial_class, "org.example.Editor", "match")
 eq(specs[1].workspace, "13 silent", "second block slot 3, silent")
 eq(specs[1].enabled, true, "enabled")
+local _, _, homes = build({ editor = rule({ app = "org.example.Editor", monitor = "Example Corp EX27", slot = 3 }),
+  off = rule({ enabled = false, slot = 5 }) })
+eq(homes[13], "DP-2", "home of the rule's desktop")
+eq(homes[5], nil, "a disabled rule has no home")
 
 -- follow = true switches to the workspace
 specs = build({ a = rule({ monitor = "Example Corp EX27", slot = 3, follow = true }) })

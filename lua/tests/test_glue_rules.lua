@@ -49,6 +49,27 @@ eq(st.rules[1].name, "omaplace-rule-editor", "status name")
 eq(st.rules[1].enabled, true, "status flag")
 eq(st.rules[1].match, nil, "status carries no app")
 
+-- a rule's desktop made on the wrong monitor (Hyprland makes it on the focused one) is moved to its own monitor
+local function moves()
+  local out = {}
+  for _, c in ipairs(fake.dispatched) do
+    if c.name == "workspace.move" then out[#out + 1] = c.args end
+  end
+  return out
+end
+fake.workspaces[13] = { id = 13, monitor = { name = "eDP-1" } }
+fake.emit("window.open", { address = "0xa", initial_class = "org.example.Editor", workspace = { id = 13 } })
+eq(#moves(), 1, "desktop 13 sent home once")
+eq(moves()[1].workspace, "13", "desktop 13 moved")
+eq(moves()[1].monitor, "DP-2", "to the rule's monitor")
+fake.workspaces[13].monitor.name = "DP-2"
+fake.emit("window.open", { address = "0xb", initial_class = "org.example.Editor", workspace = { id = 13 } })
+eq(#moves(), 1, "already on its monitor: no move")
+fake.workspaces[4] = { id = 4, monitor = { name = "DP-2" } }
+fake.emit("window.open", { address = "0xc", initial_class = "other", workspace = { id = 4 } })
+eq(#moves(), 1, "a desktop no rule names is left alone")
+fake.workspaces = {}
+
 -- a second load (config reload) does not register handlers twice
 dofile(dir .. "/../omaplace.lua")
 eq(count("monitor.added"), 1, "no double register: added")

@@ -28,13 +28,27 @@ end
 
 -- Send `window` to workspace `id`. silent = true keeps the view where it is; false follows the window there
 -- (and focuses the workspace when the window is already on it). Returns true when the window was moved.
-function M.to_workspace(window, id, silent)
+-- monitor_name: the monitor the workspace belongs to (M.home), or nil to leave it where Hyprland makes it.
+function M.to_workspace(window, id, silent, monitor_name)
   local here = window.workspace and window.workspace.id
   if here == id then
+    M.home(id, monitor_name)
     if not silent then hl.dispatch(hl.dsp.focus({ workspace = tostring(id) })) end
     return false
   end
   hl.dispatch(hl.dsp.window.move({ workspace = tostring(id), follow = not silent, window = sel(window) }))
+  M.home(id, monitor_name)
+  return true
+end
+
+-- Hyprland makes a missing workspace on the focused monitor, and Omarchy sends a workspace to its own monitor only
+-- when a monitor comes or goes (checked live 2026-11-22: a rule for slot 3 of a second monitor made desktop 13 on the
+-- laptop panel). So once a window is on it, a desktop on the wrong monitor is moved to its own. True when moved.
+function M.home(id, monitor_name)
+  if not (id and monitor_name and hl.get_workspace) then return false end
+  local ok, ws = pcall(hl.get_workspace, id)
+  if not ok or not ws or not ws.monitor or ws.monitor.name == monitor_name then return false end
+  hl.dispatch(hl.dsp.workspace.move({ workspace = tostring(id), monitor = monitor_name }))
   return true
 end
 

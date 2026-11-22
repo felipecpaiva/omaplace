@@ -106,8 +106,9 @@ function M.rebuild()
   local ok, live = pcall(hl.get_monitors)
   if not ok or type(live) ~= "table" then return nil, "no monitors" end
   local slots = Slots.with(rawget(_G, "o"))
-  local specs, vanished = Rules.build(
+  local specs, vanished, homes = Rules.build(
     M.rules, live, Monitors.resolve, slots.workspace_id, focused_of(live), M.applied, M.settings.missing_monitor_rule)
+  M.rule_homes = homes
   M.enabled = {}
   M.applied = {}
   for _, spec in ipairs(specs) do
@@ -459,7 +460,7 @@ local function apply(run, s, w, fresh)
   end
   tag(w, "+" .. M.SLOT_PREFIX .. run.id .. "/" .. s.n)
   if s.context ~= "" then tag(w, "+" .. Capture.CTX_PREFIX .. Capture.ctx_hex(s.context)) end
-  local moved = Place.to_workspace(w, info.target.ws, not info.target.follow)
+  local moved = Place.to_workspace(w, info.target.ws, not info.target.follow, info.target.mon and info.target.mon.name)
   if info.target.follow then run.focus_ws = info.target.ws end
   if not info.rect then return end
   local address = w.address
@@ -756,7 +757,7 @@ local function place_from_memory(w)
     -- set before the move (its event can come during the dispatch): a long settle_ms would let the debounce read
     -- the window before the put and overwrite the rect
     if ws.id ~= target and #M.memory_subs > 0 then M.memory_own[w.address] = true end
-    Place.to_workspace(w, target, true)
+    Place.to_workspace(w, target, true, mon.name)
   end
   tag(w, "+" .. M.MEMORY_TAG)
   if not (entry.floating and entry.rect) then return end
@@ -938,6 +939,7 @@ function M.on_window_open(w)
   if tw ~= "table" and tw ~= "userdata" then return end
   if M.settings.app_memory == "auto" and w.address and w.workspace then M.last_ws[w.address] = w.workspace.id end
   track(w)
+  if w.workspace then Place.home(w.workspace.id, (M.rule_homes or {})[w.workspace.id]) end -- a rule's desktop
   if not (run and run.live) then
     if M.place_from_plan(w) then return end -- a planned app is the plan's, never memory's (D20)
     return place_from_memory(w)
@@ -1159,7 +1161,7 @@ function M.place_from_plan(w)
     -- marked before the dispatch: its event can come during it
     M.plan_own[address] = true
     if #M.memory_subs > 0 then M.memory_own[address] = true end
-    Place.to_workspace(w, target, true)
+    Place.to_workspace(w, target, true, mon and mon.name)
   end
   if pw.floating then hl.dispatch(hl.dsp.window.float({ action = "on", window = Place.sel(w) })) end
   local function maximize(x)

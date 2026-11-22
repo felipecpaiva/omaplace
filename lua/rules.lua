@@ -26,7 +26,7 @@ local function spec_for(name, rule, live, resolve, ws_id, focused, policy)
   if not id then return spec end
   spec.workspace = workspace_text(id, rule.follow)
   spec.enabled = true
-  return spec
+  return spec, id, monitor.name
 end
 
 -- build(cfg_rules, live_monitors, resolve, ws_id, focused, previous, policy)
@@ -35,15 +35,17 @@ end
 --   focused    the focused monitor now (used when a rule has no monitor), or nil
 --   previous   optional list of spec names from the last build
 --   policy     missing_monitor_rule, "skip" (default) or "focused"
--- Returns specs sorted by name, and the names in `previous` that are not in `specs` any more.
+-- Returns specs sorted by name, the names in `previous` that are not in `specs` any more, and homes: workspace id ->
+-- monitor name of every enabled rule (the glue moves a rule's desktop to its monitor, Place.home).
 function R.build(cfg_rules, live, resolve, ws_id, focused, previous, policy)
   local names = {}
   for name in pairs(cfg_rules or {}) do names[#names + 1] = name end
   table.sort(names)
 
-  local specs, current = {}, {}
+  local specs, current, homes = {}, {}, {}
   for _, name in ipairs(names) do
-    local spec = spec_for(name, cfg_rules[name], live, resolve, ws_id, focused, policy or "skip")
+    local spec, id, mon_name = spec_for(name, cfg_rules[name], live, resolve, ws_id, focused, policy or "skip")
+    if id then homes[id] = mon_name end
     specs[#specs + 1] = spec
     current[spec.name] = true
   end
@@ -53,7 +55,7 @@ function R.build(cfg_rules, live, resolve, ws_id, focused, previous, policy)
     if not current[old] then vanished[#vanished + 1] = old end
   end
   table.sort(vanished)
-  return specs, vanished
+  return specs, vanished, homes
 end
 
 return R
