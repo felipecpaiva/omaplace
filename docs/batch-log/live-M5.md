@@ -83,3 +83,16 @@ Review follow-ups (same day):
 | Cleanup | same as the first run: hyprland.lua byte-identical, `_G.omaplace` gone, plugin disabled, test windows closed, desktop 9 tiled again, test files trashed, runtime folder removed, view on desktop 2 |
 
 Still open: a real mouse click on the notification button (S13), a second monitor (S7), open at login after a real login.
+
+# Live check after a real reboot, 2026-11-22
+
+Set up before the reboot: `restore_at_login = "ask"`, test plan `reboot-test` (desktop 8, `columns:2`, Omacalc in zone 1,
+open at login).
+
+| Check | Result |
+|---|---|
+| Open at login after a real login (M5 check 6) | **fail, then fixed**: nothing opened. The shell log shows Omarchy rebuilding its plugins 0.5 s after start ("destroyed during incubation"); omaplace had written its login marker first, so the new service copy did nothing. Fix: the login marker is written when the login plans are done, the restore marker when the restore ran or its question was sent. Replayed with a shell restart inside the login window: Omacalc opened once on desktop 8, left half |
+| Restore at login, `ask` (D26) | question sent after the fix (marker `ask` written only after the send returned) |
+| Restore of the session from before the reboot (M3 check 3) | pass: `omaplace restore` gave 5 placed (4 started), 1 not reopened, 0 failed; Chrome and two web apps back on their desktops |
+
+Still to confirm with one more real reboot: the fixed login path end to end.
