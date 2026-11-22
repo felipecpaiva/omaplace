@@ -97,6 +97,20 @@ function profilesFromLocalState(text) {
   return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
+// For windows whose profile was never seen (a browser started from the launcher has no --profile-directory): the
+// profiles the browser itself lists as open at its last exit (`profile.last_active_profiles`), one per window in that
+// order, then the last used one. Without this the browser shows its profile picker (live finding 2026-11-22). Read
+// right after login, Local State still describes the session before the reboot. Only profile ids leave this function.
+function profileQueue(text) {
+  let doc = null
+  try { doc = JSON.parse(String(text)) } catch (e) { doc = null }
+  const p = doc && doc.profile && typeof doc.profile === "object" ? doc.profile : {}
+  const ok = (id) => typeof id === "string" && /^[A-Za-z0-9 _.-]{1,64}$/.test(id) && id.charAt(0) !== "-"
+  const open = Array.isArray(p.last_active_profiles) ? p.last_active_profiles.filter(ok) : []
+  return { open: open, last: ok(p.last_used) ? p.last_used : open[0] || "" }
+}
+function nextProfile(q) { return q.open.length > 0 ? q.open.shift() : q.last }
+
 // Choices for the profile picker of a window with an unknown profile.
 function profileOptions(profiles) {
   return [{ value: "", label: "Pick a profile" }].concat((profiles || []).map((p) => ({ value: p.id, label: p.name + " (" + p.id + ")" })))

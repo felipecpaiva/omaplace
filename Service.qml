@@ -274,10 +274,25 @@ Item {
   }
 
   function launchesFor(wins, cfg) {
-    let table = root.strategies(cfg), list = root.entries()
+    let table = root.strategies(cfg), list = root.entries(), queues = {}
     return wins.map(function (w) {
-      return AppResolve.resolve(w.class, list, table, { context: w.context, folder: w.folder, launch: w.launch, home: root.home })
+      let ctx = w.context || root.guessProfile(w.class, table, queues)
+      return AppResolve.resolve(w.class, list, table, { context: ctx, folder: w.folder, launch: w.launch, home: root.home })
     })
+  }
+
+  // A profile for a browser window saved without one (Settings.profileQueue); "" for any other app. queues: one per
+  // browser folder for this launch list, so two windows get the two profiles that were open.
+  function guessProfile(cls, table, queues) {
+    let r = AppResolve.resolve(cls, [], table, { context: "?" })
+    let dir = r.contextKind === "profile" ? Settings.profileDir(r.strategy) : ""
+    if (dir === "") return ""
+    if (!queues[dir]) {
+      localStateFile.path = root.home + "/.config/" + dir + "/Local State"
+      queues[dir] = Settings.profileQueue(root.readNow(localStateFile))
+      localStateFile.path = ""
+    }
+    return Settings.nextProfile(queues[dir])
   }
 
   function step() {

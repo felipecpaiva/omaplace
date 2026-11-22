@@ -8,7 +8,7 @@ const load = (file, names) => {
   const src = readFileSync(new URL("../js/" + file, import.meta.url), "utf8").replace(".pragma library", "")
   return new Function(src + "; return { " + names.join(", ") + " }")()
 }
-const S = load("Settings.js", ["settingChange", "timingRows", "markEdited", "isEdited", "windowEdit", "profileDir", "profileOptions", "profilesFromLocalState",
+const S = load("Settings.js", ["settingChange", "timingRows", "markEdited", "isEdited", "windowEdit", "profileDir", "profileOptions", "profilesFromLocalState", "profileQueue", "nextProfile",
   "monitorNames", "monitorChoices", "positionText", "sessionRows", "answerText", "KEEPABLE", "TIMING", "PANEL_KEYS"])
 const C = load("ConfigIO.js", ["parse", "SETTING_SPECS"])
 const Store = loadLib("SceneStore.js")
@@ -179,4 +179,13 @@ test("answerText words every answer", () => {
   assert.equal(S.answerText('{"ok":false,"code":"busy"}').ok, false)
   assert.match(S.answerText('{"ok":false,"code":"failed","reason":"cannot write"}').text, /cannot write$/)
   assert.equal(S.answerText("").ok, false)
+})
+
+test("profileQueue: the profiles open at the browser's last exit, one per window, then the last used", () => {
+  const q = S.profileQueue(JSON.stringify({ profile: { last_active_profiles: ["Default", "Profile 1", "-x"], last_used: "Profile 1", info_cache: { Default: { name: "Me" } } } }))
+  assert.deepEqual([S.nextProfile(q), S.nextProfile(q), S.nextProfile(q)], ["Default", "Profile 1", "Profile 1"])
+  const lone = S.profileQueue(JSON.stringify({ profile: { last_used: "Default" } }))
+  assert.equal(S.nextProfile(lone), "Default")
+  assert.equal(S.nextProfile(S.profileQueue("not json")), "", "nothing known: the plain launch stays")
+  assert.equal(S.nextProfile(S.profileQueue(JSON.stringify({ profile: { last_used: "--evil" } }))), "", "a dash id is refused")
 })
