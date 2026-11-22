@@ -3,6 +3,8 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 import "../js/Desktops.js" as Desktops
+import "../js/Zones.js" as Zones
+import "../js/LayoutOps.js" as LayoutOps
 
 // The selected desktop, editable: its layout badge and picker (custom zones as text), a preview of where each app goes,
 // one row per zone with an app picker, Open all, Open at login, and Remove plan. Every change is one Desktops.edit
@@ -17,6 +19,8 @@ ColumnLayout {
   readonly property bool writable: editor.panel.info.scenesWritable && editor.model.editable !== false
   readonly property bool custom: editor.model.choice === "custom" || (!!editor.view && editor.view.customKey === editor.model.key)
   readonly property string draft: editor.view ? editor.view.drafts[editor.model.key] || "" : ""
+  readonly property bool zoned: !!Zones.ofLayout(editor.model.layout || "").zones // a zone layout: it can be drawn
+  readonly property bool drawing: !!editor.view && editor.view.drawKey === editor.model.key
   readonly property var layoutOptions: [{ value: "", label: "No plan" }].concat(Desktops.LAYOUT_CHOICES, [{ value: "custom", label: "Custom zones" }])
 
   spacing: Style.spacing.sm
@@ -88,11 +92,47 @@ ColumnLayout {
         editor.panel.editPlan(editor.model, "layout", text)
       }
     }
+    Button {
+      visible: editor.writable && !editor.drawing && (editor.custom || editor.zoned)
+      Layout.alignment: Qt.AlignBottom
+      text: "Draw zones"
+      foreground: editor.panel.foreground
+      accent: editor.panel.accent
+      fontFamily: editor.panel.fontFamily
+      onClicked: {
+        let z = Zones.ofLayout(editor.model.layout || "")
+        editor.view.drawText = z.zones ? LayoutOps.toText(z.zones) : "0 0 0.5 1; 0.5 0 0.5 1"
+        editor.view.drawKey = editor.model.key
+      }
+    }
     Binding { target: zonesField; property: "text"; value: editor.draft !== "" ? editor.draft : editor.model.choice === "custom" ? editor.model.layout : ""; restoreMode: Binding.RestoreNone }
   }
   Note {
     panel: editor.panel
-    text: "A zone layout or Free floating switches this desktop to floating when you press Open all. Custom zones are typed as x y w h fractions, separated by ; (there is no drawing editor yet)."
+    text: "A zone layout or Free floating switches this desktop to floating when you press Open all. Draw zones edits the zones with the mouse; custom zones can also be typed as x y w h fractions, separated by ;."
+  }
+  // The drawing lives on the page (drawText), so a rebuild of this card while drawing keeps it.
+  Loader {
+    id: drawLoader
+    active: editor.drawing
+    visible: active
+    Layout.fillWidth: true
+    Layout.preferredHeight: item ? item.implicitHeight : 0
+    sourceComponent: ZoneEditor {
+      width: drawLoader.width
+      zonesText: editor.view.drawText
+      foreground: editor.panel.foreground
+      accent: editor.panel.accent
+      fontFamily: editor.panel.fontFamily
+      onEdited: function (text) { editor.view.drawText = text }
+      onCanceled: editor.view.drawKey = ""
+      onSaved: function (text) {
+        editor.view.drawKey = ""
+        editor.view.customKey = editor.model.key
+        editor.view.focusTag = editor.model.key + "\nlayout"
+        editor.panel.editPlan(editor.model, "layout", text)
+      }
+    }
   }
   Note { panel: editor.panel; visible: editor.model.modeNote !== ""; color: editor.panel.accent; text: editor.model.modeNote }
 

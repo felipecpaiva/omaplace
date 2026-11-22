@@ -22,6 +22,8 @@ Flickable {
   // The control that made the last edit ("<card key>\nlayout", "...\nzones", "<row key>\napp"). Every edit rebuilds
   // the cards, so the new copy of that control takes the keyboard focus back (takeFocus) instead of losing it.
   property string focusTag: ""
+  property string drawKey: ""      // the card whose zones are being drawn (ZoneEditor), and the drawing so far
+  property string drawText: ""
   readonly property string current: page.selected !== "" ? page.selected
     : page.desks.groups.length > 0 ? page.desks.groups[0].cards[0].key : ""
 
@@ -48,6 +50,7 @@ Flickable {
 
   onVisibleChanged: {
     page.focusTag = ""
+    page.drawKey = ""
     if (visible && page.panel.service) page.apps = page.panel.service.appChoices()
     page.refresh()
   }
