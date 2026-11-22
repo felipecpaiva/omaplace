@@ -1,6 +1,6 @@
 # Live check M1 (placement rules), 2026-11-21
 
-Machine: laptop, one monitor, Hyprland 0.56.2, Omarchy 4.5. Felipe was away and asked Claude to run it; no synthetic
+Machine: laptop, one monitor, Hyprland 0.56.2, Omarchy 4.5. Felipe was away and the run was automated; no synthetic
 input was used. Apps were started with `hl.exec_cmd("uwsm-app -- omacalc.desktop")` and closed with
 `hl.dsp.window.close`, both through `hyprctl`. Results were read with `hyprctl clients -j` and `hyprctl activeworkspace -j`.
 

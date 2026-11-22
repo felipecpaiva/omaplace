@@ -82,7 +82,7 @@ Done when:
 
 Work packages: WP11, WP12 (12a Lua, 12b service), WP13. D22 decided (option 1; upstream PR omacom/omarchy#19671, fallback toggle until it ships).
 
-Status 2026-11-21: WP11 to WP13 built, reviewed and merged; 46 suites pass. Live 2026-11-21 (`batch-log/live-M5.md`): checks 1, 2, 3 pass; 4 sends the notification but the update was `not_possible` in both tried cases; 5 partial (full plan not maximized by Open all); 6 not tried. S11 pass, S12 fallback pass, S13 click not done. Retest after the D24 fixes: 4 and 5 pass (swap, new plan, full maximized). Open: 6 (needs a real login), S13 real click, second monitor. Turned on for daily use on the laptop 2026-11-21.
+Status 2026-11-21: WP11 to WP13 built, reviewed and merged; 46 suites pass. Live 2026-11-21 (`batch-log/live-M5.md`): checks 1, 2, 3 pass; 4 sends the notification but the update was `not_possible` in both tried cases; 5 partial (full plan not maximized by Open all); 6 not tried. S11 pass, S12 fallback pass, S13 click not done. Retest after the D24 fixes: 4 and 5 pass (swap, new plan, full maximized). S13 real click passed while recording the demo GIFs (2026-11-22). Open: 6 (needs a real login), second monitor. Turned on for daily use on the laptop 2026-11-21.
 
 ## Not goals (for now)
 
@@ -114,5 +114,5 @@ Target: by the end of today, `omaplace save work` and `omaplace open work` work 
 | 5 | WP5 service and CLI | CLI tests with a fake shell | live spikes S1, S5, then save and open one real scene |
 
 Every package: built by a builder agent in its own git worktree, checked by a separate reviewer agent against
-`engineering-standards.md`, then merged by Claude. Not today: WP6 to WP10, M1 checks 2 and 3 (need a second monitor).
+`engineering-standards.md`, then merged. Not today: WP6 to WP10, M1 checks 2 and 3 (need a second monitor).
 Missing linters today: shellcheck, luacheck, stylua (logged as SKIP until installed).

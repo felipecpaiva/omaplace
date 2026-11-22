@@ -1,6 +1,6 @@
 # 09 Competitor review: features and Omarchy standards
 
-Reviewed 2026-11-21. Read only: shallow clones (`git clone --depth 1`) and `gh pr diff`, nothing run, sourced, built or installed. Clones are in `/tmp/claude-1000/-home-felipe-Work/6e02d931-9f68-4efc-ab28-f885fbee62d2/scratchpad/review/` (`gio trash` refuses `/tmp`, so they stay there).
+Reviewed 2026-11-21. Read only: shallow clones (`git clone --depth 1`) and `gh pr diff`, nothing run, sourced, built or installed. Clones were kept in a temporary folder.
 
 Tags: [source] is `file:line` in the project's default branch HEAD (PR cites are line numbers inside the `gh pr diff` output). [docs] is an Omarchy or marketplace document. [meta] is GitHub or registry metadata from `gh` or `registry.json`.
 
@@ -24,7 +24,7 @@ Plugin rules come from the shell manual, the `omarchy-make-plugin` skill and the
 | S10 | Ship no default keybindings; bindings follow the hotkey planes and never move existing ones | [docs] AGENTS.md:136 |
 | S11 | Tests only where they catch a real regression (parsing, routing, edge cases), in proportion | [docs] AGENTS.md:163-173 |
 | S12 | Marketplace "Snapshot verified": listed commit has a passed baseline or a maintainer review, and HEAD still equals that commit; otherwise "Update unverified" or "Unverified" | [docs] VERIFICATION.md:9-22 |
-| H1 | House rule, not in Omarchy docs: no synchronous `hyprctl` from Hyprland Lua or QML | our rule (workspace CLAUDE.md omahop row) |
+| H1 | House rule, not in Omarchy docs: no synchronous `hyprctl` from Hyprland Lua or QML | our rule (house rules of the omahop project) |
 | C1 | Core only: `#!/bin/bash`, `[[ ]]`, two spaces; commands start `omarchy-`; tests in `test/shell.d`; menu rows without aliases | [docs] AGENTS.md:28-35, :39, :131, :175 |
 
 Useful seam seen in passing: `ioiohori/omarchy-app-placement` writes its rules to `~/.local/state/omarchy/toggles/hypr/`, which Omarchy re-requires on reload, so it never edits `hyprland.lua` [source] AppPlacement.qml:23-24.

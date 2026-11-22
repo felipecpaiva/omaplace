@@ -19,13 +19,12 @@ row is done until its tests pass and the real desktop shows it. Every row meets
 | Second monitor | A rule still works after its monitor moves to another port; with the rule's monitor unplugged the app opens normally (M1 checks 2 and 3, spike S7). Scenes and restore with a missing monitor land on the focused one | goals M1, `checklist/WP7s.md` |
 | Open at login | A ticked plan opens once after a real login, not again on a shell restart or config reload (M5 check 6) | goals M5, `checklist/WP12b.md` |
 | Restore after a real login | `omaplace restore` after a real logout or reboot (M3 check 3 passed only with a hand-made previous session) | goals M3 |
-| Notification button click | Pressing "Update plan" with a real mouse click runs the command (S13) | `batch-log/live-M5.md` |
 | Menu row click | Clicking a real Omarchy menu row (S6) | goals M4 |
 | Set any desktop's mode | Use `omarchy-hyprland-workspace-layout-set` once [omacom/omarchy#19671](https://github.com/omacom/omarchy/pull/19671) ships, and drop the toggle fallback (D22). The code already uses it when present | design 14.4 |
 | Settings window hand checks | The pages beyond Scenes and Desktops were checked by screenshot, not by clicks | `validation-checklist.md` |
 | `app_memory = "auto"` in the window | Works from `config.toml` and passed live; the General page still shows it greyed | design D17 |
 | Keyboard focus on the Desktops page | After each edit the page is rebuilt and keyboard focus is lost | `checklist/WP13.md` |
-| Release media | `branding/demo/desktops.gif`, `scenes.gif`, `restore.gif`, recorded on a real screen with made-up names | `releases/README.md` |
+| Release media | `restore.gif` (desktops, snap, update and scenes GIFs are done) | `releases/README.md` |
 
 ## Later ideas (not promised)
 
