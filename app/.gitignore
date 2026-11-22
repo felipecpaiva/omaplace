@@ -12,3 +12,5 @@ tests/*.png
 pkgbuild/pkg/
 pkgbuild/src/
 pkgbuild/*.pkg.tar.zst
+build-tests/
+tests/fixture-model.json
