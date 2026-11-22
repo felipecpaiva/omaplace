@@ -153,7 +153,8 @@ function resolve(cls, entries, strategies, slot) {
 
   if (use === "context") {
     const ctx = String(s.context || "")
-    if (ctx === "?") return skip(name, kind, "profile or folder not chosen yet")
+    // unknown profile or project: never started (it could open the wrong one), but an open window is put back
+    if (ctx === "?") return { strategy: name, mode: "place_only", argv: null, contextKind: kind, reason: "profile or folder not chosen yet" }
     if (ctx !== "") {
       if (!safeWord(ctx)) return skip(name, kind, "context starts with a dash")
       const folder = expandHome(String(s.folder || ""), s.home)

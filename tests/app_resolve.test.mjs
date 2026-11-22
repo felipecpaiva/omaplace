@@ -76,7 +76,8 @@ test("a context that tries to break out stays one argv element or is refused", (
 })
 
 test("context apps: unknown profile is skipped, no profile uses the plain entry", () => {
-  assert.equal(r("google-chrome", { context: "?" }).mode, "skip")
+  assert.equal(r("google-chrome", { context: "?" }).mode, "place_only", "unknown profile: never started, an open window is put back")
+  assert.equal(r("google-chrome", { context: "?" }).argv, null)
   assert.equal(r("google-chrome", {}).argv[2], "google-chrome.desktop")
 })
 
