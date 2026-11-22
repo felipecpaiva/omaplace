@@ -786,7 +786,7 @@ left to right, then top to bottom). Everything after that is the existing opener
 | D21 | The plan stays fixed; it changes only on the Desktops page. When the user moves a planned window to another zone or desktop by hand, omaplace sends one notification with an "Update plan" action (`omarchy-notification-send --action`); pressing it writes the new place into the plan, ignoring it changes nothing. Uses the move report from `auto` mode (`moves.json`) | decided (Felipe, 2026-11-21) |
 | D22 | Desktop mode: use `omarchy-hyprland-workspace-layout-set <workspace> <mode>` when Omarchy has it (upstream PR from us); until then the card focuses that desktop and presses Omarchy's toggle at most 2 times, checking `omarchy-hyprland-workspace-layout-current <id>` after each press. omaplace never writes Omarchy's state. Switch first, place after (switching to floating runs Omarchy's `arrange`) | decided (Felipe, 2026-11-21, option 1) |
 | D23 | A zone change on the same desktop is noticed when focus leaves the window (`window.active`): if the window that lost focus is a planned, snapped window and its rect is more than 2 percent of the usable area away from its zone, one "Update plan" notification is sent for it (once per window until it is back in its zone or closed). No polling | decided (Felipe, 2026-11-21) |
-| D24 | "Update plan" always does something useful (live finding 2026-11-21). Zone move onto a zone another window of the same plan holds: the two windows swap zones in the plan, then the plan's open windows are re-placed (no launches). Desktop move of a window out of a plan with several windows onto a desktop with no plan: the window leaves the old plan and that desktop gets a new `free` plan holding it at its current rect (name from `Desktops.newSceneName`); onto a desktop that has a plan: as before (14.8). A zone move outside every zone: the plan becomes `free` with every window at its current rect. `not_possible` stays only for the duplicate class and context case and for `full` plans receiving a second window | decided (Felipe, 2026-11-21, option A) |
+| D24 | "Update plan" always does something useful (live finding 2026-11-21). Zone move onto a zone another window of the same plan holds: the two windows swap zones in the plan, then the plan's open windows are re-placed (no launches). Desktop move of a window out of a plan with several windows onto a desktop with no plan: the window leaves the old plan and that desktop gets a new `free` plan holding it at its current rect (name from `Desktops.newSceneName`); onto a desktop that has a plan: as before (14.8). A zone move outside every zone: the plan becomes `free` with every window at its current rect. `not_possible` stays only for the duplicate class and context case and for `full` plans receiving a second window (both lifted by D28) | decided (Felipe, 2026-11-21, option A) |
 
 ### 14.4 Setting a desktop's mode (D22, decided: option 1)
 
@@ -872,3 +872,27 @@ the target). All commands through async `Process`. Move notifications are sent b
 | WP11 | Plan data: `plan`, `layout`, `zone`, `open_at_login` in `SceneStore.js` and `ConfigIO.js`; `js/Zones.js` copied from omagnet `LayoutOps.js` (built-in layouts and text parse only) with a parity test; zone to rect and order in `Plan.js`; desktop mode set (D22) | those | Node tests; parity against omagnet golden zones | M4 |
 | WP12 | Snap and fill: planned apps become rules plus app memory rects; `full` layout; open at login (one load-time check, no timer) | next editor of `lua/omaplace.lua`, `Service.qml` | fake-`hl`: planned app opened by hand lands in its zone; full layout maximizes; login opens only ticked desktops | WP11 |
 | WP13 | Desktops page: cards, badge, picker, preview, app picker, Open all; hand-move notification with "Update plan" | `pages/DesktopsPage.qml`, `pages/DesktopCard.qml`, `pages/ZoneThumb.qml`; next editor of `SettingsPanel.qml`, `Service.qml` | qmllint; Node test of the plan update from a move; hand checks with a screenshot | WP11, WP12 |
+
+## 15. v0.2 (designed and built 2026-11-22, Felipe's list: open items, then the "later ideas")
+
+### 15.1 Decisions
+
+| # | Decision | Status |
+|---|---|---|
+| D25 | The identity `"laptop"` in a rule (or a scene's rule desktop) is a role: any laptop panel, through `monitors.resolve` step 4. The Rules page offers it as "Laptop panel (any laptop)". Plans keep real identities, because the Desktops page lists real monitors | decided (Felipe's list, 2026-11-22) |
+| D26 | `restore_at_login` = `off` (default) / `ask` / `auto`. A login is a Hyprland instance at most 10 minutes old (its signature carries its start time), so a shell restart or turning omaplace on later never counts. Once per instance (marker `restore-done-<instance>`, separate from the plans' marker). `ask`: one notification with a "Restore" button running `omaplace restore`. `auto`: the restore is queued before the login plans, so the plans keep their desktops | decided (Felipe's list, 2026-11-22) |
+| D27 | Rule `rect` ("x y w h" fractions) and `keep_rect`: the rule's first window, once on the rule's desktop and floating there (Omarchy's floating tag, D13), is put at the rect after `settle_ms`, by dispatch. A rule's rect wins over a plan and app memory. "Add rule" from a floating window fills both | decided (Felipe's list, 2026-11-22) |
+| D28 | "Update plan" for two windows of one app: the move's window index names the moved one (Lua matched each placed window to its plan index by rect), so the D24 twin refusal is gone. A `full` plan getting a second window becomes `tiled` with both | decided (Felipe's list, 2026-11-22) |
+| D29 | Zone editor on the Desktops page: "Draw zones" opens omagnet's grid and canvas editor, copied (not imported: no cross-project imports) as `js/LayoutOps.js` and `pages/ZoneEditor.qml`; Save stores the zones as custom zones text | decided (Felipe's list, 2026-11-22) |
+| D30 | A rule's, scene's, plan's or memory's desktop made on the wrong monitor is moved to its own monitor once a window is on it (`Place.home`). Found live: Hyprland makes a missing workspace on the focused monitor, and Omarchy sends a workspace home only when a monitor comes or goes | decided (live finding, 2026-11-22) |
+
+### 15.2 Work packages
+
+| WP | What | Files | Checks |
+|---|---|---|---|
+| WP14 | Desktop on its own monitor (D30) | `lua/place.lua`, `lua/rules.lua`, `lua/omaplace.lua` | fake-`hl` glue test; live with a second monitor (passed) |
+| WP15 | Laptop role (D25) | `lua/monitors.lua`, `js/Settings.js` | Lua and Node tests |
+| WP16 | Restore at login (D26) | `js/Summary.js`, `Service.qml`, `pages/SessionPage.qml`, `js/Settings.js` | Node tests of the login decision; live: a real reboot with `ask`, then with `auto` |
+| WP17 | Rule rect (D27) | `lua/config.lua`, `lua/rules.lua`, `lua/omaplace.lua`, `js/ConfigIO.js`, `js/Summary.js`, `Service.qml`, `pages/RuleRow.qml` | `test_glue_rule_rect.lua`, fixtures; live: a rule from a floating window |
+| WP18 | Update plan for twins and full (D28) | `js/PlanMoves.js` | Node tests |
+| WP19 | Zone editor (D29) | `js/LayoutOps.js`, `pages/ZoneEditor.qml`, `pages/DesktopCard.qml`, `pages/DesktopsPage.qml` | qmllint; live: draw, save, Open all |
