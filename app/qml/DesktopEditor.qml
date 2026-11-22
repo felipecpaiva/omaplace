@@ -21,6 +21,23 @@ ColumnLayout {
     property string drawKey: ""
     property string drawText: ""
     property string moreKey: ""
+    // quick changes (D53): the selected window ("<card key>\n<pos>"), and the edit whose success moves the windows
+    property string pickKey: ""
+    property string applyId: ""
+    readonly property var placed: (card.rows || []).filter(function (r) { return !r.empty && r.win })
+    readonly property bool quick: card.plan === true && card.layout === "free" && placed.length > 0 && !card.error && writable
+    function adjust(op, arg, what) {
+        editor.applyId = app.act("editPlan", [card.identity, card.slot, card.focused === true, op, arg, card.mode || ""], what)
+    }
+    Connections {
+        target: backend
+        // saved: now move the real windows to it, so the change is seen on screen at once
+        function onReplied(id, op, answer) {
+            if (id !== editor.applyId || editor.applyId === "") return
+            editor.applyId = ""
+            if (answer.ok) editor.app.act("open", [editor.card.name], qsTr("Windows moved"))
+        }
+    }
     readonly property bool drawing: drawKey !== "" && drawKey === card.key
     property var openRows: ({})
     readonly property bool writable: app.panel.scenesWritable === true && card.editable !== false
@@ -113,6 +130,67 @@ ColumnLayout {
             : editor.card.state === "same" ? qsTr("Everything is where you left it.")
             : editor.card.state === "closed" ? qsTr("Its apps are not open now.")
             : editor.hasLive ? qsTr("Open now: %1").arg(editor.card.liveSummary) : qsTr("Open the apps you want here, then remember it. Or choose a layout below.")
+    }
+
+    // Quick changes of a floating desktop (D53): arrange every window at once, or pick one and give it a spot.
+    ColumnLayout {
+        objectName: "quick"
+        visible: editor.quick
+        Layout.fillWidth: true
+        spacing: 6
+        Flow {
+            Layout.fillWidth: true
+            spacing: 6
+            Label { text: qsTr("Arrange:"); height: 32; verticalAlignment: Text.AlignVCenter; color: ui.secondary }
+            Repeater {
+                model: editor.placed.length > 1
+                    ? [{ v: "side", t: qsTr("Side by side") }, { v: "stack", t: qsTr("One above the other") }].concat(editor.placed.length > 2 ? [{ v: "grid", t: qsTr("Grid") }] : [], [{ v: "full", t: qsTr("All full screen") }])
+                    : [{ v: "full", t: qsTr("Full screen") }]
+                ShapeButton {
+                    required property var modelData
+                    objectName: "arrange-" + modelData.v
+                    tip: modelData.t
+                    rects: Desktops.arrangeRects(modelData.v === "full" ? 1 : editor.placed.length, modelData.v)
+                    onClicked: editor.adjust("arrange", modelData.v, qsTr("Arranged"))
+                }
+            }
+        }
+        Flow {
+            visible: editor.placed.length > 1
+            Layout.fillWidth: true
+            spacing: 6
+            Label { text: qsTr("Or one window:"); height: 32; verticalAlignment: Text.AlignVCenter; color: ui.secondary }
+            Repeater {
+                model: editor.placed
+                ActionButton {
+                    required property var modelData
+                    objectName: "pick-" + modelData.pos
+                    text: modelData.label
+                    primary: editor.pickKey === editor.card.key + "\n" + modelData.pos
+                    onClicked: editor.pickKey = primary ? "" : editor.card.key + "\n" + modelData.pos
+                }
+            }
+        }
+        Flow {
+            readonly property int pos: editor.pickKey.indexOf(editor.card.key + "\n") === 0 ? Number(editor.pickKey.slice(editor.pickKey.lastIndexOf("\n") + 1)) : (editor.placed.length === 1 ? editor.placed[0].pos : 0)
+            visible: pos > 0 && editor.placed.length > 0
+            Layout.fillWidth: true
+            spacing: 6
+            Label { text: qsTr("Put it:"); height: 32; verticalAlignment: Text.AlignVCenter; color: ui.secondary }
+            Repeater {
+                model: [{ v: "full", t: qsTr("Full screen") }, { v: "left", t: qsTr("Left half") }, { v: "right", t: qsTr("Right half") },
+                    { v: "top", t: qsTr("Top half") }, { v: "bottom", t: qsTr("Bottom half") }, { v: "top-left", t: qsTr("Top left quarter") },
+                    { v: "top-right", t: qsTr("Top right quarter") }, { v: "bottom-left", t: qsTr("Bottom left quarter") },
+                    { v: "bottom-right", t: qsTr("Bottom right quarter") }, { v: "center", t: qsTr("Centered") }]
+                ShapeButton {
+                    required property var modelData
+                    objectName: "spot-" + modelData.v
+                    tip: modelData.t
+                    rects: [Desktops.spotRect(modelData.v)]
+                    onClicked: editor.adjust("spot", { pos: parent.pos, spot: modelData.v }, qsTr("Moved"))
+                }
+            }
+        }
     }
 
     // The main actions.

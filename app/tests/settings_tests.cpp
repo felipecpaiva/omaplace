@@ -262,7 +262,7 @@ private slots:
         click(w, tiles.at(1));
         auto *picker = inTools(w, w->contentItem(), "layoutPicker");
         QVERIFY(picker);
-        QCOMPARE(picker->property("displayText").toString(), QString("None"));
+        QCOMPARE(picker->property("displayText").toString(), QString("Free floating"));  // remembered in the made-up data
         QVariantList opts = picker->property("model").toList();
         QCOMPARE(opts.at(1).toMap().value("label").toString(), QString("2 columns (omagnet, this desktop)"));
         grab(w, "page-desktops-laptop");
@@ -780,6 +780,28 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(find(c, "undo"), 5000);
         click(w, find(c, "undo"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("undo"), 5000);
+    }
+
+    // D53: a remembered floating desktop changes in one click, and the windows move to it at once.
+    void quickArrange() {
+        reset();
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QTest::qWait(300);
+        auto *c = w->contentItem();
+        click(w, all(c, "tile-1").at(1));  // the laptop's desktop 1, remembered Free floating, two windows full screen
+        QVERIFY(find(c, "quick"));
+        grab(w, "quick-arrange");
+        click(w, find(c, "arrange-side"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Panel",1,false,"arrange","side","floating"])"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(sent("open", R"(["desk-laptop"])"), 5000);  // then the windows move to it
+        click(w, find(c, "pick-2"));
+        grab(w, "quick-spot");
+        click(w, find(c, "spot-right"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Panel",1,false,"spot",{"pos":2,"spot":"right"},"floating"])"), 5000);
+        click(w, all(c, "tile-2").at(0));
+        QVERIFY2(!find(c, "quick"), "a zone layout has no quick spots");
     }
 
     // Read only, against the real service (OMAPLACE_LIVE=1 and OMAPLACE_LIVE_OUT=<folder for the pictures>): the app

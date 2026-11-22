@@ -22,6 +22,8 @@ const win = (cls, zone, extra) => ({ app: cls, class: cls, context: "", rect: [0
 const doc = Store.parse(Store.serialize({ schema: 1, warnings: [], errors: [], readOnly: false, scenes: {
   "desk-2": { plan: true, layout: "columns:2", existing: "move", home_monitor: MON, home_slot: 2, key: "", saved_on: "", open_at_login: true,
     windows: [win("org.example.Editor", 1), win("org.example.Chat", 2, { rect: [0.5, 0, 0.5, 1] })] },
+  "desk-laptop": { plan: true, layout: "free", existing: "move", home_monitor: "Example Panel", home_slot: 1, key: "", saved_on: "", open_at_login: false,
+    windows: [win("org.example.Editor", undefined, { rect: [0, 0, 1, 1], order: 1 }), win("org.example.Chat", undefined, { rect: [0, 0, 1, 1], order: 2 })].map((w) => { delete w.zone; return w }) },
   work: { existing: "move", key: "", saved_on: "",
     windows: [win("org.example.Editor", 1, { folder: "~/projects/example", context: "?", zone: undefined })] }
 } }))

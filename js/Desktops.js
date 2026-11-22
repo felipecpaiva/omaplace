@@ -615,6 +615,20 @@ function edit(doc, desk, op, arg) {
       if (i !== -1) scene.windows[i] = w
       else if (free && a.pos !== scene.windows.length + 1) return { error: "bad position" }
       else scene.windows.push(w)
+    } else if (op === "spot" || op === "arrange") {
+      // quick changes of a Free floating desktop (D53): one window to a spot, or every window arranged at once
+      if (!free) return { error: "only a floating desktop's windows have spots" }
+      if (op === "spot") {
+        const a = arg || {}
+        const i = at(a.pos)
+        const r = spotRect(a.spot)
+        if (i === -1 || !r) return { error: "bad spot" }
+        scene.windows[i].rect = r
+      } else {
+        const rects = arrangeRects(scene.windows.length, arg)
+        if (!rects) return { error: "bad arrangement" }
+        scene.windows.forEach((w, k) => { w.rect = rects[k] })
+      }
     } else if (op === "clear") {
       const i = at(arg)
       if (i === -1) return { doc, name, changed: false, dropped }
@@ -628,6 +642,29 @@ function edit(doc, desk, op, arg) {
   const why = SceneStore.planProblems(next)[name]
   if (why) return { error: why }
   return { doc: Object.assign({}, doc, { scenes: next }), name, changed: true, dropped }
+}
+
+// A named spot as a rect (fractions of the usable area), or null (D53). The same names as omagnet's snaps.
+const SPOTS = {
+  full: [0, 0, 1, 1], left: [0, 0, 0.5, 1], right: [0.5, 0, 0.5, 1], top: [0, 0, 1, 0.5], bottom: [0, 0.5, 1, 0.5],
+  "top-left": [0, 0, 0.5, 0.5], "top-right": [0.5, 0, 0.5, 0.5], "bottom-left": [0, 0.5, 0.5, 0.5], "bottom-right": [0.5, 0.5, 0.5, 0.5],
+  center: [0.15, 0.1, 0.7, 0.8]
+}
+function spotRect(name) { return Object.prototype.hasOwnProperty.call(SPOTS, name) ? SPOTS[name].slice() : null }
+
+// Every window of a desktop arranged at once (D53): "side" (columns), "stack" (rows), "grid", or "full" (all full screen,
+// one on top of the other). Rounded to 4 places, so a third is the same number every time. null for an unknown name.
+function arrangeRects(n, how) {
+  if (!Number.isInteger(n) || n < 1) return []
+  const r4 = (v) => Math.round(v * 10000) / 10000
+  if (how === "full") return Array.from({ length: n }, () => [0, 0, 1, 1])
+  if (how === "side") return Array.from({ length: n }, (_, i) => [r4(i / n), 0, r4(1 / n), 1])
+  if (how === "stack") return Array.from({ length: n }, (_, i) => [0, r4(i / n), 1, r4(1 / n)])
+  if (how === "grid") {
+    const cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols)
+    return Array.from({ length: n }, (_, i) => [r4((i % cols) / cols), r4(Math.floor(i / cols) / rows), r4(1 / cols), r4(1 / rows)])
+  }
+  return null
 }
 
 // The status line after a layout change (D19: a zone layout makes the desktop floating when Open all runs).
