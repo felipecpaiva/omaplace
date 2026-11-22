@@ -519,5 +519,6 @@ test("desktops carry the number people use (D50)", () => {
   const cs = D.cards(ruled, doc({}), {}).groups[0].cards
   assert.equal(cs[0].number, 7, "workspace 7 under the rules")
   assert.equal(cs[1].number, 8)
+  assert.equal(cs.length, 2, "only the desktops its rules name")
   assert.equal(D.cards(live, doc({}), {}).groups[0].cards[1].number, 2, "Omarchy's model: the slot")
 })

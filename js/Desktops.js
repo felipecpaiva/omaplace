@@ -318,7 +318,9 @@ function cards(live, doc, ctx) {
   const shown = {}
   const groups = mons.map((m) => {
     const list = []
-    for (let slot = 1; slot <= 10; slot++) {
+    // under Hyprland's rules a monitor has only the desktops its rules name (D50); else always 1 to 10
+    const last = l.numbering === "rules" && (m.slots || []).length > 0 ? m.slots.length : 10
+    for (let slot = 1; slot <= last; slot++) {
       const s = (m.slots || []).find((x) => x && x.slot === slot)
       const found = findPlan(scenes, m.identity, slot, m.focused)
       if (found) shown[found.name] = true
