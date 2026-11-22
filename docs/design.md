@@ -954,3 +954,9 @@ the target). All commands through async `Process`. Move notifications are sent b
 | WP25 | Pages: Desktops, Apps, Scenes, Restore, General, every control mapped in research section 3 | `app/qml/` |
 | WP26 | One app: ignore its class (D39), open paths and launcher migration (D40), remove the panel | `lua/`, `bin/omaplace`, `Service.qml`, `manifest.json` |
 | WP27 | Tests (Qt Test offscreen, Node), PKGBUILD, README, release notes | `app/tests`, `app/pkgbuild`, docs |
+
+Status 2026-11-22: WP23 to WP27 built on `next`; live results in `batch-log/live-M5.md`. Departures from the research,
+on purpose: deletes ask in a dialog instead of an Undo bar (the service keeps a `.bak`), there is no global search, and
+"From a window..." waits 4 seconds for a click instead of listing open windows. `appAttached` stays on after the app
+closes, so the service keeps writing `app-model.json` when the desktops change (small; clear it on a timeout if it
+shows).
