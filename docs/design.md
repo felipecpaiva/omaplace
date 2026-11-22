@@ -932,3 +932,25 @@ the target). All commands through async `Process`. Move notifications are sent b
 |---|---|---|---|
 | WP21 | Picker labels and exec class (D32, D33) | `js/Desktops.js` | Node tests with made-up entries |
 | WP22 | Picker order and omagnet per desktop (D34, D35) | `js/Desktops.js`, `lua/omaplace.lua` (desktops), `pages/DesktopCard.qml` | Node tests, a fake-`hl` Lua test with a fake omagnet, qmllint |
+
+## 17. The settings app (Felipe, 2026-11-22: one settings app, built like omadials-settings; 5 pages from `research/settings-app-ux.md`)
+
+### 17.1 Decisions
+
+| # | Decision | Status |
+|---|---|---|
+| D36 | One settings UI: `omaplace-settings`, a C++ and Qt Quick app in `app/`, packaged like omadials-settings (own package, launcher entry, icon, theme and rounding followed live). The plugin's panel (`SettingsPanel.qml`, `pages/`) is removed once the app has every control; no tag ships both. The README's "no packages" line changes to "the settings app is one optional package" | decided (Felipe) |
+| D37 | The service stays the only writer and keeps all logic. The app is a view: it sends one request per action through a new IPC method `app(id)`, with the request in `$XDG_RUNTIME_DIR/omaplace/app-<id>.json` (`{ contract, op, args }`, never argv, so folders and commands are never in a command line). The service runs an allow-listed op (the same functions the panel calls today) and writes `app-<id>-reply.json` (`{ contract, ok, result }`) atomically | decided |
+| D38 | The app's model: IPC `appModel()` writes `app-model.json` (`{ contract, panel (panelData), desks (desktopCards), apps (appChoices) }`) now, starts the live desktops read, and writes it again when that ends. The app watches the runtime folder and re-reads the model after every reply. Contract number 1: an app and a service with different numbers show "update omaplace" in the window, never an empty page | decided |
+| D39 | The app's window class `omaplace-settings` is ignored by scenes, session snapshots, app memory and "rule add" for the focused window (a built-in ignore, not a setting). "Add rule" in the app lists open windows to pick from | decided |
+| D40 | `omaplace settings`, the menu row and the launcher open the app (`omaplace-settings open`). When it is not installed, they say how to install it. The plugin's own launcher entry is removed and the one already installed is migrated away | decided |
+
+### 17.2 Work packages
+
+| WP | What | Files |
+|---|---|---|
+| WP23 | Service seam: `app(id)`, `appModel()`, allow-list, replies, contract (D37, D38) | `Service.qml`, `js/AppSeam.js` (pure, Node tested) |
+| WP24 | App skeleton from omadials' `app/` (copied): build, theme, translator, backend (requests, model watch), 5-page sidebar | `app/` |
+| WP25 | Pages: Desktops, Apps, Scenes, Restore, General, every control mapped in research section 3 | `app/qml/` |
+| WP26 | One app: ignore its class (D39), open paths and launcher migration (D40), remove the panel | `lua/`, `bin/omaplace`, `Service.qml`, `manifest.json` |
+| WP27 | Tests (Qt Test offscreen, Node), PKGBUILD, README, release notes | `app/tests`, `app/pkgbuild`, docs |
