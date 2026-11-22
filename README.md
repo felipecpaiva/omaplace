@@ -11,7 +11,7 @@
 
 Every app opens where it belongs on Omarchy: the right desktop, the right monitor, the right spot. Plan your desktops, save scenes, and bring the whole session back after a reboot.
 
-**Status: v0.2.0.** Desktop plans, placement rules, scenes, session restore (also at login) and app memory, with monitors it recognizes again after a port change. Open items are in [docs/ROADMAP.md](docs/ROADMAP.md), feedback from daily use in [docs/feedback.md](docs/feedback.md).
+**Status: v0.3.0.** Desktop plans, placement rules, scenes, session restore (also at login) and app memory, with monitors it recognizes again after a port change. Open items are in [docs/ROADMAP.md](docs/ROADMAP.md), feedback from daily use in [docs/feedback.md](docs/feedback.md).
 
 Not affiliated with or endorsed by Omarchy or 37signals.
 
@@ -169,6 +169,8 @@ you arrange your apps, and opening it again brings it to the front. Five pages:
 - **General:** the Omarchy menu, the timings (Advanced), and About.
 
 Keys: Ctrl+1 to Ctrl+5 for the pages, F5 reads the desktops again, ? or F1 lists the keys, Ctrl+W closes.
+
+<p align="center"><img src="branding/demo/settings-app.gif" alt="The settings app: the Desktops map and editor, then the Apps, Scenes, Restore and General pages" width="720"></p>
 
 Every change is saved at once; the file before the change is kept as `.bak` next to it.
 

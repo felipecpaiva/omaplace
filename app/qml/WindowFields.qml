@@ -52,7 +52,7 @@ GridLayout {
     RowLayout {
         visible: row.unknown
         Layout.fillWidth: true
-        ComboBox {
+        Combo {
             visible: row.need.kind === "profile" && row.need.profiles.length > 0
             model: Settings.profileOptions(row.need.profiles)
             textRole: "label"

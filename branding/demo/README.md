@@ -12,6 +12,10 @@ captions at the top. The README and the release notes show these files.
 | `snap` | `snap.gif` | Omacalc opened by hand jumps into its zone |
 | `update` | `update.gif` | Omacalc dragged onto the left zone, the "Update plan" notification, its button, the two windows swap |
 | `samespot` | `samespot.gif` | A rule with Same spot: Omacalc opens in its spot, is moved away and closed, and opens there again |
+| (app) | `settings-app.gif` | The settings app: the Desktops map and editor, then each page |
+| (app) | `app-names.gif` | Two apps with one name told apart in the app list, and the note on a shared window class |
+| (app) | `layout-picker.gif` | The layout list on a tiled desktop (Tiled first) and a floating one (its omagnet layout first) |
+| (app) | `draw-zones.gif` | Draw zones without omagnet: pick a zone, split it |
 | `scenes` | `scenes.gif` | Two windows arranged by hand, `omaplace save demo`, closed, `omaplace open demo` brings them back |
 
 Session restore and restore at login have no GIF: they need a new login, and would show your real apps.
@@ -58,3 +62,15 @@ Hands off the keyboard, mouse and screen for about 2 minutes (it waits 10 s firs
   8's layout mode and Omarchy's layout file for it, Do Not Disturb, the pointer and your workspace. Then the script
   reloads omaplace's Lua settings, rebuilds `plans.lua` and says whether it still names the demo plan. Both print a
   `restored:` line.
+
+## The settings app's animations
+
+The four "(app)" rows come from the app itself, offscreen, with made-up data (never the live desktop): the Qt test
+`demo` in `app/tests/settings_tests.cpp` saves frames and captions, and `app/tests/demo_gifs.py` builds the GIF and
+MP4 with omakit:
+
+```
+cd app && bin/test        # builds the tests
+OMAPLACE_DEMO_OUT=/tmp/frames QT_QPA_PLATFORM=offscreen build-tests/settings-tests demo
+python3 tests/demo_gifs.py /tmp/frames
+```

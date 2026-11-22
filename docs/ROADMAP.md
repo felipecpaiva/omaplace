@@ -10,6 +10,7 @@ row is done until its tests pass and the real desktop shows it. Every row meets
 |---|---|---|
 | **v0.1** (2026-11-21, tag v0.1.0; notes `releases/v0.1.0.md`) | Every app opens where it belongs | Placement rules with monitor identity (M1), scenes and app memory (M2), session snapshots and manual restore (M3), the Omarchy menu with consent and `app_memory = "auto"` (M4), the Desktops page and desktop plans (M5). Goals and live results: `goals.md`, `batch-log/live-M1.md`, `batch-log/live-M5.md` |
 | **v0.2** (2026-11-22, tag v0.2.0; notes `releases/v0.2.0.md`) | Close the open checks, then the first ideas | Second monitor and real reboot checks with their fixes, restore at login, `keep_rect` (Same spot), Draw zones, omagnet layouts, the laptop panel role, "Update plan" for twins, Automatic app memory in the window (D25 to D31) |
+| **v0.3** (2026-11-22, tag v0.3.0; notes `releases/v0.3.0.md`) | One settings app | `omaplace-settings` with five pages (D36 to D40), feedback items 1 to 3 (`feedback.md`), the plugin panel removed |
 | Later (ideas, not promised) | See "Later ideas" | |
 
 ## Open items after v0.2

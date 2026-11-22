@@ -10,6 +10,9 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QTemporaryDir>
+#include <QElapsedTimer>
+#include <QSettings>
+#include <QJsonArray>
 #include "backend.h"
 #include "theme.h"
 
@@ -23,8 +26,17 @@ static void collect(QtMsgType type, const QMessageLogContext &ctx, const QString
 class IconProvider : public QQuickImageProvider {
 public:
     IconProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
-    QPixmap requestPixmap(const QString &, QSize *size, const QSize &) override {
-        QPixmap pm(16, 16); pm.fill(Qt::gray); if (size) *size = pm.size(); return pm;
+    // grey squares in the tests; the theme's generic icons (made-up apps use names like accessories-calculator) in
+    // the animations
+    QPixmap requestPixmap(const QString &id, QSize *size, const QSize &req) override {
+        QPixmap pm;
+        if (!qEnvironmentVariable("OMAPLACE_DEMO_OUT").isEmpty()) {
+            const int side = req.width() > 0 ? req.width() : 32;
+            pm = QIcon::fromTheme(QUrl::fromPercentEncoding(id.toUtf8()), QIcon::fromTheme("application-x-executable")).pixmap(side, side);
+        }
+        if (pm.isNull()) { pm = QPixmap(16, 16); pm.fill(Qt::gray); }
+        if (size) *size = pm.size();
+        return pm;
     }
 };
 
@@ -152,7 +164,7 @@ private slots:
         b.start();
         QTRY_VERIFY_WITH_TIMEOUT(b.connected(), 5000);
         QCOMPARE(b.model().value("contract").toInt(), 1);
-        QCOMPARE(b.model().value("apps").toList().size(), 5);
+        QCOMPARE(b.model().value("apps").toList().size(), 6);
         QVERIFY(changed.count() >= 1);
     }
 
@@ -554,6 +566,120 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(sent("ruleFromFocus"), 5000);
     }
 
+    // The feature animations (OMAPLACE_DEMO_OUT=<folder>): made-up data, offscreen, the real QML. Each scene saves its
+    // frames and captions to <folder>/<scene>/ for app/tests/demo_gifs.py, which builds the GIF and MP4 with omakit.
+    void demo() {
+        const QString out = qEnvironmentVariable("OMAPLACE_DEMO_OUT");
+        if (out.isEmpty()) QSKIP("set OMAPLACE_DEMO_OUT to record the animations");
+        reset();
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QTest::qWait(400);
+        auto *c = w->contentItem();
+        auto *root = win.engine.rootObjects().first();
+
+        // a scene: frames every 80 ms while `steps` run, captions with their times
+        QString dir; QElapsedTimer clock; QJsonArray frames, marks; int nframe = 0;
+        QTimer grabber;
+        QObject::connect(&grabber, &QTimer::timeout, [&] {
+            const QString f = dir + QString("/f%1.jpg").arg(nframe++, 5, 10, QChar('0'));
+            w->grabWindow().save(f, "JPG", 92);
+            frames.append(QJsonArray{clock.elapsed() / 1000.0, f});
+        });
+        auto start = [&](const QString &name) {
+            dir = out + "/" + name; QDir().mkpath(dir); frames = {}; marks = {}; nframe = 0;
+            clock.start(); grabber.start(80);
+        };
+        auto say = [&](const QString &text) { marks.append(QJsonArray{clock.elapsed() / 1000.0, text}); };
+        auto stop = [&] {
+            say("");
+            grabber.stop();
+            QFile f(dir + "/scene.json");
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QJsonDocument(QJsonObject{{"frames", frames}, {"marks", marks}, {"total", clock.elapsed() / 1000.0}}).toJson());
+        };
+        auto pause = [](int ms) { QTest::qWait(ms); };
+
+        // 1. the app: five pages
+        start("settings-app");
+        say("One settings window that stays open"); pause(2200);
+        say("Desktops: every monitor, every desktop"); pause(1800);
+        click(w, all(c, "tile-2").at(0)); pause(1600);
+        say("Apps: where each app always opens"); click(w, find(c, "nav1")); pause(2200);
+        say("Scenes: open, rename, edit windows"); click(w, find(c, "nav2")); pause(2000);
+        say("Restore: your last session"); click(w, find(c, "nav3")); pause(2000);
+        say("General: the menu and timings"); click(w, find(c, "nav4")); pause(1800);
+        click(w, find(c, "nav0")); pause(600);
+        stop();
+
+        // 2. two apps with one name, and a shared window class
+        start("app-names");
+        say("Two apps, one name: now told apart"); pause(1200);
+        click(w, all(c, "tile-2").at(0)); pause(600);
+        click(w, find(c, "zoneApp-2")); pause(900);
+        for (const QChar ch : QString("pad")) { QTest::keyClick(w, ch.toLatin1()); pause(220); }
+        pause(1800);
+        say("A shared window class gets a note"); 
+        // show the row as it would be with Pad (terminal) in zone 2
+        {
+            QVariantMap m = win.backend.model();
+            QVariantMap desks = m.value("desks").toMap();
+            QVariantList groups = desks.value("groups").toList();
+            QVariantMap g = groups.at(0).toMap(); QVariantList cards = g.value("cards").toList();
+            QVariantMap card = cards.at(1).toMap(); QVariantList rows = card.value("rows").toList();
+            QVariantMap row = rows.at(1).toMap();
+            row.insert("app", "Pad"); row.insert("label", "Pad (terminal)"); row.insert("icon", "utilities-terminal");
+            row.insert("notes", QVariantList{"1 other app opens with the same window class (TUI.tile). omaplace cannot tell them apart, so any of them opened by hand can take this zone. Open all starts the right one."});
+            QVariantMap win2 = row.value("win").toMap(); win2.insert("class", "TUI.tile"); row.insert("win", win2);
+            rows[1] = row; card.insert("rows", rows); cards[1] = card; g.insert("cards", cards); groups[0] = g;
+            desks.insert("groups", groups); m.insert("desks", desks); m.insert("seq", 200000);
+            QTest::keyClick(w, Qt::Key_Escape); pause(300);
+            QVERIFY(win.backend.applyModel(m));
+        }
+        pause(3200);
+        stop();
+
+        // 3. the layout list follows the desktop
+        start("layout-picker");
+        say("Layouts that fit the desktop come first"); pause(1000);
+        click(w, all(c, "tile-3").at(0)); pause(700);
+        say("Tiled desktop: Tiled (now) first");
+        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", true); pause(2600);
+        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", false); pause(400);
+        click(w, all(c, "tile-1").at(1)); pause(700);
+        say("Floating: its omagnet layout first");
+        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", true); pause(3000);
+        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", false); pause(400);
+        stop();
+
+        // 4. draw zones (without omagnet)
+        {
+            QVariantMap m = win.backend.model();
+            QVariantMap desks = m.value("desks").toMap();
+            desks.insert("omagnet", QVariantMap{{"loaded", false}, {"layouts", QVariantList{}}});
+            m.insert("desks", desks); m.insert("seq", 300000);
+            QVERIFY(win.backend.applyModel(m));
+        }
+        start("draw-zones");
+        say("No omagnet? Draw zones with the mouse"); pause(800);
+        click(w, all(c, "tile-2").at(0)); pause(600);
+        click(w, find(c, "drawZones")); pause(1200);
+        say("Pick a zone, split it"); 
+        {
+            QQuickItem *canvas = nullptr;
+            for (auto *i : all(c)) if (i->isVisible() && i->inherits("QQuickRectangle") && i->width() > 300 && i->property("radius").toInt() == 6) canvas = i;
+            QVERIFY(canvas);
+            const QPointF p = canvas->mapToScene(QPointF(canvas->width() * 0.75, canvas->height() * 0.5));
+            QTest::mouseClick(w, Qt::LeftButton, {}, p.toPoint()); pause(700);
+        }
+        click(w, byText(c, "Split horizontal")); pause(1600);
+        say("Then Save makes it the plan"); pause(2400);
+        click(w, byText(c, "Cancel")); pause(300);
+        stop();
+        Q_UNUSED(root);
+    }
+
     // Read only, against the real service (OMAPLACE_LIVE=1 and OMAPLACE_LIVE_OUT=<folder for the pictures>): the app
     // connects, gets a model, shows every page without a QML warning. It sends appModel only, never a change.
     void liveReadOnly() {
@@ -596,6 +722,11 @@ private slots:
 int main(int argc, char **argv) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
     QGuiApplication app(argc, argv);
+    {
+        QSettings gtk(QDir::homePath() + "/.config/gtk-3.0/settings.ini", QSettings::IniFormat);
+        const QString theme = gtk.value("Settings/gtk-icon-theme-name").toString();
+        if (!theme.isEmpty()) QIcon::setThemeName(theme);
+    }
     QQuickStyle::setStyle("Material");
     SettingsTests t;
     return QTest::qExec(&t, argc, argv);

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.felipecpaiva.omaplace",
   "name": "omaplace",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Felipe Paiva",
   "description": "App placement rules, desktop plans, scenes and session restore for Omarchy, with monitors it recognizes again. Adds nothing to the bar and no keys. Settings: the omaplace-settings app (omaplace settings).",
   "license": "MIT",

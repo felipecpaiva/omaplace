@@ -81,6 +81,7 @@ ApplicationWindow {
         id: help
         objectName: "help"
         title: qsTr("Keyboard shortcuts")
+        background: Rectangle { color: ui.surface; radius: Math.min(8, ui.radius); border.width: 1; border.color: ui.edge }
         anchors.centerIn: parent
         modal: true
         standardButtons: Dialog.Ok
@@ -96,6 +97,7 @@ ApplicationWindow {
         anchors.centerIn: parent
         modal: true
         title: qsTr("Are you sure?")
+        background: Rectangle { color: ui.surface; radius: Math.min(8, ui.radius); border.width: 1; border.color: ui.edge }
         standardButtons: Dialog.Yes | Dialog.Cancel
         width: Math.min(480, win.width - 40)
         Label { textFormat: Text.PlainText; wrapMode: Text.WordWrap; width: confirmDialog.availableWidth; text: win.confirm ? win.confirm.text : "" }

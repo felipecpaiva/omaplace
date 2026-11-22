@@ -28,11 +28,17 @@ Button {
         border.color: picker.activeFocus ? ui.accent : ui.edge
     }
     Accessible.name: qsTr("App: %1").arg(text)
-    onClicked: { filter.text = ""; popup.open(); filter.forceActiveFocus() }
+    onClicked: {
+        filter.text = ""
+        // open upward when the window has no room for the list below the button
+        const below = (picker.Window.height || 0) - picker.mapToItem(null, 0, picker.height).y
+        popup.y = below < popup.height + 8 ? -popup.height : picker.height
+        popup.open()
+        filter.forceActiveFocus()
+    }
 
     Popup {
         id: popup
-        y: picker.height
         width: Math.max(picker.width, 320)
         height: 360
         padding: 8

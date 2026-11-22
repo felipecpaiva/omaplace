@@ -14,6 +14,7 @@ const apps = D.appChoices([
   { id: "org.example.Chat.desktop", name: "Chat", icon: "internet-chat", startupClass: "org.example.Chat" },
   { id: "Pad.desktop", name: "Pad", execString: "xdg-terminal-exec --app-id=TUI.tile -e pad", icon: "utilities-terminal" },
   { id: "pad-app.desktop", name: "Pad", startupClass: "pad-app", icon: "text-x-generic" },
+  { id: "Monitor.desktop", name: "Monitor", execString: "xdg-terminal-exec --app-id=TUI.tile -e top", icon: "utilities-system-monitor" },
   { id: "org.example.Calc.desktop", name: "Calculator", icon: "accessories-calculator", startupClass: "org.example.Calc" }
 ])
 const win = (cls, zone, extra) => ({ app: cls, class: cls, context: "", rect: [0, 0, 0.5, 1], order: zone, floating: true,

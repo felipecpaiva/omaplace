@@ -46,7 +46,7 @@ ScrollView {
                     placeholder: qsTr("Add an app...")
                     onPicked: function (id) { page.newApp = id }
                 }
-                ComboBox {
+                Combo {
                     id: newMonitor
                     objectName: "newRuleMonitor"
                     Layout.preferredWidth: 220
@@ -110,7 +110,7 @@ ScrollView {
                     Flow {
                         Layout.fillWidth: true
                         spacing: 10
-                        ComboBox {
+                        Combo {
                             objectName: "ruleMonitor-" + ruleRow.rule.name
                             width: 240
                             model: Settings.monitorChoices(page.monitors, ruleRow.rule.monitor)

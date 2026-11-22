@@ -53,7 +53,7 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: 8
         Label { text: qsTr("Layout"); height: layoutPicker.height; verticalAlignment: Text.AlignVCenter }
-        ComboBox {
+        Combo {
             id: layoutPicker
             objectName: "layoutPicker"
             width: Math.min(280, editor.width - 60)
