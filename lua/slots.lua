@@ -14,7 +14,7 @@ local SLOTS = 10
 function M.with(o, plan)
   local ws = type(o) == "table" and o.workspaces or nil
   -- hyprmoncfg turns Omarchy's numbering off (enabled = false) and leaves workspace_id in place: not per monitor then
-  local per_monitor = type(ws) == "table" and type(ws.workspace_id) == "function" and ws.enabled ~= false
+  local per_monitor = type(ws) == "table" and type(ws.workspace_id) == "function" and ws.enabled ~= false -- plain table: Omarchy module
   local lists = type(plan) == "table" and type(plan.monitors) == "table" and plan.monitors or {}
   local has_rules = next(lists) ~= nil
   local S = {}
