@@ -96,3 +96,12 @@ open at login).
 | Restore of the session from before the reboot (M3 check 3) | pass: `omaplace restore` gave 5 placed (4 started), 1 not reopened, 0 failed; Chrome and two web apps back on their desktops |
 
 Still to confirm with one more real reboot: the fixed login path end to end.
+
+# Second reboot, 2026-11-22 (`restore_at_login = "auto"`, plan with Omacalc and Aether)
+
+| Check | Result |
+|---|---|
+| Markers after the work (fix of the first reboot) | pass: the login plan and the restore both ran once; a shell restart afterwards ran neither again |
+| Automatic restore | pass: 5 placed (3 started), 0 not reopened, Chrome and two web apps on their desktops, no profile picker |
+| Order: restore before login plans (D26) | **fail, then fixed**: the plan ran first (Aether opened before everything). The service checked the plans before the restore; now the restore is checked first |
+| Aether in the plan's right column | **fail, then fixed**: the plan holds the desktop id's class `aether`, the window is `Aether`, so the slot was never claimed and Aether stayed where it opened. Tickets and plan lookups now compare classes without case. After the fix, `omaplace open reboot-test`: Aether right half and Omacalc left half of desktop 8 |
