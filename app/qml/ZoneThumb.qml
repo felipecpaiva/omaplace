@@ -54,12 +54,12 @@ Item {
                 // an open window or a stack of them (D42, D44): icon and names in the top-left corner, like a title bar,
                 // and what is true about it in the bottom-right ("full screen", "2 windows")
                 Column {
-                    visible: box.modelData.live === true
+                    visible: box.modelData.stack === true
                     x: 4; y: 3
                     width: parent.width - 8
                     spacing: 1
                     Repeater {
-                        model: box.modelData.live === true && thumb.showNames ? (box.modelData.names || []).slice(0, 3) : []
+                        model: box.modelData.stack === true && thumb.showNames ? (box.modelData.names || []).slice(0, 3) : []
                         Row {
                             required property var modelData
                             required property int index
@@ -74,14 +74,14 @@ Item {
                         }
                     }
                     Image {
-                        visible: !thumb.showNames && box.modelData.live === true && box.modelData.icon !== ""
+                        visible: !thumb.showNames && box.modelData.stack === true && box.modelData.icon !== ""
                         width: 10; height: 10
                         sourceSize: Qt.size(20, 20)
                         source: visible ? backend.iconSource(box.modelData.icon) : ""
                     }
                 }
                 Label {
-                    visible: box.modelData.live === true && (box.modelData.full || box.modelData.count > 1)
+                    visible: box.modelData.stack === true && (box.modelData.full || box.modelData.count > 1)
                     anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3
                     textFormat: Text.PlainText
                     font.pixelSize: thumb.showNames ? 11 : 8
@@ -90,7 +90,7 @@ Item {
                         : (box.modelData.count > 1 ? String(box.modelData.count) : "")
                 }
                 Column {
-                    visible: box.modelData.live !== true
+                    visible: box.modelData.stack !== true
                     anchors.centerIn: parent
                     width: parent.width - 4
                     spacing: 2

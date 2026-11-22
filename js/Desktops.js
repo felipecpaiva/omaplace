@@ -199,15 +199,8 @@ function positions(scene) {
   const layout = scene.layout
   if (layout === "full") return [Object.assign({ pos: 1, rect: [0, 0, 1, 1] }, at(() => true))]
   if (layout === "free") {
-    // windows still at the default whole-screen rect are drawn stepped (preview only), so they do not hide each other
-    let step = 0
-    const shown = (r) => {
-      const whole = !Array.isArray(r) || (r[0] === 0 && r[1] === 0 && r[2] === 1 && r[3] === 1)
-      if (!whole) return r
-      const o = Math.min(0.4, 0.08 * step++)
-      return [o, o, 0.6, 0.6]
-    }
-    const rows = wins.map((w, i) => ({ pos: i + 1, rect: shown(w.rect), index: i, win: w }))
+    // each window where it was saved; the picture stacks the ones on the same spot (pictureRows, D52)
+    const rows = wins.map((w, i) => ({ pos: i + 1, rect: Array.isArray(w.rect) ? w.rect : [0, 0, 1, 1], index: i, win: w }))
     if (wins.length < MAX_COLUMNS) rows.push({ pos: wins.length + 1, rect: null, index: -1, win: null })
     return rows
   }
@@ -288,6 +281,8 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   if (want !== "" && mode !== "" && want !== mode) card.modeNote = "Putting the windows back switches this desktop from " + modeLabel(mode) + " to " + modeLabel(want) + "."
   Object.assign(card, stateOf(card))
   card.title = titleOf(card)
+  // the remembered picture (D52): a Free floating plan as its windows really sit, same spot ones as one stack
+  card.pictureRows = card.layout === "free" ? liveRows(card.rows.filter((r) => !r.empty && r.rect), true) : card.rows
   return card
 }
 
@@ -412,7 +407,7 @@ function overlap(p, q) {
 
 // Windows on (mostly) the same spot are one stack: one box at the first one's place that names them all, so the picture
 // says what is true ("2 windows, full screen") instead of shrinking one of them.
-function liveRows(live) {
+function liveRows(live, planned) {
   const stacks = []
   const cx = (r) => [r[0] + r[2] / 2, r[1] + r[3] / 2]
   for (const a of (live || []).filter((x) => x.rect)) {
@@ -420,8 +415,8 @@ function liveRows(live) {
     if (st) { st.names.push(a.label); continue }
     stacks.push({ rect: a.rect, names: [a.label], icon: a.icon })
   }
-  return stacks.map((g, i) => ({ pos: i + 1, rect: g.rect, empty: false, live: true, icon: g.icon, names: g.names, count: g.names.length,
-    label: g.names.join(" + "), full: isFull(g.rect) }))
+  return stacks.map((g, i) => ({ pos: i + 1, rect: g.rect, empty: false, live: planned !== true, stack: true, icon: g.icon, names: g.names,
+    count: g.names.length, label: g.names.join(" + "), full: isFull(g.rect) }))
 }
 
 function isFull(r) { return !!r && r[0] < 0.02 && r[1] < 0.02 && r[2] > 0.96 && r[3] > 0.96 }

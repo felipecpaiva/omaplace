@@ -270,9 +270,9 @@ test("a guessed class: noted, then confirmed once the app is open, then a re-pic
   assert.ok(!row.notes.some((n) => /guess/.test(n)))
 })
 
-test("positions: free windows at the default rect are drawn stepped, others as saved", () => {
+test("positions: free windows keep their saved spot, whole screen ones too (the picture stacks them, D52)", () => {
   const fw = [win("a"), win("b", undefined, { rect: [0.5, 0, 0.5, 1] }), win("c"), win("d", undefined, { rect: undefined })].map((w) => { delete w.zone; return w })
-  assert.deepEqual(D.positions({ layout: "free", windows: fw }).map((r) => r.rect), [[0, 0, 0.6, 0.6], [0.5, 0, 0.5, 1], [0.08, 0.08, 0.6, 0.6], [0.16, 0.16, 0.6, 0.6], null])
+  assert.deepEqual(D.positions({ layout: "free", windows: fw }).map((r) => r.rect), [[0, 0, 1, 1], [0.5, 0, 0.5, 1], [0, 0, 1, 1], [0, 0, 1, 1], null])
 })
 
 test("edit on a not connected focused-monitor plan (identity empty, focused)", () => {
@@ -540,4 +540,17 @@ test("hyprmoncfg: per display numbers, the active strategy, monitors the rules l
   assert.equal(D.hyprmoncfgStrategy([st, JSON.stringify({ name: "Two", workspaces: { enabled: false, strategy: "sequential" } })].join("\n")), "off")
   assert.equal(D.hyprmoncfgStrategy(""), "", "no hyprmoncfg")
   assert.equal(D.hyprmoncfgStrategy("not json"), "")
+})
+
+test("a remembered floating desktop is drawn where its windows sit, stacked (D52)", () => {
+  const full = plan("free", [win("org.example.Chat", undefined, { rect: [0, 0, 1, 1] }), win("org.example.Editor", undefined, { rect: [0, 0, 1, 1] }),
+    win("org.example.Calc", undefined, { rect: [0.6, 0.1, 0.3, 0.5] })])
+  const c = D.cards(live, doc({ p: full }), {}).groups[0].cards[1]
+  assert.deepEqual(c.rows[0].rect, [0, 0, 1, 1], "the editor rows keep the saved spot")
+  assert.equal(c.pictureRows.length, 2, "two full screen windows are one stack")
+  assert.deepEqual(c.pictureRows[0].rect, [0, 0, 1, 1])
+  assert.equal(c.pictureRows[0].count, 2)
+  assert.equal(c.pictureRows[0].full, true)
+  assert.equal(c.pictureRows[0].live, false, "drawn as remembered, not as open now")
+  assert.deepEqual(c.pictureRows[1].rect, [0.6, 0.1, 0.3, 0.5])
 })

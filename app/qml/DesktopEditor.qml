@@ -86,7 +86,7 @@ ColumnLayout {
             ZoneThumb {
                 objectName: "desktopPicture"
                 Layout.fillWidth: true
-                rows: editor.card.plan ? (editor.card.rows || []) : (editor.card.liveRows || [])
+                rows: editor.card.plan ? (editor.card.pictureRows || editor.card.rows || []) : (editor.card.liveRows || [])
                 emptyText: editor.card.plan || editor.hasLive ? "" : qsTr("Nothing is open here")
             }
         }
