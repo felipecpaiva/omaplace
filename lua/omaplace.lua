@@ -1381,7 +1381,7 @@ function M.desktops(req_id)
       if type(name) == "string" and type(text) == "string" then list[#list + 1] = { name = name, zones = text } end
     end
     table.sort(list, function(a, b) return a.name < b.name end)
-    d.omagnet = { loaded = true, layouts = list }
+    d.omagnet = { loaded = true, layouts = list, config = type(om.config_path) == "string" and om.config_path or "" }
     -- D35: the layout omagnet's own config gives each desktop (workspace entry, else the monitor's), never its key override
     local ws_l = type(cfg.workspace_layouts) == "table" and cfg.workspace_layouts or {}
     local mon_l = type(cfg.zone_layouts) == "table" and cfg.zone_layouts or {}

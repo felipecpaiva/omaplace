@@ -8,4 +8,8 @@ mkdir -p build-tests
 cd build-tests
 qmake6 ../tests/settings_tests.pro >/dev/null
 make -j"$(nproc)" >/dev/null
-QT_QPA_PLATFORM=offscreen ./settings-tests -silent
+# a memory limit, so a runaway test kills only itself (a self-chained warning handler once took the whole session down)
+if command -v systemd-run >/dev/null && systemd-run --user --scope -q true 2>/dev/null; then
+  exec systemd-run --user --scope -q -p MemoryMax=1500M -p MemorySwapMax=0 env QT_QPA_PLATFORM=offscreen timeout 300 ./settings-tests -silent
+fi
+QT_QPA_PLATFORM=offscreen timeout 300 ./settings-tests -silent

@@ -18,6 +18,8 @@ import "js/PlanMoves.js" as PlanMoves
 import "js/ModeSwitch.js" as ModeSwitch
 import "js/Desktops.js" as Desktops
 import "js/AppSeam.js" as AppSeam
+import "js/OmagnetBridge.js" as OmagnetBridge
+import "js/Zones.js" as Zones
 
 // omaplace service (design 4.3, 6.2, 6.3, 7.2): the CLI's IPC target and the only file that runs processes.
 // All data work goes through the js/ modules. One slow request (save, open, rule add) runs at a time; every other
@@ -140,6 +142,7 @@ Item {
     if (oldText !== "") bakScenes.setText(oldText)
     if (root.writeError === "") scenesFile.setText(text)
     if (root.writeError === "") root.writePlans(text)
+    if (root.writeError === "") root.syncOmagnet(text)
     return root.writeError
   }
 
@@ -773,6 +776,39 @@ Item {
 
   function refreshMonitors() { if (!monitorsProc.running) monitorsProc.running = true }
 
+  // ---- the omagnet bridge (D43): every desktop plan with zones is also omagnet's layout for that desktop, so dragging a
+  // window there snaps to the same zones. Only while omagnet's Lua is loaded; only omaplace's own entries change.
+  function syncOmagnet(scenesText) {
+    let om = root.desktopsLive.omagnet
+    if (!om || !om.loaded || typeof om.config !== "string" || om.config === "") return
+    try {
+      let doc = SceneStore.parse(scenesText)
+      omagnetFile.path = om.config
+      let text = root.readNow(omagnetFile)
+      let next = text
+      for (let m of (root.desktopsLive.monitors || [])) {
+        for (let s of (m.slots || [])) {
+          let found = Desktops.findPlan(doc.scenes, m.identity, s.slot, m.focused === true)
+          let z = found && !found.scene.planError ? Zones.ofLayout(found.scene.layout || "") : {}
+          next = OmagnetBridge.setDesktop(next, s.workspace, z.zones ? Zones.toText(z.zones) : "").text
+        }
+      }
+      if (next === text) return
+      if (text !== "") { omagnetBak.setText(text); root.writeOmagnet(next); return }
+      // no config yet: its folder may not exist either (FileView does not make folders)
+      root.omagnetPending = next
+      omagnetMkdir.command = ["mkdir", "-p", "--", om.config.slice(0, om.config.lastIndexOf("/"))]
+      omagnetMkdir.running = true
+    } catch (e) { console.warn("omaplace: omagnet bridge: " + e) }
+  }
+
+  property string omagnetPending: ""
+  function writeOmagnet(text) {
+    omagnetFile.setText(text)
+    if (!omagnetReload.running) omagnetReload.running = true
+  }
+  Process { id: omagnetMkdir; onExited: function (code) { if (code === 0 && root.omagnetPending !== "") root.writeOmagnet(root.omagnetPending); root.omagnetPending = "" } }
+
   // ---- the settings app (design 17, D37, D38)
 
   property bool appAttached: false
@@ -1278,6 +1314,9 @@ Item {
   FileView { id: countFile; blockLoading: true; printErrors: false }
   FileView { id: answerFile; blockLoading: true; printErrors: false }
   FileView { id: appReqFile; blockLoading: true; printErrors: false }
+  FileView { id: omagnetFile; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false }
+  FileView { id: omagnetBak; path: omagnetFile.path + ".omaplace.bak"; blockWrites: true; atomicWrites: true; printErrors: false }
+  Process { id: omagnetReload; command: ["hyprctl", "eval", "return _G.omagnet and _G.omagnet.reload_config()"] }
   FileView { id: appOutFile; blockWrites: true; atomicWrites: true; printErrors: false }
   FileView { id: menuFile; path: root.menuPath; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the Omarchy menu file" }
   FileView { id: menuBak; path: root.menuPath + ".omaplace.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the menu backup" }

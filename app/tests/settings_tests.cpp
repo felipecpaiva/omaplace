@@ -131,6 +131,13 @@ class SettingsTests : public QObject {
         QTest::keyClick(w, Qt::Key_Return);
         QTest::qWait(50);
     }
+    // The layout tools wait under "Change layout..." (D44): open them like a person would, then find the control.
+    QQuickItem *inTools(QQuickWindow *w, QQuickItem *c, const QString &name) {
+        for (auto *i : all(c, name)) if (i->isVisible()) return i;
+        if (auto *more = find(c, "changeLayout")) click(w, more);
+        QTest::qWait(100);
+        return find(c, name);
+    }
     struct Window {
         Theme theme;
         Backend backend;
@@ -229,7 +236,7 @@ private slots:
     void pages() {
         reset();
         g_warnings.clear();
-        g_previous = qInstallMessageHandler(collect);
+        // the handler is installed once in main(): a test that fails early never chains it to itself
         Theme theme;
         Backend backend(m_rt, m_shell);
         QQmlApplicationEngine engine;
@@ -250,7 +257,7 @@ private slots:
         auto tiles = all(w->contentItem(), "tile-1");
         QCOMPARE(tiles.size(), 2);
         click(w, tiles.at(1));
-        auto *picker = find(w->contentItem(), "layoutPicker");
+        auto *picker = inTools(w, w->contentItem(), "layoutPicker");
         QVERIFY(picker);
         QCOMPARE(picker->property("displayText").toString(), QString("No plan"));
         QVariantList opts = picker->property("model").toList();
@@ -316,7 +323,6 @@ private slots:
         QTest::keyClick(w, Qt::Key_1, Qt::ControlModifier);
         QTRY_COMPARE(engine.rootObjects().first()->property("page").toInt(), 0);
 
-        qInstallMessageHandler(g_previous);
         const QStringList qmlWarnings = g_warnings.filter(QRegularExpression("qml|QML|\\.js:"));
         QVERIFY2(qmlWarnings.isEmpty(), qPrintable(qmlWarnings.join("\n")));
     }
@@ -325,7 +331,7 @@ private slots:
     void everyControl() {
         reset();
         g_warnings.clear();
-        g_previous = qInstallMessageHandler(collect);
+        // the handler is installed once in main(): a test that fails early never chains it to itself
         Window win(m_rt, m_shell);
         auto *w = win.w;
         QVERIFY(w);
@@ -335,9 +341,9 @@ private slots:
 
         // Desktops: desktop 2 (plan, 2 columns): layout, an app in zone 2, open at login
         click(w, all(c, "tile-2").at(0));
-        choose(find(c, "layoutPicker"), "columns:3");
+        choose(inTools(w, c, "layoutPicker"), "columns:3");
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"layout","columns:3","floating"])"), 5000);
-        click(w, find(c, "zoneApp-2"));
+        click(w, inTools(w, c, "zoneApp-2"));
         for (const QChar ch : QString("calc")) QTest::keyClick(w, ch.toLatin1());
         QTest::keyClick(w, Qt::Key_Return);
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"app",{"id":"org.example.Calc","pos":2},"floating"])"), 5000);
@@ -349,9 +355,9 @@ private slots:
         click(w, byText(c, "More"));
         typeIn(w, find(c, "folderField"), "~/example");
         QTRY_VERIFY_WITH_TIMEOUT(sent("setWindow", R"(["desk-2",0,"org.example.Editor","folder","~/example"])"), 5000);
-        click(w, byText(c, "Edit in omagnet"));
-        QTRY_VERIFY_WITH_TIMEOUT(sent("openOmagnet"), 5000);
-        // the built-in zone editor shows when omagnet is not there: draw, split, save
+        // omagnet is never opened (D43): its snapping gets the zones from omaplace, the drawing is always omaplace's own
+        for (auto *i : all(c)) QVERIFY2(!(i->isVisible() && i->property("text").toString() == "Edit in omagnet"), "no Edit in omagnet");
+        QVERIFY2(inTools(w, c, "drawZones"), "Draw zones with omagnet loaded too");
         QVariantMap m = win.backend.model();
         QVariantMap desks = m.value("desks").toMap();
         desks.insert("omagnet", QVariantMap{{"loaded", false}, {"layouts", QVariantList{}}});
@@ -359,15 +365,14 @@ private slots:
         m.insert("seq", 100000);
         QVERIFY(win.backend.applyModel(m));
         QTest::qWait(200);
-        QVERIFY2(!find(c, "layoutPicker") || byText(c, "Edit in omagnet") == nullptr, "Edit in omagnet hidden without omagnet");
-        click(w, find(c, "drawZones"));
+        click(w, inTools(w, c, "drawZones"));
         click(w, byText(c, "Split vertical"));  // nothing selected: says so, changes nothing
         grab(w, "zone-editor");
         click(w, byText(c, "Save"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"layout","0 0 0.5 1; 0.5 0 0.5 1","floating"])"), 5000);
         // a desktop with no plan: picking a layout makes one; "No plan" on a plan asks first
         click(w, all(c, "tile-3").at(0));
-        choose(find(c, "layoutPicker"), "tiled");
+        choose(inTools(w, c, "layoutPicker"), "tiled");
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",3,true,"layout","tiled","tiled"])"), 5000);
 
         // Apps: each rule control, app memory, ignored apps
@@ -440,7 +445,6 @@ private slots:
         grab(w, "help");
         QMetaObject::invokeMethod(help, "accept");
 
-        qInstallMessageHandler(g_previous);
         const QStringList qmlWarnings = g_warnings.filter(QRegularExpression("qml|QML|\\.js:"));
         QVERIFY2(qmlWarnings.isEmpty(), qPrintable(qmlWarnings.join("\n")));
     }
@@ -455,9 +459,9 @@ private slots:
         auto *c = w->contentItem();
         auto *root = win.engine.rootObjects().first();
         click(w, all(c, "tile-2").at(0));
-        choose(find(c, "layoutPicker"), "columns:3");
+        choose(inTools(w, c, "layoutPicker"), "columns:3");
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan"), 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(find(c, "layoutPicker")->property("displayText").toString(), QString("2 columns"), 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(inTools(w, c, "layoutPicker")->property("displayText").toString(), QString("2 columns"), 3000);
         QTRY_VERIFY_WITH_TIMEOUT(root->property("toastBad").toBool(), 3000);
         click(w, find(c, "openAtLogin"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"login",false,"floating"])"), 5000);
@@ -489,12 +493,12 @@ private slots:
         QTest::qWait(300);
         auto *c = w->contentItem();
         click(w, all(c, "tile-2").at(0));
-        choose(find(c, "layoutPicker"), "");
+        choose(inTools(w, c, "layoutPicker"), "");
         auto *confirm = win.engine.rootObjects().first()->findChild<QObject *>("confirm");
         QTRY_VERIFY_WITH_TIMEOUT(confirm->property("visible").toBool(), 3000);
         QMetaObject::invokeMethod(confirm, "reject");
         QTRY_VERIFY_WITH_TIMEOUT(!confirm->property("visible").toBool(), 3000);
-        QCOMPARE(find(c, "layoutPicker")->property("displayText").toString(), QString("2 columns"));
+        QCOMPARE(inTools(w, c, "layoutPicker")->property("displayText").toString(), QString("2 columns"));
         QVERIFY(!sent("removeScene"));
     }
 
@@ -513,7 +517,7 @@ private slots:
         QTest::qWait(300);
         auto *c = w->contentItem();
         click(w, all(c, "tile-2").at(0));
-        click(w, find(c, "drawZones"));
+        click(w, inTools(w, c, "drawZones"));
         QVERIFY(byText(c, "Split horizontal"));
         click(w, all(c, "tile-3").at(0));
         QTest::qWait(100);
@@ -553,7 +557,7 @@ private slots:
         QTest::qWait(300);
         auto *c = w->contentItem();
         click(w, all(c, "tile-2").at(0));
-        click(w, find(c, "zoneApp-2"));
+        click(w, inTools(w, c, "zoneApp-2"));
         for (const QChar ch : QString("calc")) QTest::keyClick(w, ch.toLatin1());
         QTest::keyClick(w, Qt::Key_Return);
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan"), 5000);
@@ -617,7 +621,7 @@ private slots:
         start("app-names");
         say("Two apps, one name: now told apart"); pause(1200);
         click(w, all(c, "tile-2").at(0)); pause(600);
-        click(w, find(c, "zoneApp-2")); pause(900);
+        click(w, inTools(w, c, "zoneApp-2")); pause(900);
         for (const QChar ch : QString("pad")) { QTest::keyClick(w, ch.toLatin1()); pause(220); }
         pause(1800);
         say("A shared window class gets a note"); 
@@ -645,12 +649,12 @@ private slots:
         say("Layouts that fit the desktop come first"); pause(1000);
         click(w, all(c, "tile-3").at(0)); pause(700);
         say("Tiled desktop: Tiled (now) first");
-        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", true); pause(2600);
-        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", false); pause(400);
+        inTools(w, c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", true); pause(2600);
+        inTools(w, c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", false); pause(400);
         click(w, all(c, "tile-1").at(1)); pause(700);
         say("Floating: its omagnet layout first");
-        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", true); pause(3000);
-        find(c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", false); pause(400);
+        inTools(w, c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", true); pause(3000);
+        inTools(w, c, "layoutPicker")->property("popup").value<QObject *>()->setProperty("visible", false); pause(400);
         stop();
 
         // 4. draw zones (without omagnet)
@@ -664,7 +668,7 @@ private slots:
         start("draw-zones");
         say("No omagnet? Draw zones with the mouse"); pause(800);
         click(w, all(c, "tile-2").at(0)); pause(600);
-        click(w, find(c, "drawZones")); pause(1200);
+        click(w, inTools(w, c, "drawZones")); pause(1200);
         say("Pick a zone, split it"); 
         {
             QQuickItem *canvas = nullptr;
@@ -689,21 +693,21 @@ private slots:
         QTest::qWait(300);
         auto *c = w->contentItem();
         click(w, all(c, "tile-3").at(0));
-        QVERIFY(find(c, "openNow"));
+        QVERIFY(find(c, "desktopPicture"));
         bool calc = false, tui = false;
-        for (auto *i : all(find(c, "openNow"))) {
+        for (auto *i : all(find(c, "desktopPicture"))) {
             if (!i->isVisible()) continue;
             calc = calc || i->property("text").toString() == "Calculator";
             tui = tui || i->property("text").toString() == "TUI.tile (one of 2 apps)";
         }
         QVERIFY2(calc, "an installed app shows by its name");
         QVERIFY2(tui, "a shared class shows too");
-        QVERIFY2(find(c, "livePreview"), "a desktop with no plan draws its open apps");
+        
         grab(w, "open-now");
         click(w, find(c, "planFromDesktop"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("planFromDesktop", R"(["Example Corp EX27",3,true,"tiled",13])"), 5000);
         click(w, all(c, "tile-2").at(0));
-        click(w, find(c, "planFromDesktop"));
+        click(w, find(c, "updateFromNow"));  // a remembered desktop: Update from now asks first
         auto *confirm = win.engine.rootObjects().first()->findChild<QObject *>("confirm");
         QTRY_VERIFY_WITH_TIMEOUT(confirm->property("visible").toBool(), 3000);
         QVERIFY(!sent("planFromDesktop", R"(["Example Corp EX27",2,true,"floating",12])"));
@@ -711,7 +715,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(sent("planFromDesktop", R"(["Example Corp EX27",2,true,"floating",12])"), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!confirm->property("visible").toBool(), 3000);
         click(w, all(c, "tile-4").at(0));
-        QVERIFY2(!find(c, "openNow"), "an empty desktop shows no list");
+        QVERIFY2(!find(c, "planFromDesktop"), "an empty desktop has nothing to remember");
     }
 
     // Read only, against the real service (OMAPLACE_LIVE=1 and OMAPLACE_LIVE_OUT=<folder for the pictures>): the app
@@ -721,7 +725,7 @@ private slots:
         const QString out = qEnvironmentVariable("OMAPLACE_LIVE_OUT");
         QVERIFY2(!out.isEmpty(), "OMAPLACE_LIVE_OUT: a folder outside the repo (the pictures show real app names)");
         g_warnings.clear();
-        g_previous = qInstallMessageHandler(collect);
+        // the handler is installed once in main(): a test that fails early never chains it to itself
         Window win{QString(), QString()};
         QVERIFY(win.w);
         QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 8000);
@@ -734,7 +738,6 @@ private slots:
             QTest::qWait(400);
             win.w->grabWindow().save(out + QString("/live-page-%1.png").arg(i));
         }
-        qInstallMessageHandler(g_previous);
         const QStringList qmlWarnings = g_warnings.filter(QRegularExpression("qml|QML|\\.js:"));
         QVERIFY2(qmlWarnings.isEmpty(), qPrintable(qmlWarnings.join("\n")));
     }
@@ -762,6 +765,7 @@ int main(int argc, char **argv) {
         if (!theme.isEmpty()) QIcon::setThemeName(theme);
     }
     QQuickStyle::setStyle("Material");
+    g_previous = qInstallMessageHandler(collect);
     SettingsTests t;
     return QTest::qExec(&t, argc, argv);
 }

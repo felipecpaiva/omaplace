@@ -269,6 +269,7 @@ function cardOf(mon, slot, ws, found, live, ctx) {
     live: liveApps((live.wsClasses || {})[ws], ctx.apps, mon.area)
   }
   card.liveRows = liveRows(card.live)
+  card.liveSummary = liveSummary(card.liveRows)
   if (!found) return card
   const s = found.scene
   card.name = found.name
@@ -392,19 +393,31 @@ function overlap(p, q) {
   return w > 0 && h > 0 ? (w * h) / Math.min(p[2] * p[3], q[2] * q[3]) : 0
 }
 
-// Windows stacked on (mostly) the same spot are drawn as a small pile, each one shifted down and right, so every name shows.
+// Windows on (mostly) the same spot are one stack: one box at the first one's place that names them all, so the picture
+// says what is true ("2 windows, full screen") instead of shrinking one of them.
 function liveRows(live) {
-  const rows = []
+  const stacks = []
+  const cx = (r) => [r[0] + r[2] / 2, r[1] + r[3] / 2]
   for (const a of (live || []).filter((x) => x.rect)) {
-    // mostly covered and centred near the same point: the names would print on top of each other
-    const cx = (r) => [r[0] + r[2] / 2, r[1] + r[3] / 2]
-    const near = rows.filter((r) => overlap(r.base, a.rect) > 0.6 && Math.hypot(cx(r.base)[0] - cx(a.rect)[0], cx(r.base)[1] - cx(a.rect)[1]) < 0.12).length
-    const d = Math.min(0.3, near * 0.1)
-    const r = a.rect
-    const rect = near ? [Math.min(r[0] + d, 0.9), Math.min(r[1] + d, 0.9), Math.max(0.1, r[2] - d), Math.max(0.1, r[3] - d)] : r
-    rows.push({ pos: rows.length + 1, rect, base: r, empty: false, label: a.label, icon: a.icon, live: true })
+    const st = stacks.find((g) => overlap(g.rect, a.rect) > 0.6 && Math.hypot(cx(g.rect)[0] - cx(a.rect)[0], cx(g.rect)[1] - cx(a.rect)[1]) < 0.12)
+    if (st) { st.names.push(a.label); continue }
+    stacks.push({ rect: a.rect, names: [a.label], icon: a.icon })
   }
-  return rows.map((x) => { const o = Object.assign({}, x); delete o.base; return o })
+  return stacks.map((g, i) => ({ pos: i + 1, rect: g.rect, empty: false, live: true, icon: g.icon, names: g.names, count: g.names.length,
+    label: g.names.join(" + "), full: isFull(g.rect) }))
+}
+
+function isFull(r) { return !!r && r[0] < 0.02 && r[1] < 0.02 && r[2] > 0.96 && r[3] > 0.96 }
+
+// One line about what is open on a desktop now, for the editor: "Reddit and Google Chrome, both full screen".
+function liveSummary(rows) {
+  if (!rows || rows.length === 0) return ""
+  const parts = rows.map((r) => {
+    const names = r.names.length <= 2 ? r.names.join(" and ") : r.names.slice(0, -1).join(", ") + " and " + r.names[r.names.length - 1]
+    if (r.full) return names + (r.count === 2 ? ", both full screen" : r.count > 2 ? ", all full screen" : ", full screen")
+    return r.count > 1 ? names + ", stacked" : names
+  })
+  return parts.join("; ")
 }
 
 // A captured scene of one desktop as that desktop's plan (D41). The mode Omarchy has now decides the layout, so Open
