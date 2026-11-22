@@ -20,7 +20,8 @@ function M.with(o, plan)
   local S = {}
 
   local function list_of(monitor)
-    if type(monitor) ~= "table" then return nil end
+    local tm = type(monitor)
+    if tm ~= "table" and tm ~= "userdata" then return nil end -- Hyprland hands monitors over as userdata
     return lists[monitor.name] or lists["desc:" .. tostring(monitor.description or "")]
   end
 
