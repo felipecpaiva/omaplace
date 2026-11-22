@@ -21,7 +21,10 @@ ColumnLayout {
   readonly property string draft: editor.view ? editor.view.drafts[editor.model.key] || "" : ""
   readonly property bool zoned: !!Zones.ofLayout(editor.model.layout || "").zones // a zone layout: it can be drawn
   readonly property bool drawing: !!editor.view && editor.view.drawKey === editor.model.key
-  readonly property var layoutOptions: [{ value: "", label: "No plan" }].concat(Desktops.LAYOUT_CHOICES, [{ value: "custom", label: "Custom zones" }])
+  // omagnet's own layouts, while omagnet is loaded (D31): offered by name, stored as their zones (works without omagnet)
+  readonly property var omagnet: editor.view && editor.view.desks.omagnet ? editor.view.desks.omagnet : ({ loaded: false, layouts: [] })
+  readonly property var layoutOptions: [{ value: "", label: "No plan" }].concat(Desktops.LAYOUT_CHOICES,
+    editor.omagnet.layouts.map(function (l) { return { value: l.zones, label: "omagnet: " + l.name } }), [{ value: "custom", label: "Custom zones" }])
 
   spacing: Style.spacing.sm
 
@@ -93,7 +96,7 @@ ColumnLayout {
       }
     }
     Button {
-      visible: editor.writable && !editor.drawing && (editor.custom || editor.zoned)
+      visible: editor.writable && !editor.drawing && (editor.custom || editor.zoned) && !editor.omagnet.loaded // omagnet's editor then
       Layout.alignment: Qt.AlignBottom
       text: "Draw zones"
       foreground: editor.panel.foreground
@@ -105,11 +108,20 @@ ColumnLayout {
         editor.view.drawKey = editor.model.key
       }
     }
+    Button {
+      visible: editor.omagnet.loaded
+      Layout.alignment: Qt.AlignBottom
+      text: "Edit in omagnet"
+      foreground: editor.panel.foreground
+      accent: editor.panel.accent
+      fontFamily: editor.panel.fontFamily
+      onClicked: editor.panel.service.openOmagnet()
+    }
     Binding { target: zonesField; property: "text"; value: editor.draft !== "" ? editor.draft : editor.model.choice === "custom" ? editor.model.layout : ""; restoreMode: Binding.RestoreNone }
   }
   Note {
     panel: editor.panel
-    text: "A zone layout or Free floating switches this desktop to floating when you press Open all. Draw zones edits the zones with the mouse; custom zones can also be typed as x y w h fractions, separated by ;."
+    text: "A zone layout or Free floating switches this desktop to floating when you press Open all. Draw zones edits the zones with the mouse; custom zones can also be typed as x y w h fractions, separated by ;." + (editor.omagnet.loaded ? " Layouts made in omagnet (Edit in omagnet, then its Layouts tab) show in the list after the page is opened again." : "")
   }
   // The drawing lives on the page (drawText), so a rebuild of this card while drawing keeps it.
   Loader {

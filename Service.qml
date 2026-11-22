@@ -935,6 +935,7 @@ Item {
     let brace = text.indexOf("{")
     let d = c === "ok" && brace !== -1 ? Summary.parseJson(text.slice(brace)) : null
     root.deskNext.monitors = d && Array.isArray(d.monitors) ? d.monitors : []
+    root.deskNext.omagnet = d ? d.omagnet : null
     if (!d) root.deskNext.reason = c === "no_lua" ? "The omaplace Lua module is not loaded in Hyprland" : "No desktop list from the Lua module (" + (c || "no answer") + ")"
     root.deskRun(deskWs, ["hyprctl", "workspaces", "-j"])
   }
@@ -991,6 +992,7 @@ Item {
       let doc = SceneStore.parse(root.readNow(scenesFile))
       let m = Desktops.cards(root.desktopsLive, doc, { rules: root.config().rules, apps: root.appChoices(), entries: root.entries(), liveNames: root.liveMonitors })
       m.reason = root.desktopsLive.reason || ""
+      m.omagnet = Desktops.omagnetLayouts(root.desktopsLive.omagnet)
       m.loading = root.deskBusy && !root.desktopsLive.monitors
       return m
     } catch (e) { return { groups: [], reason: String(e.message || e), loading: false } }
@@ -1071,6 +1073,8 @@ Item {
   Process { id: deskWs; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskWs.gen === root.deskGen) root.onDeskWorkspaces(text) } }
   Process { id: deskClients; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskClients.gen === root.deskGen) root.onDeskClients(text) } }
   Process { id: deskMode; property int gen: 0; stdout: StdioCollector { onStreamFinished: if (deskMode.gen === root.deskGen) root.onDeskMode(text) } }
+  // omagnet's own settings window, for its layout editor (D31); only offered while omagnet's Lua is loaded.
+  function openOmagnet() { Quickshell.execDetached(["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omagnet"]) }
   Process { id: settingsProc; command: ["omarchy-shell", "shell", "toggle", "io.github.felipecpaiva.omaplace"] }
 
   Process {

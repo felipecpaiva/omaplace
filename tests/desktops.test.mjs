@@ -319,3 +319,18 @@ test("cards: a plan for the focused monitor with no monitor focused gets the not
   assert.equal(m.groups[1].name, "Focused monitor (not connected)")
   assert.equal(m.groups[1].cards[0].focused, true)
 })
+
+test("omagnet layouts (D31): read, recognized by their zones, offered by name", () => {
+  const om = D.omagnetLayouts({ loaded: true, layouts: [
+    { name: "coding", zones: "0 0 0.7 1; 0.7 0 0.3 1" },
+    { name: "bad name!", zones: "0 0 1 1" },
+    { name: "broken", zones: "0 0 2 1" }] })
+  assert.equal(om.loaded, true)
+  assert.deepEqual(om.layouts.map((l) => l.name), ["coding"])
+  assert.equal(D.layoutLabel("0 0 0.70 1; 0.7 0 0.3 1", om), "Zones: omagnet coding", "same zones, other spelling")
+  assert.equal(D.layoutChoice("0 0 0.7 1; 0.7 0 0.3 1", om), om.layouts[0].zones)
+  assert.equal(D.layoutChoice("0 0 0.5 1; 0.5 0 0.5 1", om), "custom", "other zones stay custom")
+  assert.equal(D.layoutLabel("columns:2", om), "Zones: 2 columns", "built-ins keep their own names")
+  assert.equal(D.layoutLabel("0 0 0.7 1; 0.7 0 0.3 1"), "Zones: custom (2)", "without omagnet: custom")
+  assert.deepEqual(D.omagnetLayouts(undefined), { loaded: false, layouts: [] })
+})

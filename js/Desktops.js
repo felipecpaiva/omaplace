@@ -23,18 +23,45 @@ const NAME_MAX = 40
 
 function isZoneLayout(layout) { return typeof layout === "string" && layout !== "" && SIMPLE.indexOf(layout) === -1 }
 
-// The badge words of a plan layout.
-function layoutLabel(layout) {
+// omagnet's layouts from the desktops report (D31): { loaded, layouts: [{ name, zones }] }, zones as normalized text so a
+// plan holding the same zones is recognized. Names and zones that do not read are left out.
+function omagnetLayouts(raw) {
+  const r = raw && typeof raw === "object" ? raw : {}
+  const list = Array.isArray(r.layouts) ? r.layouts : []
+  const out = []
+  for (const l of list) {
+    if (!l || typeof l.name !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(l.name)) continue
+    const z = Zones.parse(l.zones)
+    if (!z.error) out.push({ name: l.name, zones: Zones.toText(z.zones) })
+  }
+  return { loaded: r.loaded === true, layouts: out }
+}
+
+// The omagnet layout a plan's zones text is, or null.
+function omagnetOf(layout, om) {
+  if (!om || !Array.isArray(om.layouts) || typeof layout !== "string" || SIMPLE.indexOf(layout) !== -1) return null
+  const z = Zones.parse(layout)
+  if (z.error) return null
+  const text = Zones.toText(z.zones)
+  return om.layouts.find((l) => l.zones === text) || null
+}
+
+// The badge words of a plan layout. om: omagnetLayouts(), or nothing.
+function layoutLabel(layout, om) {
   const known = LAYOUT_CHOICES.find((c) => c.value === layout)
   if (known) return isZoneLayout(layout) ? "Zones: " + known.label : known.label
+  const mine = omagnetOf(layout, om)
+  if (mine) return "Zones: omagnet " + mine.name
   const z = Zones.ofLayout(layout)
   return z.error ? "Bad layout" : "Zones: custom (" + z.zones.length + ")"
 }
 
-// The picker value of a layout: its own name when listed, "custom" for zones text.
-function layoutChoice(layout) {
+// The picker value of a layout: its own name when listed, an omagnet layout's zones text, "custom" for other zones text.
+function layoutChoice(layout, om) {
   if (typeof layout !== "string" || layout === "") return ""
-  return LAYOUT_CHOICES.some((c) => c.value === layout) ? layout : "custom"
+  if (LAYOUT_CHOICES.some((c) => c.value === layout)) return layout
+  const mine = omagnetOf(layout, om)
+  return mine ? mine.zones : "custom"
 }
 
 function modeLabel(mode) { return MODE_WORDS[mode] || "" }
@@ -186,10 +213,10 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   const s = found.scene
   card.name = found.name
   card.layout = typeof s.layout === "string" ? s.layout : ""
-  card.choice = layoutChoice(card.layout)
+  card.choice = layoutChoice(card.layout, ctx.omagnet)
   card.openAtLogin = s.open_at_login === true
   card.error = s.planError || ""
-  card.badge = card.error ? "Bad plan" : layoutLabel(card.layout)
+  card.badge = card.error ? "Bad plan" : layoutLabel(card.layout, ctx.omagnet)
   card.rows = card.error ? [] : rowsOf(found.name, s, ctx)
   const want = card.error ? "" : Plan.planMode(card.layout)
   if (want !== "" && mode !== "" && want !== mode) card.modeNote = "Open all switches this desktop from " + modeLabel(mode) + " to " + modeLabel(want) + "."
@@ -206,6 +233,7 @@ function cards(live, doc, ctx) {
   const scenes = (doc && doc.scenes) || {}
   const c = Object.assign({ rules: {}, apps: [], entries: [] }, ctx || {})
   c.seen = seenClasses(scenes, l.classes, c.entries)
+  c.omagnet = omagnetLayouts(l.omagnet)
   c.fallback = false
   c.snaps = {}
   c.holders = {}

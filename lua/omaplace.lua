@@ -1361,6 +1361,17 @@ function M.desktops(req_id)
       function(m, all) return Monitors.fingerprint(m, all).identity end)
   end)
   if not ok then log("desktops failed: " .. tostring(d)); return nil, "failed" end
+  -- omagnet's own layouts ([layout_<name>] zones text), when omagnet is loaded: the page offers them by name (D31)
+  local om = rawget(_G, "omagnet")
+  if type(om) == "table" then
+    local list = {}
+    local cfg = type(om.cfg) == "table" and om.cfg or {}
+    for name, text in pairs(type(cfg.layouts) == "table" and cfg.layouts or {}) do
+      if type(name) == "string" and type(text) == "string" then list[#list + 1] = { name = name, zones = text } end
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    d.omagnet = { loaded = true, layouts = list }
+  end
   if req_id == nil then return d end
   if type(req_id) ~= "string" or #req_id > 64 or not req_id:match("^[%w_%-]+$") then return nil, "bad_req" end
   local text = Json.encode(d)

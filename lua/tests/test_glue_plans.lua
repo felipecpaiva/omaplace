@@ -595,6 +595,13 @@ eq(d.monitors[2].focused, true, "panel focused")
 eq(_G.omaplace.desktops("r1") ~= nil, true, "desktops with a request id")
 eq(read(rt .. "/desktops-r1.json"):find('"workspace":12', 1, true) ~= nil, true, "answer file written")
 eq(select(2, _G.omaplace.desktops("../x")), "bad_req", "bad request id refused")
+eq(d.omagnet, nil, "no omagnet loaded: no omagnet layouts")
+_G.omagnet = { cfg = { layouts = { zeta = "0 0 1 1", coding = "0 0 0.7 1; 0.7 0 0.3 1", [3] = "x" } } }
+local dm = _G.omaplace.desktops()
+eq(dm.omagnet.loaded, true, "omagnet loaded")
+eq(#dm.omagnet.layouts, 2, "its two named layouts")
+eq(dm.omagnet.layouts[1].name, "coding", "sorted by name")
+_G.omagnet = nil
 
 clean()
 print = real_print
