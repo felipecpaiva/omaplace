@@ -11,7 +11,7 @@
 
 Every app opens where it belongs on Omarchy: the right desktop, the right monitor, the right spot. Plan your desktops, save scenes, and bring the whole session back after a reboot.
 
-**Status: v0.2.0.** Desktop plans, placement rules, scenes, session restore (also at login) and app memory, with monitors it recognizes again after a port change. Open items are in [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: v0.2.0.** Desktop plans, placement rules, scenes, session restore (also at login) and app memory, with monitors it recognizes again after a port change. Open items are in [docs/ROADMAP.md](docs/ROADMAP.md), feedback from daily use in [docs/feedback.md](docs/feedback.md).
 
 Not affiliated with or endorsed by Omarchy or 37signals.
 
