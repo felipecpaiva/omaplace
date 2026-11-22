@@ -11,7 +11,7 @@
 
 Every app opens where it belongs on Omarchy: the right desktop, the right monitor, the right spot. Plan your desktops, save scenes, and bring the whole session back after a reboot.
 
-**Status: v0.1.0.** Desktop plans, placement rules, scenes, session restore and app memory, with monitors it recognizes again after a port change. Private for now. Open items are in [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: v0.2.0.** Desktop plans, placement rules, scenes, session restore (also at login) and app memory, with monitors it recognizes again after a port change. Open items are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Not affiliated with or endorsed by Omarchy or 37signals.
 
@@ -24,7 +24,9 @@ Not affiliated with or endorsed by Omarchy or 37signals.
 The settings window opens on the **Desktops** page: one card per desktop (1 to 10) on each monitor, each with a badge
 that says what it is now (Tiled, Scrolling, Floating) or what its plan is. Click a card and pick a layout:
 
-- **Zones:** 2 columns, 3 columns, 2 rows, a 2 by 2 grid, Priority, or your own zones typed as text (the same zones as omagnet).
+- **Zones:** 2 columns, 3 columns, 2 rows, a 2 by 2 grid, Priority, or your own zones: draw them with the mouse ("Draw zones"), or type them as text. With
+  [omagnet](https://github.com/felipecpaiva/omagnet) running, its own layouts are listed by name and "Edit in omagnet"
+  opens its editor instead.
 - **Tiled** or **Scrolling:** the apps open in order, left to right.
 - **Full screen:** one app, maximized, the bar stays.
 - **Free floating:** each window at its own saved spot.
@@ -67,6 +69,10 @@ seconds, and closing everything at shutdown never erases the last good snapshot.
 (or the button on the Session page) brings back the previous login's desktops, each window on its own monitor and
 desktop. It always picks the previous login, never the current one.
 
+To do it by itself after a reboot, set **Restore at login** on the Session page (or `restore_at_login` in
+`config.toml`): **Ask** shows one notification with a Restore button, **Automatic** restores at once. Off is the
+default. It runs only right after a real login, never on a shell restart.
+
 ### Placement rules
 
 "This app always opens on desktop 3 of my big monitor." Add one from the app itself (`omaplace rule add` with the app
@@ -81,6 +87,10 @@ follow = false                  # true: switch to that desktop when the app open
 rect = "0.5 0 0.5 1"            # optional: x y w h as fractions of the screen (here the right half)
 keep_rect = true                # put the window there when it floats (a floating desktop); "Add rule" fills both
 ```
+
+<p align="center"><img src="branding/demo/samespot.gif" alt="A rule with Same spot: Omacalc opens in its spot, is moved away and closed, and opens in the same spot again" width="720"></p>
+
+On the Rules page this is the **Same spot** toggle.
 
 The rule follows the monitor, not the port. If the monitor is unplugged, the rule switches itself off and the app opens
 as usual. It comes back when the monitor does.
@@ -181,19 +191,16 @@ menu" for a Scenes menu with Save this desktop, Open a scene, Restore last sessi
 
 ## Known limits
 
-- Tested on one monitor only. Moving a monitor to another port and unplugging the monitor of a rule are built and unit
-  tested, but not yet checked with a real second monitor.
-- "Open at login" on the Desktops page is built but not yet checked after a real login. Restoring a session after a real
-  new login is not checked either (it passes with a hand-made previous session). Restore at login itself (Ask,
-  Automatic) is not built yet.
 - Switching a desktop's mode: until Omarchy has a command to set the mode of any desktop
   ([omacom/omarchy#19671](https://github.com/omacom/omarchy/pull/19671)), "Open all" focuses that desktop and presses
   Omarchy's layout toggle (at most twice). At login it cannot do that, so the mode is left as it is and the summary says so.
-- Pressing the "Update plan" button with a real mouse click is not checked yet (the command behind it is).
-- No visual zone editor: pick a ready layout or type zones as text.
-- A Chrome window opened from Chrome's own profile menu cannot be placed by profile: its profile cannot be seen.
-- Two windows of the same app in one plan are placed by order, not by content. "Update plan" cannot handle that case,
-  nor a second window in a Full screen plan.
+- Open at login and Restore at login passed two real reboots. The last two fixes (restore before the plans, app names
+  in any letter case) are checked by hand, not yet by a third reboot.
+- Checked by tests and screenshots, not yet by hand clicks: Draw zones, "Edit in omagnet", the Same spot toggle and the
+  "Laptop panel" choice on the Rules page, and pressing "Update plan" with a real click.
+- A Chrome window opened from Chrome's own profile menu cannot be placed by profile: its profile cannot be seen. On a
+  restore, such a window opens with the profiles Chrome had open when it last closed.
+- Two windows of the same app in one plan are placed by order, not by content.
 - A `scenes.toml` made by hand while the shell runs is picked up by the next command or settings open, not at once.
 - Apps restore their own contents (browser tabs, documents). omaplace places windows, it does not restore what is in them.
 

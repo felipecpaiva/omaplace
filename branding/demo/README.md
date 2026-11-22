@@ -4,16 +4,17 @@
 workspace 8. It never makes a virtual monitor and sends no keys: mouse moves and clicks through `/dev/uinput`, pointer
 warps and window moves through `hyprctl eval`, plus the omaplace CLI. It is built on omakit (input, recorder, GIF
 builder and the Stage that guards workspace 8 and puts everything back): 12 fps, 960 wide, a 96 colour palette,
-captions at the top. The README and the v0.1.0 release notes show these four files.
+captions at the top. The README and the release notes show these files.
 
 | Scene | File | What it shows |
 |-------|------|---------------|
 | `desktops` | `desktops.gif` | The Desktops page, the desktop 8 card with its 2 column plan and preview, Open all, both apps in their zones |
 | `snap` | `snap.gif` | Omacalc opened by hand jumps into its zone |
 | `update` | `update.gif` | Omacalc dragged onto the left zone, the "Update plan" notification, its button, the two windows swap |
+| `samespot` | `samespot.gif` | A rule with Same spot: Omacalc opens in its spot, is moved away and closed, and opens there again |
 | `scenes` | `scenes.gif` | Two windows arranged by hand, `omaplace save demo`, closed, `omaplace open demo` brings them back |
 
-Session restore has no GIF: it needs a new login.
+Session restore and restore at login have no GIF: they need a new login, and would show your real apps.
 
 ## Before the first run: calibrate
 

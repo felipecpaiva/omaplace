@@ -3,7 +3,7 @@
 Mouse only (uinput moves and clicks, never keys), hyprctl eval for pointer warps and window dispatch, plus the omaplace
 CLI and settings file edits. omakit (the sibling ../omakit checkout, or OMAKIT_PATH) records and builds each scene as a
 captioned GIF and MP4 in branding/demo/, and its Stage guards workspace 8 and puts everything back.
-Scenes: desktops, snap, update, scenes. --calibrate takes screenshots for the coordinates below and records nothing.
+Scenes: desktops, snap, update, scenes, samespot. --calibrate takes screenshots for the coordinates below and records nothing.
 Privacy: Do Not Disturb is on for the whole run. Your notifications are never dismissed. The update scene turns Do Not
 Disturb off only once no card is on screen (it waits up to 10 s), from the click that triggers the "Update plan"
 notification until the pointer is on its button; it zooms onto the notification area for that part and writes no GIF
@@ -296,7 +296,48 @@ def scene_scenes():
         finish(r, "scenes")
 
 
-SCENES_BY_NAME = {"desktops": scene_desktops, "snap": scene_snap, "update": scene_update, "scenes": scene_scenes}
+RULE_RECT = "0.55 0.12 0.3 0.7"   # the "Same spot" rule's rect: x y w h as fractions of the screen
+RULE_TOML = CONFIG_TOML + f"""
+[rule.calc]
+app = "omacalc"
+monitor = ""
+slot = {SPARE}
+follow = false
+rect = "{RULE_RECT}"
+keep_rect = true
+"""
+
+
+def drag(cls, by):
+    """Drag a window by its title bar; falls back to a dispatch when the press missed the bar."""
+    w = window(cls); (x0, y0) = w["at"]
+    to(x0 + OMACALC_GRAB[0], y0 + OMACALC_GRAB[1]); time.sleep(0.3)
+    m.press(); time.sleep(0.25)
+    m.move(h.physical(by), 0, steps=45, pause=0.015); time.sleep(0.3); m.release(); time.sleep(0.6)
+    w2 = window(cls) or w
+    if abs(w2["at"][0] - x0) < 50:
+        h.ev(f'hl.dispatch(hl.dsp.window.move({{ x = {x0 + by}, y = {y0}, relative = false, window = "address:{w["address"]}" }}))')
+        time.sleep(0.6)
+
+
+def scene_samespot():
+    """A rule with Same spot (keep_rect) on a floating desktop: Omacalc opens at the rule's rect, every time."""
+    baseline(); put(SCENES, "schema = 1\n"); put(CONFIG, RULE_TOML); reload_lua(); rescan()
+    h.set_layout_mode(SPARE, "floating"); focus_ws(SPARE); low_middle()
+    try:
+        with record() as r:
+            time.sleep(0.8); r.caption("A rule: Omacalc on desktop 8, Same spot on"); time.sleep(1.4)
+            launch("omacalc"); r.caption("Open it: it lands in its spot"); wait_for(("omacalc",)); time.sleep(2.2)
+            r.caption("Move it away and close it"); drag("omacalc", -700); time.sleep(0.8)
+            close("omacalc"); time.sleep(0.6)
+            r.caption("Open it again: back in the same spot"); launch("omacalc"); wait_for(("omacalc",)); time.sleep(2.5)
+            finish(r, "samespot")
+    finally:
+        put(CONFIG, CONFIG_TOML); reload_lua()
+
+
+SCENES_BY_NAME = {"desktops": scene_desktops, "snap": scene_snap, "update": scene_update, "scenes": scene_scenes,
+                  "samespot": scene_samespot}
 NEEDS = {"desktops": ("DESKTOPS_TAB", "DESK8_CARD", "OPEN_ALL"), "update": ("NOTIF_BUTTON",)}   # (0, 0) means not calibrated
 
 
