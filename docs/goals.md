@@ -26,7 +26,7 @@ Done when:
 
 Work packages: WP0, WP1, WP2. Live checks: S7 needs a real second monitor, so 2 and 3 may be signed off later.
 
-Status 2026-11-21: checks 1, 4 and 5 passed live ([batch-log/live-M1.md](batch-log/live-M1.md)). 2 and 3 open (need a second monitor).
+Status 2026-11-22: all five checks passed live ([batch-log/live-M1.md](batch-log/live-M1.md)); 2 and 3 with a real second monitor, which also found and fixed a desktop made on the wrong monitor.
 
 ### M2: Scenes and app memory (F2, F5, D18)
 

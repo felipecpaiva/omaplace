@@ -88,3 +88,17 @@ Note: `omaplace restore` prints only `ok`; a counts line like `open` would be ni
 | Menu block on a copy of the real `omarchy-menu.jsonc` | pass: added, still parses, removed back to byte-identical; rows call the CLI by full path. Clicking a real menu row (S6) not done (needs a click) |
 | Settings window | renders (screenshot `docs/media/settings-scenes.png`); other pages need clicks, see `docs/checklist/WP6.md` |
 | Cleanup | hyprland.lua restored byte-identical to its backup, `_G.omaplace` gone, plugin disabled (still installed), test config and state moved to trash, runtime folder removed |
+
+# Live check M1 with a second monitor, 2026-11-22
+
+Laptop panel plus one external monitor (identity `Invalid Vendor Codename - RTK ...`, a generic USB-C display). Rule
+`app = "omacalc"`, that monitor's identity, `slot = 3`, `follow = false`. Apps started and closed through `hyprctl eval`;
+results read with `hyprctl clients -j`, `workspaces -j` and `monitors -j`.
+
+| Check | Result |
+|---|---|
+| Rule on the second monitor (port DP-2) | **fail, then fixed**: Omacalc went to desktop 13 (slot 3 of that monitor's block), but desktop 13 was created on the laptop panel. Hyprland makes a missing workspace on the focused monitor, and Omarchy sends a workspace home only when a monitor comes or goes. Fix: `Place.home` moves a desktop to its own monitor once a window is on it (rules, scene runs, plans, app memory). After the fix: desktop 13 on DP-2, the view stayed on 2 |
+| Cable moved to another port (now DP-1) (M1 check 2) | pass: the rule found the monitor by identity, Omacalc on 13 on DP-1, view on 2 |
+| Monitor unplugged (M1 check 3) | pass: Omacalc opened on the current desktop of the laptop panel, no config error, no omaplace log line. (Omarchy itself moved the open Omacalc from 13 to 4 at the unplug) |
+
+Goals M1 checks 2 and 3 pass. Still open with a second monitor: a session restore whose monitor is missing (WP7s check 5), to run with the restart checks.
