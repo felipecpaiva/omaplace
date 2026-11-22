@@ -400,3 +400,37 @@ test("cards carry the picker options with omagnet's desktop layout", () => {
   assert.equal(m.groups[0].cards[0].options[1].value, "tiled", "desktop 1 is tiled")
   assert.equal(m.groups[0].cards[1].options[1].label, "2 columns (omagnet, this desktop)", "desktop 2 floating with omagnet")
 })
+
+// D41: the apps open now, and a captured desktop as its plan (made-up windows)
+test("apps open now on a desktop, by installed name", () => {
+  const apps = D.appChoices([{ id: "org.example.Editor.desktop", name: "Editor", icon: "ed", startupClass: "org.example.Editor" }])
+  const l2 = { ...live, wsClasses: { 2: ["org.example.Editor", "org.example.Unknown", ""] } }
+  const card = D.cards(l2, doc({}), { apps }).groups[0].cards[1]
+  assert.deepEqual(card.live, [{ class: "org.example.Editor", label: "Editor", icon: "ed" }, { class: "org.example.Unknown", label: "org.example.Unknown", icon: "" }])
+  assert.deepEqual(D.cards(live, doc({}), { apps }).groups[0].cards[0].live, [], "nothing open")
+  const tuis = D.appChoices([{ id: "A.desktop", name: "A", execString: "xdg-terminal-exec --app-id=TUI.tile -e a" },
+    { id: "B.desktop", name: "B", execString: "xdg-terminal-exec --app-id=TUI.tile -e b" }])
+  assert.equal(D.liveApps(["TUI.tile"], tuis)[0].label, "TUI.tile (one of 2 apps)", "a shared class names no app")
+})
+
+test("a captured desktop becomes its plan, in the mode it has", () => {
+  const scene = { windows: [win("org.example.Chat", undefined, { order: 2, rect: [0.5, 0, 0.5, 1], folder: "~/x" }), win("org.example.Editor", undefined, { order: 1, rect: [0.1, 0.1, 0.4, 0.8] })] }
+  const free = D.planFromScene(scene, MON, 2, "floating")
+  assert.equal(free.plan, true)
+  assert.equal(free.layout, "free")
+  assert.equal(free.home_slot, 2)
+  assert.equal(free.windows[0].class, "org.example.Editor", "left to right order")
+  assert.deepEqual(free.windows[0].rect, [0.1, 0.1, 0.4, 0.8], "each window keeps its spot")
+  assert.equal(free.windows[1].folder, "~/x", "folders come with it")
+  const tiled = D.planFromScene(scene, MON, 2, "tiled")
+  assert.equal(tiled.layout, "tiled")
+  assert.equal(tiled.windows[1].zone, 2)
+  assert.equal(tiled.windows[1].floating, false)
+  assert.equal(D.planFromScene(scene, MON, 2, "scrolling").layout, "scrolling")
+  assert.equal(D.planFromScene(scene, MON, 2, "").layout, "tiled", "unknown mode: tiled")
+  assert.equal(scene.windows[0].zone, undefined, "the scene is not changed")
+  const back = roundTrip(doc({ p: free }))
+  assert.equal(back.errors.length, 0, "the plan is a valid scenes.toml")
+  assert.equal(back.scenes.p.windows.length, 2)
+  assert.equal(roundTrip(doc({ p: tiled })).errors.length, 0)
+})

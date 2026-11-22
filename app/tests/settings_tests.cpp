@@ -680,6 +680,39 @@ private slots:
         Q_UNUSED(root);
     }
 
+    // D41: the apps open on a desktop are listed, and one button makes them its plan (a plan there asks first).
+    void openAppsBecomeThePlan() {
+        reset();
+        Window win(m_rt, m_shell);
+        auto *w = win.w;
+        QTRY_VERIFY_WITH_TIMEOUT(win.backend.connected(), 5000);
+        QTest::qWait(300);
+        auto *c = w->contentItem();
+        click(w, all(c, "tile-3").at(0));
+        QVERIFY(find(c, "openNow"));
+        bool calc = false, tui = false;
+        for (auto *i : all(find(c, "openNow"))) {
+            if (!i->isVisible()) continue;
+            calc = calc || i->property("text").toString() == "Calculator";
+            tui = tui || i->property("text").toString() == "TUI.tile (one of 2 apps)";
+        }
+        QVERIFY2(calc, "an installed app shows by its name");
+        QVERIFY2(tui, "a shared class shows too");
+        grab(w, "open-now");
+        click(w, find(c, "planFromDesktop"));
+        QTRY_VERIFY_WITH_TIMEOUT(sent("planFromDesktop", R"(["Example Corp EX27",3,true,"tiled",13])"), 5000);
+        click(w, all(c, "tile-2").at(0));
+        click(w, find(c, "planFromDesktop"));
+        auto *confirm = win.engine.rootObjects().first()->findChild<QObject *>("confirm");
+        QTRY_VERIFY_WITH_TIMEOUT(confirm->property("visible").toBool(), 3000);
+        QVERIFY(!sent("planFromDesktop", R"(["Example Corp EX27",2,true,"floating",12])"));
+        QMetaObject::invokeMethod(confirm, "accept");
+        QTRY_VERIFY_WITH_TIMEOUT(sent("planFromDesktop", R"(["Example Corp EX27",2,true,"floating",12])"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!confirm->property("visible").toBool(), 3000);
+        click(w, all(c, "tile-4").at(0));
+        QVERIFY2(!find(c, "openNow"), "an empty desktop shows no list");
+    }
+
     // Read only, against the real service (OMAPLACE_LIVE=1 and OMAPLACE_LIVE_OUT=<folder for the pictures>): the app
     // connects, gets a model, shows every page without a QML warning. It sends appModel only, never a change.
     void liveReadOnly() {

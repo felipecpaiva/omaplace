@@ -265,7 +265,8 @@ function cardOf(mon, slot, ws, found, live, ctx) {
     key: mon.identity + "\n" + slot, identity: mon.identity, focused: mon.focused === true, monitorName: mon.name, slot, workspace: ws,
     windows: (live.windows || {})[ws] || 0, mode, plan: !!found, name: "", layout: "", choice: "", openAtLogin: false,
     error: "", badge: "No plan" + (mode ? ", now " + modeLabel(mode) : ""), rows: [], modeNote: "", editable: !ctx.fallback,
-    options: layoutOptions(mode, ctx.omagnet, (ctx.omDesks || {})[ws] || null)
+    options: layoutOptions(mode, ctx.omagnet, (ctx.omDesks || {})[ws] || null),
+    live: liveApps((live.wsClasses || {})[ws], ctx.apps)
   }
   if (!found) return card
   const s = found.scene
@@ -353,6 +354,32 @@ function pruneDrafts(drafts, groups) {
 // ---- edits
 
 function clone(v) { return JSON.parse(JSON.stringify(v)) }
+
+// The apps open on a desktop now (D41), for the editor: { class, label, icon } per window, the installed app's name and
+// icon when its window class matches one, else the class. Classes only, never a title.
+function liveApps(classes, apps) {
+  const out = []
+  for (const cls of Array.isArray(classes) ? classes : []) {
+    if (typeof cls !== "string" || cls === "") continue
+    const lc = cls.toLowerCase()
+    const all = (apps || []).filter((x) => (x.startupWMClass || "").toLowerCase() === lc || x.value.toLowerCase() === lc)
+    // a class several apps share (a terminal app's TUI.tile) cannot name one of them
+    if (all.length > 1) out.push({ class: cls, label: cls + " (one of " + all.length + " apps)", icon: all[0].icon })
+    else out.push({ class: cls, label: all.length ? all[0].label : cls, icon: all.length ? all[0].icon : "" })
+  }
+  return out
+}
+
+// A captured scene of one desktop as that desktop's plan (D41). The mode Omarchy has now decides the layout, so Open
+// all never switches it: floating keeps each window's size and spot (Free floating), tiled and scrolling keep the left to
+// right order. Folders, programs and profiles come with the windows, as in a saved scene.
+function planFromScene(scene, identity, slot, mode) {
+  const layout = mode === "floating" ? "free" : mode === "scrolling" ? "scrolling" : "tiled"
+  const plan = newPlan(identity, slot, layout)
+  const wins = (scene && scene.windows ? scene.windows : []).slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+  plan.windows = wins.map((w, i) => placeAt(Object.assign({}, w), layout, i + 1))
+  return plan
+}
 
 function newPlan(identity, slot, layout) {
   return { existing: "move", home_monitor: identity, home_slot: slot, key: "", saved_on: "", plan: true, layout, open_at_login: false, windows: [] }

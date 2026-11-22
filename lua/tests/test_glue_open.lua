@@ -135,6 +135,13 @@ eq(cap:find('"rect":[0,0,0.5,1]', 1, true) ~= nil, true, "rect fraction")
 eq(read("capture-q1.json.tmp"), nil, "no temp file left")
 _G.omaplace.capture("q2", "all")
 eq(read("capture-q2.json"):find("org.example.Far", 1, true) ~= nil, true, "scope all")
+-- D41: one workspace by id, focused or not
+_G.omaplace.capture("q3", "ws:11")
+local c3 = read("capture-q3.json")
+eq(c3:find("org.example.Far", 1, true) ~= nil, true, "ws:11 has the window of workspace 11")
+eq(c3:find("org.example.Editor", 1, true), nil, "and not the focused desktop's")
+_G.omaplace.capture("q4", "ws:x")
+eq(read("capture-q4.json"):find("org.example.Editor", 1, true) ~= nil, true, "a bad ws scope falls back to the focused desktop")
 eq(_G.omaplace.capture("../x", "all"), nil, "bad request id refused")
 eq(fake.pending_timers(), 0, "capture arms nothing")
 

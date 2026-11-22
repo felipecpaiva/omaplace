@@ -960,3 +960,9 @@ on purpose: deletes ask in a dialog instead of an Undo bar (the service keeps a 
 "From a window..." waits 4 seconds for a click instead of listing open windows. `appAttached` stays on after the app
 closes, so the service keeps writing `app-model.json` when the desktops change (small; clear it on a timeout if it
 shows).
+
+## 18. The apps open now become the plan (feedback 4, D41)
+
+| # | Decision | Status |
+|---|---|---|
+| D41 | The Desktops model gives each desktop `live`: the apps open on it now (class, the installed app's name and icon when one matches; never a title), from the service's `hyprctl clients` read. "Make these the plan" (op `planFromDesktop`) runs the save flow on that desktop's workspace (Lua `capture(req, "ws:<id>")`, a new scope), then turns the captured scene into the desktop's plan with `Desktops.planFromScene`: the mode Omarchy has now decides the layout (floating: Free floating with each window's rect; tiled: Tiled; scrolling: Scrolling, left to right order kept), so Open all never switches the mode for it. The plan keeps its name when one exists (asked first in the app), else gets `newSceneName` | decided (Felipe, 2026-11-22) |

@@ -307,7 +307,8 @@ Item {
   }
 
   function evalCapture() {
-    evalProc.command = ["hyprctl", "eval", LuaCall.wrap("capture", [LuaLiteral.encode(root.req.id), "\"focused\""], LuaLiteral.encode(root.replyPath()))]
+    let scope = root.req.ws > 0 ? "ws:" + root.req.ws : "focused"
+    evalProc.command = ["hyprctl", "eval", LuaCall.wrap("capture", [LuaLiteral.encode(root.req.id), LuaLiteral.encode(scope)], LuaLiteral.encode(root.replyPath()))]
     evalProc.running = true
   }
 
@@ -413,7 +414,9 @@ Item {
       if (sc.capture.windows.length === 0) { root.finish(root.fail("empty", "nothing to save on this desktop")); return }
       let w = root.writableScenes()
       if (w.error) { root.finish(w.error); return }
-      w.doc.scenes[r.name] = SceneStore.mergeCapture(w.doc.scenes[r.name], sc.capture)
+      let t = r.planTarget
+      if (t) w.doc.scenes[r.name] = Desktops.planFromScene(SceneStore.mergeCapture(null, sc.capture), t.identity, t.slot, t.mode) // D41
+      else w.doc.scenes[r.name] = SceneStore.mergeCapture(w.doc.scenes[r.name], sc.capture)
       let err = root.writeScenes(w.text, SceneStore.serialize(w.doc))
       if (err !== "") { root.finish(root.fail("failed", err)); return }
       let res = sc.counts
@@ -823,6 +826,7 @@ Item {
     case "setWindow": return root.setSceneWindow(a[0], a[1], a[2], a[3], a[4])
     case "pickFolder": return root.pickFolder(a[0], a[1], a[2])
     case "ruleNew": return root.ruleNew(a[0], a[1], a[2])
+    case "planFromDesktop": return root.startPlanFromDesktop(a[0], a[1], a[2], a[3], a[4])
     case "ruleFromFocus":
       // the settings window has the focus now; the person clicks the app's window, then "rule add" reads it (D39)
       if (root.req || appRuleTimer.running) return Summary.answer(root.fail("busy"))
@@ -839,6 +843,19 @@ Item {
     case "result": return root.resultOf(a[0]) || Summary.answer({ ok: true, pending: true })
     }
     return Summary.answer(root.fail("unknown_op"))
+  }
+
+  // The apps open on one desktop become its plan (D41): the save flow on that workspace, written as the desktop's plan
+  // (its own name kept when it has one).
+  function startPlanFromDesktop(identity, slot, focused, mode, ws) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    if (!Number.isInteger(ws) || ws < 1 || !Number.isInteger(slot) || slot < 1 || slot > 10) return Summary.answer(root.fail("failed", "no such desktop"))
+    let w = root.writableScenes()
+    if (w.error) return Summary.answer(w.error)
+    let found = Desktops.findPlan(w.doc.scenes, identity, slot, focused)
+    let name = found ? found.name : Desktops.newSceneName(identity, slot, w.doc.scenes)
+    if (!name) return Summary.answer(root.fail("failed", "no free scene name"))
+    return root.begin("save", { name: name, ws: ws, planTarget: { identity: identity, slot: slot, mode: mode } })
   }
 
   // A new rule from the app (D39: picked, not "the focused window", which would be the settings app itself).
@@ -1021,7 +1038,7 @@ Item {
     root.deskBusy = true
     root.deskStarted = Date.now()
     root.deskAgain = false
-    root.deskNext = { reason: "", monitors: [], windows: {}, modes: {}, classes: [] }
+    root.deskNext = { reason: "", monitors: [], windows: {}, modes: {}, classes: [], wsClasses: {} }
     root.deskId = "panel-" + (++root.deskCounter)
     root.deskRun(deskEval, ["hyprctl", "eval", LuaCall.wrap("desktops", [LuaLiteral.encode(root.deskId)], LuaLiteral.encode(root.deskReplyPath()))])
   }
@@ -1046,12 +1063,16 @@ Item {
   // Only the classes are kept (never titles).
   function onDeskClients(text) {
     let list = Summary.parseJson(text)
-    let seen = {}
+    let seen = {}, byWs = {}
     for (let w of (Array.isArray(list) ? list : [])) {
       let cls = w ? String(w.initialClass || w.class || "") : ""
       if (cls !== "") seen[cls] = true
+      // the apps open on each desktop (D41), classes only; the settings window itself is never one of them
+      let ws = w && w.workspace ? w.workspace.id : 0
+      if (cls !== "" && cls !== "omaplace-settings" && Number.isInteger(ws) && ws > 0 && !w.hidden) (byWs[ws] = byWs[ws] || []).push(cls)
     }
     root.deskNext.classes = Object.keys(seen)
+    root.deskNext.wsClasses = byWs
     root.nextDeskMode()
   }
 

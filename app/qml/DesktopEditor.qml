@@ -46,6 +46,49 @@ ColumnLayout {
         Label { color: ui.secondary; text: editor.card.badge || ""; elide: Text.ElideRight; Layout.maximumWidth: editor.width / 2 }
     }
 
+    // The apps open on this desktop now (D41), and one button to make them its plan, as they are placed now.
+    Pane {
+        objectName: "openNow"
+        visible: (editor.card.live || []).length > 0
+        Layout.fillWidth: true
+        padding: 10
+        background: Rectangle { color: ui.off; radius: Math.min(6, ui.radius) }
+        contentItem: ColumnLayout {
+            spacing: 6
+            Label { text: qsTr("Open on this desktop now"); font.bold: true }
+            Flow {
+                Layout.fillWidth: true
+                spacing: 10
+                Repeater {
+                    model: editor.card.live || []
+                    Row {
+                        required property var modelData
+                        spacing: 4
+                        Image { source: modelData.icon ? backend.iconSource(modelData.icon) : ""; visible: source != ""; width: 18; height: 18; sourceSize: Qt.size(36, 36); anchors.verticalCenter: parent.verticalCenter }
+                        Label { text: modelData.label; textFormat: Text.PlainText; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                ActionButton {
+                    objectName: "planFromDesktop"
+                    primary: !editor.card.plan
+                    text: editor.card.plan ? qsTr("Replace the plan with these") : qsTr("Make these the plan")
+                    enabled: editor.writable && (editor.card.workspace || 0) > 0
+                    onClicked: {
+                        const args = [editor.card.identity, editor.card.slot, editor.card.focused === true, editor.card.mode || "", editor.card.workspace]
+                        const n = (editor.card.live || []).length
+                        const done = qsTr("Desktop %1 has a plan with the apps open on it").arg(editor.card.slot)
+                        if (editor.card.plan) editor.app.ask(qsTr("Replace the plan of desktop %1 with the %2 apps open on it now? The file before the change is kept as scenes.toml.bak.").arg(editor.card.slot).arg(n), "planFromDesktop", args, done)
+                        else editor.app.act("planFromDesktop", args, done)
+                    }
+                }
+                Hint { text: editor.card.mode === "floating" ? qsTr("Each window keeps its size and spot.") : qsTr("The apps keep their order, left to right.") }
+            }
+        }
+    }
+
     Hint { warn: true; visible: (editor.card.error || "") !== ""; text: qsTr("This plan has a problem: %1. Fix it in ~/.config/omaplace/scenes.toml first; nothing is saved until then.").arg(editor.card.error) }
     Hint { warn: true; visible: editor.card.editable === false; text: qsTr("Reading the monitors failed. Press F5 to try again. Nothing can be changed until then.") }
 

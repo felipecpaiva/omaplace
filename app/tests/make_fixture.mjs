@@ -30,7 +30,8 @@ const live = {
     { identity: MON, name: "DP-2", focused: true, slots: Array.from({ length: 10 }, (_, i) => ({ slot: i + 1, workspace: 11 + i })) },
     { identity: "Example Panel", name: "eDP-1", focused: false, slots: Array.from({ length: 10 }, (_, i) => ({ slot: i + 1, workspace: i + 1, ...(i === 0 ? { omagnet: { name: "columns:2", zones: "0 0 0.5 1; 0.5 0 0.5 1" } } : {}) })) }
   ],
-  modes: { 1: "floating", 2: "tiled", 12: "floating", 13: "tiled" }, windows: { 12: 2, 1: 1 }, classes: ["org.example.Editor"],
+  modes: { 1: "floating", 2: "tiled", 12: "floating", 13: "tiled" }, windows: { 12: 2, 1: 1, 13: 2 }, classes: ["org.example.Editor"],
+  wsClasses: { 12: ["org.example.Editor", "org.example.Chat"], 13: ["org.example.Calc", "TUI.tile"] },
   omagnet: { loaded: true, layouts: [{ name: "coding", zones: "0 0 0.7 1; 0.7 0 0.3 1" }] }
 }
 const desks = D.cards(live, doc, { apps, rules: {}, entries: [] })

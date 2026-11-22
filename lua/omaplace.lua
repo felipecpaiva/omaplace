@@ -302,6 +302,7 @@ local function remember(kind, w)
 end
 
 -- The live desktops as a snapshot (design 5.5). scope "focused" or "all".
+-- scope "all", "focused", or "ws:<id>" (one workspace, the settings app's "Make these the plan", D41)
 local function snapshot_of(scope, kind)
   local live, wins = hl.get_monitors(), hl.get_windows()
   local floating = {}
@@ -313,8 +314,8 @@ local function snapshot_of(scope, kind)
   local snap = Capture.snapshot(wins, live, {
     slot_of = slots.slot_of, is_floating = function(id) return floating[id] == true end,
     fingerprint = Monitors.fingerprint, usable = Geometry.usable, ignore = Capture.ignore_set(M.settings.ignore),
-    scope = scope,
-    workspace = focused and focused.active_workspace and focused.active_workspace.id,
+    scope = scope == "all" and "all" or "focused",
+    workspace = tonumber(tostring(scope):match("^ws:(%d+)$")) or (focused and focused.active_workspace and focused.active_workspace.id),
     kind = kind, saved_at = os.time(), mode = slots.mode(),
   })
   return snap
@@ -324,7 +325,8 @@ end
 function M.capture(req_id, scope)
   if type(req_id) ~= "string" or #req_id > 64 or not req_id:match("^[%w_%-]+$") then return nil, "bad_req" end
   if not runtime_dir() then return nil, "no_runtime" end
-  local snap = snapshot_of(scope == "all" and "all" or "focused", "capture")
+  local ws = type(scope) == "string" and scope:match("^ws:(%d+)$")
+  local snap = snapshot_of(scope == "all" and "all" or ws and ("ws:" .. ws) or "focused", "capture")
   local text, err = Json.encode(snap)
   if not text then log("capture encode failed: " .. tostring(err)); return nil, "failed" end
   return write_atomic("capture-" .. req_id .. ".json", text .. "\n")

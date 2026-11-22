@@ -9,7 +9,7 @@ var CONTRACT = 1
 var OPS = {
   refresh: [], open: ["s"], rename: ["s", "s"], removeScene: ["s"],
   setWindow: ["s", "i", "s", "s", "v"], pickFolder: ["s", "i", "s"],
-  ruleNew: ["s", "s", "i"], ruleFromFocus: [], setRule: ["s", "s", "v"], removeRule: ["s"],
+  ruleNew: ["s", "s", "i"], ruleFromFocus: [], planFromDesktop: ["s", "i", "b", "s", "i"], setRule: ["s", "s", "v"], removeRule: ["s"],
   setSetting: ["s", "v"], menuAdd: [], menuRemove: [], restore: ["s"],
   editPlan: ["s", "i", "b", "s", "j", "s"], openOmagnet: [], result: ["s"]
 }
