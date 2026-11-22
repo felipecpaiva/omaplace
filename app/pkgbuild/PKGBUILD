@@ -1,7 +1,7 @@
 # Build from app/pkgbuild inside an omaplace source checkout (it uses the plugin's js/ next to it).
 pkgname=omaplace-settings
 pkgver=0.3.0
-pkgrel=6
+pkgrel=7
 pkgdesc='Settings app for the omaplace Omarchy plugin'
 arch=('x86_64' 'aarch64')
 url='https://github.com/felipecpaiva/omaplace'
