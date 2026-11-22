@@ -15,6 +15,7 @@ ColumnLayout {
     property var card: ({})
     property var apps: []
     property var omagnet: ({ loaded: false, layouts: [] })
+    property string monitorLabel: ""
     // By card key, so another desktop picked meanwhile never gets them (and a Save writes the desktop it was drawn for).
     property string customKey: ""
     property string drawKey: ""
@@ -46,31 +47,60 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        Label {
+        ColumnLayout {
             Layout.fillWidth: true
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            font.bold: true
-            font.pixelSize: 18
-            text: qsTr("Desktop %1").arg(editor.card.slot) + "  " + (editor.card.monitorName || "")
+            spacing: 0
+            Label {
+                objectName: "deskTitle"
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                textFormat: Text.PlainText
+                font.bold: true
+                font.pixelSize: 18
+                text: editor.card.plan ? editor.card.title : qsTr("Desktop %1").arg(editor.card.slot)
+            }
+            Label {
+                color: ui.secondary
+                textFormat: Text.PlainText
+                text: (editor.card.plan ? qsTr("Desktop %1, ").arg(editor.card.slot) : "") + (editor.monitorLabel || editor.card.monitorName || "")
+            }
         }
         Label {
-            color: editor.card.plan ? ui.accent : ui.secondary
+            color: editor.card.state === "changed" ? ui.warn : editor.card.plan ? ui.accent : ui.secondary
             font.bold: editor.card.plan === true
-            text: editor.card.plan ? qsTr("Remembered") : editor.card.mode === "floating" ? qsTr("Floating") : editor.card.mode === "scrolling" ? qsTr("Scrolling") : editor.card.mode === "tiled" ? qsTr("Tiled") : ""
+            text: editor.card.state === "changed" ? qsTr("Changed") : editor.card.plan ? qsTr("Remembered") : ""
         }
     }
 
     Hint { warn: true; visible: (editor.card.error || "") !== ""; text: qsTr("This plan has a problem: %1. Fix it in ~/.config/omaplace/scenes.toml first; nothing is saved until then.").arg(editor.card.error) }
     Hint { warn: true; visible: editor.card.editable === false; text: qsTr("Reading the monitors failed. Press F5 to try again. Nothing can be changed until then.") }
 
-    // The picture: the plan, else the desktop as it is now.
-    ZoneThumb {
-        objectName: "desktopPicture"
+    // The picture: the remembered desktop, else the desktop as it is now; both side by side when they differ (D45).
+    RowLayout {
         Layout.fillWidth: true
-        Layout.maximumWidth: 460
-        rows: editor.card.plan ? (editor.card.rows || []) : (editor.card.liveRows || [])
-        emptyText: editor.card.plan || editor.hasLive ? "" : qsTr("Nothing is open here")
+        spacing: 12
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.maximumWidth: editor.card.state === "changed" ? 300 : 460
+            Label { visible: editor.card.state === "changed"; text: qsTr("Remembered"); color: ui.secondary }
+            ZoneThumb {
+                objectName: "desktopPicture"
+                Layout.fillWidth: true
+                rows: editor.card.plan ? (editor.card.rows || []) : (editor.card.liveRows || [])
+                emptyText: editor.card.plan || editor.hasLive ? "" : qsTr("Nothing is open here")
+            }
+        }
+        ColumnLayout {
+            visible: editor.card.state === "changed"
+            Layout.fillWidth: true
+            Layout.maximumWidth: 300
+            Label { text: qsTr("Now"); color: ui.secondary }
+            ZoneThumb {
+                objectName: "nowPicture"
+                Layout.fillWidth: true
+                rows: editor.card.liveRows || []
+            }
+        }
     }
     Label {
         objectName: "nowLine"
@@ -79,8 +109,10 @@ ColumnLayout {
         wrapMode: Text.WordWrap
         textFormat: Text.PlainText
         color: ui.secondary
-        text: editor.card.plan ? (editor.hasLive ? qsTr("Open now: %1").arg(editor.card.liveSummary) : qsTr("Nothing of it is open now."))
-            : editor.hasLive ? qsTr("Open now: %1").arg(editor.card.liveSummary) : qsTr("Open the apps you want here, or choose a layout below.")
+        text: editor.card.state === "changed" ? qsTr("Changed since you remembered it: %1.").arg(editor.card.changes)
+            : editor.card.state === "same" ? qsTr("Everything is where you left it.")
+            : editor.card.state === "closed" ? qsTr("Its apps are not open now.")
+            : editor.hasLive ? qsTr("Open now: %1").arg(editor.card.liveSummary) : qsTr("Open the apps you want here, then remember it. Or choose a layout below.")
     }
 
     // The main actions.
@@ -97,15 +129,15 @@ ColumnLayout {
         }
         ActionButton {
             objectName: "openAll"
-            visible: editor.card.plan === true
+            visible: editor.card.state === "closed" || editor.card.state === "changed"
             primary: true
-            text: qsTr("Put windows back")
+            text: editor.card.state === "closed" ? qsTr("Open it") : qsTr("Put windows back")
             enabled: !editor.card.error && (editor.card.rows || []).some(function (r) { return !r.empty })
             onClicked: editor.app.act("open", [editor.card.name], qsTr("Desktop %1 is back as remembered").arg(editor.card.slot))
         }
         ActionButton {
             objectName: "updateFromNow"
-            visible: editor.card.plan === true && editor.hasLive
+            visible: editor.card.state === "changed"
             text: qsTr("Update from now")
             enabled: editor.writable && (editor.card.workspace || 0) > 0
             onClicked: editor.remember()
@@ -116,31 +148,32 @@ ColumnLayout {
         text: editor.card.mode === "floating" ? qsTr("Keeps every window where it is, and its size. After a reboot, or with Put windows back, they come back like this.")
             : qsTr("Keeps the apps in their order, left to right. After a reboot, or with Put windows back, they come back like this.")
     }
-    RowLayout {
-        visible: editor.card.plan === true
-        Layout.fillWidth: true
-        Switch {
-            objectName: "openAtLogin"
-            text: qsTr("Open at login")
-            checked: editor.card.openAtLogin === true
-            enabled: editor.writable && !editor.card.error
-            onToggled: { editor.edit("login", checked); checked = Qt.binding(function () { return editor.card.openAtLogin === true }) }
-        }
-        Item { Layout.fillWidth: true }
-        ActionButton { objectName: "removePlan"; text: qsTr("Forget"); enabled: editor.writable; onClicked: editor.removePlan() }
-    }
 
     // Change layout: everything else, out of the way until asked.
     ActionButton {
         objectName: "changeLayout"
         visible: editor.card.plan === true || editor.hasLive
-        text: editor.tools ? qsTr("Hide layout options") : qsTr("Change layout...")
+        text: editor.tools ? qsTr("Hide the options") : qsTr("More options...")
         onClicked: editor.moreKey = editor.tools ? "" : editor.card.key
     }
     ColumnLayout {
         visible: editor.tools
         Layout.fillWidth: true
         spacing: 10
+
+        RowLayout {
+            visible: editor.card.plan === true
+            Layout.fillWidth: true
+            Switch {
+                objectName: "openAtLogin"
+                text: qsTr("Open it at login")
+                checked: editor.card.openAtLogin === true
+                enabled: editor.writable && !editor.card.error
+                onToggled: { editor.edit("login", checked); checked = Qt.binding(function () { return editor.card.openAtLogin === true }) }
+            }
+            Item { Layout.fillWidth: true }
+            ActionButton { objectName: "removePlan"; text: qsTr("Forget this desktop"); enabled: editor.writable; onClicked: editor.removePlan() }
+        }
 
         Flow { // wraps the buttons under the picker on a narrow window
             Layout.fillWidth: true

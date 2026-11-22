@@ -465,3 +465,33 @@ test("windows on the same spot are one stack", () => {
   assert.equal(D.liveSummary(D.liveRows([{ label: "X", rect: [0.1, 0.1, 0.3, 0.3] }])), "X")
   assert.equal(D.liveSummary([]), "")
 })
+
+// D45: a remembered desktop against now, its name, friendly monitor names, folded empty desktops
+test("a remembered desktop's state against what is open now", () => {
+  const area = { x: 0, y: 0, w: 1000, h: 1000 }
+  const free = plan("free", [win("org.example.Editor", undefined, { rect: [0, 0, 0.5, 1] }), win("org.example.Chat", undefined, { rect: [0.5, 0, 0.5, 1] })])
+  const at = (cls, x, w) => ({ cls, at: [x * 1000, 0], size: [w * 1000, 1000] })
+  const card = (ws) => D.cards({ ...live, monitors: [{ ...live.monitors[0], area }], wsClasses: { 2: ws } }, doc({ p: free }), {}).groups[0].cards[1]
+  assert.equal(card([]).state, "closed")
+  assert.equal(card([at("org.example.Editor", 0, 0.5), at("ORG.EXAMPLE.CHAT", 0.5, 0.5)]).state, "same", "case and place match")
+  assert.equal(card([at("org.example.Editor", 0.01, 0.5), at("org.example.Chat", 0.5, 0.5)]).state, "same", "within 2 percent")
+  const moved = card([at("org.example.Editor", 0.3, 0.5), at("org.example.Chat", 0.5, 0.5)])
+  assert.equal(moved.state, "changed")
+  assert.equal(moved.changes, "1 window moved")
+  assert.equal(card([at("org.example.Editor", 0, 0.5)]).changes, "1 app is not open")
+  assert.equal(card([at("org.example.Editor", 0, 0.5), at("org.example.Chat", 0.5, 0.5), at("org.example.Calc", 0, 0.2)]).changes, "1 more window is open")
+  assert.equal(D.cards(live, doc({}), {}).groups[0].cards[1].state, "none")
+  assert.equal(moved.title, "org.example.Editor and org.example.Chat")
+})
+
+test("names people use, and empty desktops folded", () => {
+  assert.equal(D.monitorLabel("eDP-1", "Example Panel"), "Laptop screen")
+  assert.equal(D.monitorLabel("DP-2", "Example Corp EX27"), "Example Corp EX27")
+  assert.equal(D.titleOf({ plan: true, rows: [{ label: "A" }, { label: "B" }, { label: "C" }, { label: "A" }, { empty: true }] }), "A, B and 1 more")
+  assert.equal(D.titleOf({ plan: true, rows: [{ empty: true }] }), "Nothing in it yet")
+  const cs = [{ slot: 1, windows: 2 }, { slot: 2, windows: 0 }, { slot: 3, plan: true, windows: 0 }, { slot: 4, windows: 0 }, { slot: 5, windows: 0 }]
+  const f = D.shownCards(cs)
+  assert.deepEqual(f.shown.map((c) => c.slot), [1, 2, 3])
+  assert.equal(f.folded, 2)
+  assert.equal(D.cards(live, doc({}), {}).groups[0].label, "Example Corp EX27")
+})

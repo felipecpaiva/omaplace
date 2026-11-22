@@ -7,8 +7,8 @@ AbstractButton {
     id: tile
     property var card: ({})
     property bool selected: false
-    readonly property string word: card.error ? qsTr("Bad plan") : card.plan ? String(card.badge || "").replace(/^Zones: /, "")
-        : card.mode === "floating" ? qsTr("Floating") : card.mode === "scrolling" ? qsTr("Scrolling") : card.mode === "tiled" ? qsTr("Tiled") : qsTr("No plan")
+    // one word only where there is something to know (D45): remembered, or changed since; nothing under the others
+    readonly property string word: card.error ? qsTr("Problem") : card.state === "changed" ? qsTr("Changed") : card.plan ? qsTr("Remembered") : ""
     activeFocusOnTab: true
     padding: 3
     Accessible.name: qsTr("Desktop %1, %2").arg(tile.card.slot).arg(tile.card.badge)
@@ -45,7 +45,7 @@ AbstractButton {
             text: tile.word
             font.pixelSize: 11
             font.bold: tile.card.plan === true
-            color: tile.card.error ? ui.warn : tile.card.plan ? ui.accent : ui.secondary
+            color: tile.card.error || tile.card.state === "changed" ? ui.warn : ui.accent
         }
     }
 }

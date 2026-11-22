@@ -31,7 +31,7 @@ const live = {
     { identity: "Example Panel", name: "eDP-1", focused: false, area: { x: 1600, y: 30, w: 1600, h: 970 }, slots: Array.from({ length: 10 }, (_, i) => ({ slot: i + 1, workspace: i + 1, ...(i === 0 ? { omagnet: { name: "columns:2", zones: "0 0 0.5 1; 0.5 0 0.5 1" } } : {}) })) }
   ],
   modes: { 1: "floating", 2: "tiled", 12: "floating", 13: "tiled" }, windows: { 12: 2, 1: 1, 13: 2 }, classes: ["org.example.Editor"],
-  wsClasses: { 12: ["org.example.Editor", "org.example.Chat"],
+  wsClasses: { 12: [{ cls: "org.example.Editor", at: [100, 80], size: [700, 800] }],
     13: [{ cls: "org.example.Calc", at: [40, 70], size: [500, 600] }, { cls: "TUI.tile", at: [800, 30], size: [800, 970] }],
     1: [{ cls: "org.example.Editor", at: [100, 130], size: [900, 700] }] },
   omagnet: { loaded: true, layouts: [{ name: "coding", zones: "0 0 0.7 1; 0.7 0 0.3 1" }] }

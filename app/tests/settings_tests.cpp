@@ -348,7 +348,7 @@ private slots:
         QTest::keyClick(w, Qt::Key_Return);
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"app",{"id":"org.example.Calc","pos":2},"floating"])"), 5000);
         QTest::qWait(400); // the picker's list closes with a short animation
-        click(w, find(c, "openAtLogin"));
+        click(w, inTools(w, c, "openAtLogin"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"login",false,"floating"])"), 5000);
         click(w, byText(c, "Clear"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"clear",1,"floating"])"), 5000);
@@ -463,9 +463,9 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan"), 5000);
         QTRY_COMPARE_WITH_TIMEOUT(inTools(w, c, "layoutPicker")->property("displayText").toString(), QString("2 columns"), 3000);
         QTRY_VERIFY_WITH_TIMEOUT(root->property("toastBad").toBool(), 3000);
-        click(w, find(c, "openAtLogin"));
+        click(w, inTools(w, c, "openAtLogin"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("editPlan", R"(["Example Corp EX27",2,true,"login",false,"floating"])"), 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(find(c, "openAtLogin")->property("checked").toBool(), true, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(inTools(w, c, "openAtLogin")->property("checked").toBool(), true, 3000);
         click(w, find(c, "nav1"));
         click(w, find(c, "ruleOn-editor"));
         QTRY_VERIFY_WITH_TIMEOUT(sent("setRule", R"(["editor","enabled",false])"), 5000);
@@ -714,7 +714,7 @@ private slots:
         QMetaObject::invokeMethod(confirm, "accept");
         QTRY_VERIFY_WITH_TIMEOUT(sent("planFromDesktop", R"(["Example Corp EX27",2,true,"floating",12])"), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!confirm->property("visible").toBool(), 3000);
-        click(w, all(c, "tile-4").at(0));
+        click(w, all(c, "tile-1").at(0));  // the one empty desktop the map keeps
         QVERIFY2(!find(c, "planFromDesktop"), "an empty desktop has nothing to remember");
     }
 

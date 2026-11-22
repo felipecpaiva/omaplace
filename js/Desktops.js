@@ -270,6 +270,8 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   }
   card.liveRows = liveRows(card.live)
   card.liveSummary = liveSummary(card.liveRows)
+  Object.assign(card, stateOf(card))
+  card.title = titleOf(card)
   if (!found) return card
   const s = found.scene
   card.name = found.name
@@ -281,6 +283,8 @@ function cardOf(mon, slot, ws, found, live, ctx) {
   card.rows = card.error ? [] : rowsOf(found.name, s, ctx)
   const want = card.error ? "" : Plan.planMode(card.layout)
   if (want !== "" && mode !== "" && want !== mode) card.modeNote = "Open all switches this desktop from " + modeLabel(mode) + " to " + modeLabel(want) + "."
+  Object.assign(card, stateOf(card))
+  card.title = titleOf(card)
   return card
 }
 
@@ -318,7 +322,7 @@ function cards(live, doc, ctx) {
       if (found) shown[found.name] = true
       list.push(cardOf(m, slot, s && Number.isInteger(s.workspace) ? s.workspace : 0, found, l, c))
     }
-    return { identity: m.identity, name: m.name || m.identity, connected: true, cards: list }
+    return { identity: m.identity, name: m.name || m.identity, label: monitorLabel(m.name, m.identity), connected: true, cards: list }
   })
   const away = {}
   for (const name of Object.keys(scenes)) {
@@ -408,6 +412,55 @@ function liveRows(live) {
 }
 
 function isFull(r) { return !!r && r[0] < 0.02 && r[1] < 0.02 && r[2] > 0.96 && r[3] > 0.96 }
+
+// A remembered desktop against what is open on it now (D45): "none" (nothing remembered), "closed" (remembered, none of
+// its apps open), "same" (its apps are open, each where it was), or "changed" (with `changes`, one line in user words).
+// Classes compare without case; a Free floating window counts as moved past 2 percent (the D23 tolerance).
+function stateOf(card) {
+  if (!card.plan) return { state: "none", changes: "" }
+  const want = (card.rows || []).filter((r) => !r.empty && r.cls)
+  const live = card.live || []
+  if (live.length === 0) return { state: "closed", changes: "" }
+  const pool = live.map((a) => ({ cls: a.class.toLowerCase(), rect: a.rect, used: false }))
+  let missing = 0, moved = 0
+  for (const r of want) {
+    const cands = pool.filter((p) => !p.used && p.cls === r.cls.toLowerCase())
+    if (cands.length === 0) { missing++; continue }
+    const free = card.layout === "free" && r.win && Array.isArray(r.win.rect)
+    const near = free ? cands.find((p) => p.rect && p.rect.every((v, k) => Math.abs(v - r.win.rect[k]) <= 0.02)) : cands[0]
+    if (!near) { moved++; cands[0].used = true } else near.used = true
+  }
+  const extra = pool.filter((p) => !p.used).length
+  const parts = []
+  if (moved) parts.push(moved === 1 ? "1 window moved" : moved + " windows moved")
+  if (missing) parts.push(missing === 1 ? "1 app is not open" : missing + " apps are not open")
+  if (extra) parts.push(extra === 1 ? "1 more window is open" : extra + " more windows are open")
+  return parts.length ? { state: "changed", changes: parts.join(", ") } : { state: "same", changes: "" }
+}
+
+// A name for a remembered desktop from its apps (D45): "Editor and Browser", "Editor, Chat and 2 more". Display only.
+function titleOf(card) {
+  if (!card.plan) return ""
+  const names = []
+  for (const r of card.rows || []) if (!r.empty && r.label && names.indexOf(r.label) === -1) names.push(r.label)
+  if (names.length === 0) return "Nothing in it yet"
+  if (names.length <= 2) return names.join(" and ")
+  return names.slice(0, 2).join(", ") + " and " + (names.length - 2) + " more"
+}
+
+// A monitor as a person names it (D45, display only, never stored): the laptop's own screen, else its model.
+function monitorLabel(name, identity) {
+  if (/^(eDP|LVDS|DSI)/i.test(String(name || ""))) return "Laptop screen"
+  return String(identity || name || "Monitor")
+}
+
+// The desktops the map shows (D45): those in use or remembered, then the first empty one (so there is always one to
+// start on). The rest are folded behind a count.
+function shownCards(cards) {
+  const used = (cards || []).filter((c) => c.plan || c.windows > 0)
+  const empty = (cards || []).filter((c) => !(c.plan || c.windows > 0))
+  return { shown: (cards || []).filter((c) => used.indexOf(c) !== -1 || c === empty[0]), folded: Math.max(0, empty.length - 1) }
+}
 
 // One line about what is open on a desktop now, for the editor: "Reddit and Google Chrome, both full screen".
 function liveSummary(rows) {

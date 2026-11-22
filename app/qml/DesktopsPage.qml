@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../js/Desktops.js" as Desktops
 
 // Desktops: the map of every desktop of every monitor on the left, the editor of the selected one on the right. Each
 // side scrolls on its own, so the editor stays in view while the map scrolls to another monitor.
@@ -8,6 +9,7 @@ Item {
     id: page
     property var app
     property string selected: ""
+    property var unfolded: ({})          // monitors whose empty desktops are shown (D45)
     readonly property var desks: app.model.desks || ({ groups: [], reason: "", loading: true })
     readonly property var groups: desks.groups || []
     readonly property var omagnet: desks.omagnet || ({ loaded: false, layouts: [] })
@@ -40,28 +42,42 @@ Item {
                         required property var modelData
                         Layout.fillWidth: true
                         spacing: 6
-                        Label { text: mon.modelData.name; font.bold: true; textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight }
+                        readonly property var fold: Desktops.shownCards(mon.modelData.cards)
+                        readonly property bool open: !!page.unfolded[mon.modelData.identity]
+                        Label {
+                            text: mon.modelData.label || mon.modelData.name
+                            font.bold: true; textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight
+                            ToolTip.visible: tip.hovered; ToolTip.text: mon.modelData.name
+                            HoverHandler { id: tip }
+                        }
                         GridLayout {
                             Layout.fillWidth: true
                             columns: mapScroll.availableWidth >= 300 ? 5 : 3
-                            uniformCellWidths: true
                             columnSpacing: 4
                             rowSpacing: 4
                             Repeater {
-                                model: mon.modelData.cards
+                                model: mon.open ? mon.modelData.cards : mon.fold.shown
                                 DeskTile {
                                     required property var modelData
                                     objectName: "tile-" + modelData.slot
-                                    Layout.fillWidth: true
+                                    // a fixed share of the row, so two tiles are as big as ten
+                                    Layout.preferredWidth: (mapScroll.availableWidth - 16) / (mapScroll.availableWidth >= 300 ? 5 : 3)
+                                    Layout.fillWidth: false
                                     card: modelData
                                     selected: modelData.key === page.current
                                     onClicked: page.selected = modelData.key
                                 }
                             }
                         }
+                        ActionButton {
+                            objectName: "unfold"
+                            visible: mon.fold.folded > 0
+                            text: mon.open ? qsTr("Hide empty desktops") : (mon.fold.folded === 1 ? qsTr("1 empty desktop") : qsTr("%1 empty desktops").arg(mon.fold.folded))
+                            onClicked: { const u = Object.assign({}, page.unfolded); u[mon.modelData.identity] = !mon.open; page.unfolded = u }
+                        }
                     }
                 }
-                Hint { text: qsTr("Pick a desktop to plan it. The word under each one is its layout, or what Omarchy has now.") }
+
             }
         }
 
@@ -84,6 +100,7 @@ Item {
                     card: page.chosen || ({})
                     apps: page.app.model.apps || []
                     omagnet: page.omagnet
+                    monitorLabel: (page.groups.find(function (g) { return g.cards.some(function (c) { return c.key === page.current }) }) || {}).label || ""
                 }
             }
         }
