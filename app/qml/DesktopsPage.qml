@@ -13,7 +13,7 @@ Item {
     readonly property var omagnet: desks.omagnet || ({ loaded: false, layouts: [] })
     readonly property var allCards: [].concat.apply([], groups.map(function (g) { return g.cards }))
     readonly property string current: page.selected !== "" && allCards.some(function (c) { return c.key === page.selected }) ? page.selected
-        : allCards.length > 0 ? allCards[0].key : ""
+        : (allCards.find(function (c) { return c.focused === true }) || allCards[0] || { key: "" }).key   // the monitor in use first
     readonly property var chosen: allCards.find(function (c) { return c.key === page.current }) || null
 
     RowLayout {

@@ -202,6 +202,8 @@ Older sessions
 
 ## 6. Technical options for the real window
 
+> Decision (Felipe, 2026-11-22): option (b), one settings app built like omadials-settings, and the plugin panel removed. See design D36 to D40. The text below is the research as written.
+
 | | (a) `FloatingWindow` in the plugin panel | (b) Separate app, like `omadials-settings` |
 |---|---|---|
 | How | `SettingsPanel.qml` keeps `kinds: panel`; replace `PanelWindow` with `FloatingWindow { title; minimumSize }` | C++ and Qt Quick binary, PKGBUILD, own `.desktop` |

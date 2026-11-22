@@ -21,7 +21,7 @@ Not affiliated with or endorsed by Omarchy or 37signals.
 
 <p align="center"><img src="branding/demo/desktops.gif" alt="Picking a layout and an app per zone on the Desktops page" width="720"></p>
 
-The settings window opens on the **Desktops** page: one card per desktop (1 to 10) on each monitor, each with a badge
+The settings app opens on the **Desktops** page: one tile per desktop (1 to 10) on each monitor, each with a word
 that says what it is now (Tiled, Scrolling, Floating) or what its plan is. Click a card and pick a layout:
 
 - **Zones:** 2 columns, 3 columns, 2 rows, a 2 by 2 grid, Priority, or your own zones: draw them with the mouse ("Draw zones"), or type them as text. With
@@ -66,17 +66,17 @@ lists what was placed, started, skipped or not reopened. Nothing fails silently.
 
 While you work, omaplace keeps a snapshot of all desktops. It writes only after window events, at most once every 15
 seconds, and closing everything at shutdown never erases the last good snapshot. After a reboot, `omaplace restore`
-(or the button on the Session page) brings back the previous login's desktops, each window on its own monitor and
+(or the button on the Restore page) brings back the previous login's desktops, each window on its own monitor and
 desktop. It always picks the previous login, never the current one.
 
-To do it by itself after a reboot, set **Restore at login** on the Session page (or `restore_at_login` in
+To do it by itself after a reboot, set **Restore at login** on the Restore page (or `restore_at_login` in
 `config.toml`): **Ask** shows one notification with a Restore button, **Automatic** restores at once. Off is the
 default. It runs only right after a real login, never on a shell restart.
 
 ### Placement rules
 
 "This app always opens on desktop 3 of my big monitor." Add one from the app itself (`omaplace rule add` with the app
-focused, or the Rules page), or by hand in `~/.config/omaplace/config.toml` (made-up app and monitor):
+focused, or the Apps page), or by hand in `~/.config/omaplace/config.toml` (made-up app and monitor):
 
 ```toml
 [rule.editor]
@@ -90,7 +90,7 @@ keep_rect = true                # put the window there when it floats (a floatin
 
 <p align="center"><img src="branding/demo/samespot.gif" alt="A rule with Same spot: Omacalc opens in its spot, is moved away and closed, and opens in the same spot again" width="720"></p>
 
-On the Rules page this is the **Same spot** toggle.
+On the Apps page this is the **Open in the same spot** switch.
 
 The rule follows the monitor, not the port. If the monitor is unplugged, the rule switches itself off and the app opens
 as usual. It comes back when the monitor does.
@@ -104,8 +104,10 @@ hand from one scene's desktop to another's moves it between the two scenes. `"of
 ## Requirements
 
 - Omarchy 4.5 or newer, with the Hyprland Lua configuration and the Quickshell shell it ships (tested on Hyprland 0.56.2).
-- Nothing else to install: no network, no root, no packages, no background process of its own. `inotifywait` is used
+- The plugin itself needs nothing else: no network, no root, no background process of its own. `inotifywait` is used
   when installed, so the command line answers a little faster.
+- The settings window is one optional package, `omaplace-settings` (see Install). Without it, everything works from
+  the command line and `config.toml`.
 
 What it reads and writes:
 
@@ -115,7 +117,7 @@ What it reads and writes:
 | `~/.config/omaplace/scenes.toml` | scenes and desktop plans (a `.bak` too) |
 | `~/.local/state/omaplace/` | session snapshots, app memory, the plan lookup |
 | `$XDG_RUNTIME_DIR/omaplace/` | short lived request and status files, gone at logout |
-| `~/.local/share/applications/omaplace.desktop` | the launcher entry; only a file carrying its own marker is ever replaced or removed |
+| `~/.local/share/applications/omaplace.desktop` | only taken away: the launcher entry older versions made (only a file carrying its own marker); the settings package brings its own |
 | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | only if you press "Add omaplace to the Omarchy menu": one block between `// omaplace begin` and `// omaplace end`, with a backup first |
 
 It never stores window titles or web addresses. Terminal folders and program names are stored so terminals can reopen
@@ -124,14 +126,6 @@ putting it in public dotfiles. It never edits your `hyprland.lua` or any Omarchy
 space. To switch a desktop's mode it uses Omarchy's own commands.
 
 ## Install
-
-The repo is private for now, so clone it into the plugin folder with git:
-
-```
-git clone <git-url> ~/.config/omarchy/plugins/io.github.felipecpaiva.omaplace
-```
-
-Or let Omarchy do it: `omarchy plugin add <git-url>`. Once the repo is public:
 
 ```
 omarchy plugin add https://github.com/felipecpaiva/omaplace --enable
@@ -151,18 +145,30 @@ Then:
    The `pcall` makes sure a missing or broken file never breaks the rest of your config. Rules are read from
    `~/.config/omaplace/config.toml` when Hyprland loads.
 3. The command line is `bin/omaplace` in the plugin folder. Add it to your PATH or make an alias.
+4. The settings app: download `omaplace-settings-<version>-1-x86_64.pkg.tar.zst` from the
+   [latest release](https://github.com/felipecpaiva/omaplace/releases/latest), then install it:
+
+   ```
+   sudo pacman -U omaplace-settings-*.pkg.tar.zst
+   ```
+
+   Or build it from this repository (needs `qt6-base`, `qt6-declarative`, `qt6-wayland`, `gcc`, `make`, `python`):
+   `cd app && bin/install`.
 
 ## Settings
 
-Open **omaplace** from the app launcher, or run `omaplace settings`. Five pages:
+Open **omaplace** from the app launcher, or run `omaplace settings`. It is a normal window: it floats, stays open while
+you arrange your apps, and opening it again brings it to the front. Five pages:
 
-- **Desktops:** the plan for each desktop (above).
+- **Desktops:** the map of every desktop on every monitor, and the plan of the one you pick (above).
+- **Apps:** where an app always opens (rules: monitor, desktop, follow, same spot), where apps you open yourself go
+  (app memory), and apps omaplace leaves alone.
 - **Scenes:** open, rename, delete, and see each window. Pick a browser profile or a project folder for a window
-  omaplace could not tell.
-- **Rules:** add, change and remove placement rules.
-- **Session:** turn snapshots on or off, restore the last session or an older one.
-- **General:** app memory, what a scene does with apps already open, missing monitors, ignored apps, and timings under
-  "Show advanced settings".
+  omaplace could not tell. What a scene does with apps already open and with a missing monitor.
+- **Restore:** restore the last session, restore at login, the snapshot switch, and older sessions.
+- **General:** the Omarchy menu, the timings (Advanced), and About.
+
+Keys: Ctrl+1 to Ctrl+5 for the pages, F5 reads the desktops again, ? or F1 lists the keys, Ctrl+W closes.
 
 Every change is saved at once; the file before the change is kept as `.bak` next to it.
 
@@ -178,14 +184,14 @@ omaplace list | rename <from> <to> | remove <name>
 omaplace rule add           the focused app always opens on this desktop and monitor
 omaplace rule remove <name>
 omaplace status
-omaplace settings           open the settings window
+omaplace settings           open the settings app
 ```
 
 `--json` before the word prints the service's answer as is. Exit codes: 0 ok, 2 bad usage, 3 not found or nothing to
 save, 4 partial, 5 failed, 6 the Lua module is not loaded, 7 the plan could not take the move (`plan-update`, used by
 the "Update plan" button).
 
-**Omarchy menu.** omaplace never touches the Omarchy menu by itself. In General, press "Add omaplace to the Omarchy
+**Omarchy menu.** omaplace never touches the Omarchy menu by itself. In the settings app, on General, press "Add omaplace to the Omarchy
 menu" for a Scenes menu with Save this desktop, Open a scene, Restore last session, Always open here and Settings.
 "Remove from the menu" takes the block out again and leaves the rest of the file alone.
 
@@ -196,8 +202,9 @@ menu" for a Scenes menu with Save this desktop, Open a scene, Restore last sessi
   Omarchy's layout toggle (at most twice). At login it cannot do that, so the mode is left as it is and the summary says so.
 - Open at login and Restore at login passed two real reboots. The last two fixes (restore before the plans, app names
   in any letter case) are checked by hand, not yet by a third reboot.
-- Checked by tests and screenshots, not yet by hand clicks: Draw zones, "Edit in omagnet", the Same spot toggle and the
-  "Laptop panel" choice on the Rules page, and pressing "Update plan" with a real click.
+- The settings app is checked by offscreen tests that click every control (against a stand-in for the plugin) and by a
+  read-only run against the real plugin. Its real window (floating, one instance, the launcher) is checked by hand
+  once installed. Pressing "Update plan" with a real click is not checked yet.
 - A Chrome window opened from Chrome's own profile menu cannot be placed by profile: its profile cannot be seen. On a
   restore, such a window opens with the profiles Chrome had open when it last closed.
 - Two windows of the same app in one plan are placed by order, not by content.
@@ -206,10 +213,11 @@ menu" for a Scenes menu with Save this desktop, Open a scene, Restore last sessi
 
 ## Uninstall
 
-1. If you added the menu: press "Remove from the menu" in the settings window first, or delete the lines from
+1. If you added the menu: press "Remove from the Omarchy menu" in the settings app first, or delete the lines from
    `// omaplace begin` to `// omaplace end` in `~/.config/omarchy/extensions/omarchy-menu.jsonc` by hand.
 2. Delete the `pcall(dofile, ...)` line from `hyprland.lua`.
-3. Run `omarchy plugin remove io.github.felipecpaiva.omaplace`. The service removes its launcher entry when it stops (only the file with its own marker).
+3. Run `omarchy plugin remove io.github.felipecpaiva.omaplace`, and remove the `omaplace-settings` package with pacman
+   if you installed the settings app.
 4. If you want, delete `~/.config/omaplace`, `~/.local/state/omaplace` and
    `~/.config/omarchy/extensions/omarchy-menu.jsonc.omaplace.bak`.
 
