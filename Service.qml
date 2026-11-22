@@ -17,6 +17,7 @@ import "js/PlansFile.js" as PlansFile
 import "js/PlanMoves.js" as PlanMoves
 import "js/ModeSwitch.js" as ModeSwitch
 import "js/Desktops.js" as Desktops
+import "js/AppSeam.js" as AppSeam
 
 // omaplace service (design 4.3, 6.2, 6.3, 7.2): the CLI's IPC target and the only file that runs processes.
 // All data work goes through the js/ modules. One slow request (save, open, rule add) runs at a time; every other
@@ -127,6 +128,9 @@ Item {
     function ruleRemove(name: string): string { return root.removeRule(name) }
     function status(): string { return root.statusLine() }
     function settings(): string { return root.toggleSettings() }
+    // the settings app (design 17): one request file in, one reply file out; the model is pushed while the app is open
+    function app(id: string): string { return root.appRequest(id) }
+    function appModel(): string { return root.appModelNow() }
   }
 
   // ---- files
@@ -775,6 +779,89 @@ Item {
 
   function refreshMonitors() { if (!monitorsProc.running) monitorsProc.running = true }
 
+  // ---- the settings app (design 17, D37, D38)
+
+  property bool appAttached: false
+  property int appSeq: 0
+
+  function appModelNow() {
+    root.appAttached = true
+    root.ensureDirs()
+    root.refreshMonitors()
+    root.desktopsInfo()
+    root.rescanScenes()
+    root.pushModel()
+    return Summary.answer({ ok: true, contract: AppSeam.CONTRACT })
+  }
+
+  function modelNow() {
+    return AppSeam.model(root.panelData(), root.desktopCards(), root.appChoices(), root.req !== null, ++root.appSeq)
+  }
+
+  function pushModel() {
+    if (!root.appAttached || !root.dirsReady) return
+    let m = root.modelNow()
+    // a late answer (the folder chooser) rides on the next model once
+    if (root.lastAnswer !== "") { m.late = Summary.parseJson(root.lastAnswer); root.lastAnswer = "" }
+    appOutFile.path = root.runtimeDir + "/app-model.json"
+    appOutFile.setText(JSON.stringify(m) + "\n")
+  }
+
+  function appRequest(id) {
+    if (!AppSeam.validId(id)) return Summary.answer(root.fail("bad_request"))
+    root.appAttached = true
+    appReqFile.path = root.runtimeDir + "/app-" + id + ".json"
+    let text = root.readNow(appReqFile)
+    appReqFile.path = ""
+    Quickshell.execDetached(["rm", "-f", "--", root.runtimeDir + "/app-" + id + ".json"])
+    let r = AppSeam.parse(text)
+    let answer = r.error ? Summary.answer(root.fail(r.error)) : root.appOp(r.op, r.args)
+    appOutFile.path = root.runtimeDir + "/app-" + id + "-reply.json"
+    appOutFile.setText(AppSeam.reply(id, answer, root.modelNow()))
+    return answer
+  }
+
+  // The allow-listed ops (AppSeam.OPS): each is the function the panel called.
+  function appOp(op, a) {
+    switch (op) {
+    case "refresh": root.refreshMonitors(); root.desktopsInfo(); root.rescanScenes(); return Summary.answer({ ok: true })
+    case "open": return root.startOpen(a[0])
+    case "rename": return root.renameScene(a[0], a[1])
+    case "removeScene": return root.removeScene(a[0])
+    case "setWindow": return root.setSceneWindow(a[0], a[1], a[2], a[3], a[4])
+    case "pickFolder": return root.pickFolder(a[0], a[1], a[2])
+    case "ruleNew": return root.ruleNew(a[0], a[1], a[2])
+    case "setRule": return root.setRuleField(a[0], a[1], a[2])
+    case "removeRule": return root.removeRule(a[0])
+    case "setSetting": return root.setSetting(a[0], a[1])
+    case "menuAdd": return root.menuAdd()
+    case "menuRemove": return root.menuRemove()
+    case "restore": return root.startRestore(a[0])
+    case "editPlan": return root.editPlan(a[0], a[1], a[2], a[3], a[4], a[5])
+    case "openOmagnet": root.openOmagnet(); return Summary.answer({ ok: true })
+    case "result": return root.resultOf(a[0]) || Summary.answer({ ok: true, pending: true })
+    }
+    return Summary.answer(root.fail("unknown_op"))
+  }
+
+  // A new rule from the app (D39: picked, not "the focused window", which would be the settings app itself).
+  function ruleNew(app, monitor, slot) {
+    if (root.req) return Summary.answer(root.fail("busy"))
+    if (app === "" || !Number.isInteger(slot) || slot < 1 || slot > 10) return Summary.answer(root.fail("failed", "pick an app and a desktop from 1 to 10"))
+    try {
+      let text = root.readNow(configFile)
+      let cfg = ConfigIO.parse(text)
+      for (let n in cfg.rules) if (cfg.rules[n].app === app) return Summary.answer(root.fail("failed", "this app has a rule already: " + n))
+      let name = AppSeam.ruleName(app, cfg.rules)
+      if (name === "") return Summary.answer(root.fail("failed", "no free rule name"))
+      let err = root.writeConfig(text, ConfigIO.setRule(text, name, { app: app, monitor: monitor, slot: slot, follow: false }))
+      return Summary.answer(err === "" ? { ok: true, rule: name } : root.fail("failed", err))
+    } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
+  }
+
+  onRevisionChanged: root.pushModel()
+  onReqChanged: if (root.req === null) Qt.callLater(root.pushModel)
+
   // Everything the window shows, read now. Windows with an unknown context carry what the picker needs (`need`).
   function panelData() {
     try {
@@ -1147,6 +1234,8 @@ Item {
   FileView { id: localStateFile; blockLoading: true; printErrors: false }
   FileView { id: countFile; blockLoading: true; printErrors: false }
   FileView { id: answerFile; blockLoading: true; printErrors: false }
+  FileView { id: appReqFile; blockLoading: true; printErrors: false }
+  FileView { id: appOutFile; blockWrites: true; atomicWrites: true; printErrors: false }
   FileView { id: launcherSourceFile; path: root.launcherSource; blockLoading: true; printErrors: false }
   FileView { id: menuFile; path: root.menuPath; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the Omarchy menu file" }
   FileView { id: menuBak; path: root.menuPath + ".omaplace.bak"; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the menu backup" }
