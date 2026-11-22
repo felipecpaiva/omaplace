@@ -51,7 +51,31 @@ Item {
                 border.color: modelData.live ? ui.edge : ui.accent
                 radius: Math.min(3, ui.radius)
                 clip: true
+                // an open window (D42): icon and name in its top-left corner, like a title bar, so a pile shows every name
+                Row {
+                    visible: box.modelData.live === true
+                    x: 4; y: 3
+                    width: parent.width - 8
+                    spacing: 4
+                    Image {
+                        visible: box.modelData.icon !== ""
+                        readonly property int side: Math.max(8, Math.min(16, box.height * 0.3))
+                        width: side; height: side
+                        sourceSize: Qt.size(side * 2, side * 2)
+                        source: visible ? backend.iconSource(box.modelData.icon) : ""
+                    }
+                    Label {
+                        visible: thumb.showNames
+                        width: parent.width - 22
+                        elide: Text.ElideRight
+                        textFormat: Text.PlainText
+                        text: box.modelData.label
+                        color: ui.text
+                        font.pixelSize: 11
+                    }
+                }
                 Column {
+                    visible: box.modelData.live !== true
                     anchors.centerIn: parent
                     width: parent.width - 4
                     spacing: 2
