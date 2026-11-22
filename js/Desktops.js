@@ -340,7 +340,9 @@ function cards(live, doc, ctx) {
     const s = scenes[name]
     if (s.plan !== true || shown[name]) continue
     const id = s.home_monitor || ""
-    if (!away[id]) { away[id] = { identity: id, name: (id || "Focused monitor") + " (not connected)", connected: false, cards: [] }; groups.push(away[id]) }
+    // remembered for a monitor that is not here, or has no desktop for it now (hyprmoncfg's rules, D51)
+    const who = !id ? "The monitor in use" : /invalid vendor|unknown/i.test(id) ? "Another monitor" : id
+    if (!away[id]) { away[id] = { identity: id, name: who + " (no desktop for it now)", label: who + " (no desktop for it now)", connected: false, cards: [] }; groups.push(away[id]) }
     const slot = Number.isInteger(s.home_slot) ? s.home_slot : 0
     away[id].cards.push(cardOf({ identity: id, name: id, focused: id === "" }, slot, 0, { name, scene: s }, {}, c))
   }

@@ -140,7 +140,7 @@ test("cards: a plan on a monitor that is not connected still gets a card", () =>
   assert.equal(m.groups[0].cards[5].name, "focus") // an empty monitor is the focused one, shown there
   assert.equal(m.groups.length, 2)
   assert.equal(m.groups[1].connected, false)
-  assert.equal(m.groups[1].name, "Gone Monitor (not connected)")
+  assert.equal(m.groups[1].name, "Gone Monitor (no desktop for it now)")
   assert.deepEqual(m.groups[1].cards.map((c) => [c.name, c.slot]), [["away", 5]])
 })
 
@@ -316,7 +316,7 @@ test("edit layout: no free scene name for a new plan is an error", () => {
 
 test("cards: a plan for the focused monitor with no monitor focused gets the not connected group", () => {
   const m = D.cards({ monitors: [{ identity: MON, name: "DP-1", focused: false, slots: [] }] }, doc({ f: plan("tiled", [], { home_monitor: "", home_slot: 1 }) }), {})
-  assert.equal(m.groups[1].name, "Focused monitor (not connected)")
+  assert.equal(m.groups[1].name, "The monitor in use (no desktop for it now)")
   assert.equal(m.groups[1].cards[0].focused, true)
 })
 
