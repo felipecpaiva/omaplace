@@ -105,3 +105,21 @@ Still to confirm with one more real reboot: the fixed login path end to end.
 | Automatic restore | pass: 5 placed (3 started), 0 not reopened, Chrome and two web apps on their desktops, no profile picker |
 | Order: restore before login plans (D26) | **fail, then fixed**: the plan ran first (Aether opened before everything). The service checked the plans before the restore; now the restore is checked first |
 | Aether in the plan's right column | **fail, then fixed**: the plan holds the desktop id's class `aether`, the window is `Aether`, so the slot was never claimed and Aether stayed where it opened. Tickets and plan lookups now compare classes without case. After the fix, `omaplace open reboot-test`: Aether right half and Omacalc left half of desktop 8 |
+
+# Live check of the settings app (design 17), 2026-11-22
+
+Laptop panel plus one external monitor. The app built from `next` (`app/bin/build`), the plugin on `next` after a
+shell restart. Felipe agreed to both checks right before them.
+
+| Check | Result |
+|---|---|
+| Offscreen tests (`app/bin/test`): every control sends its request, refused changes show the saved value, a drawing stays with its desktop, a shell restart is followed, focus comes back after an edit, the problem banner | pass, 15 tests |
+| Read only against the real service (`liveReadOnly`): model with 2 monitors, 87 apps; all five pages, no QML warning; `config.toml` and `scenes.toml` unchanged (checksums) | pass |
+| Real changes through the real service (a script using the app's request files, made-up values, files backed up first): setting, new rule, rule follow and desktop, a second rule for the same app refused, rule removed, a plan on desktop 9 with an app and open at login, rename, remove, an unknown op refused | pass, 15 of 15; both files put back byte for byte |
+| The old launcher entry of the plugin | removed at service start (it carried the marker) |
+| The real window | floats, 1040 by 720, centred on the focused monitor (the Lua line's `o.window` rule); the monitor in use is selected first; app icons show |
+| A second start | exits at once, no second window, the first window gets the focus |
+| Closing | no process and no request file left |
+
+Not checked live: "From a window..." (the 4 second wait for a click needs a hand), the folder chooser, and the
+package installed with pacman (Felipe installs it with his password).
