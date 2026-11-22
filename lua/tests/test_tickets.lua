@@ -111,16 +111,17 @@ do
   eq(ns(T.next_launches(b, 5000)), "2", "B goes once A expired")
 end
 
--- place_only and skip; "?" context is skipped; failures are final.
+-- place_only and skip; an unknown "?" context is never started but takes the app's open window; failures are final.
 do
   local b = T.new({
     { class = "notes", mode = "place_only" }, { class = "x", mode = "skip" },
     { class = "chrome", context = "?", mode = "launch" }, { class = "y", mode = "launch" }, { class = "", mode = "launch" },
   }, 0, opts)
   eq(b.slots[2].state, "skipped", "skip mode")
-  eq(b.slots[3].state, "skipped", "unknown context")
+  eq(b.slots[3].mode, "place_only", "unknown context: never launched")
   eq(b.slots[5].state, "skipped", "empty class")
-  eq(ns(T.next_launches(b, 0)), "1,4", "place_only starts without a tick, then one launch")
+  eq(T.claim(b, { class = "chrome", existing = true }, 0).n, 3, "an open untagged window of the app is put back (live 2026-11-22)")
+  eq(ns(T.next_launches(b, 0)), "1,3,4", "place_only and the moved one start without a tick, then one launch")
   T.fail(b, 4, "bad_launch")
   eq(b.slots[4].state, "failed", "failed")
   eq(T.claim(b, { class = "notes" }, 10).n, 1, "place_only claimed by the app's own window")

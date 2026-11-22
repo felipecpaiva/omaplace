@@ -25,7 +25,10 @@ function T.new(plan_windows, now, opts)
     local mode = (w.mode == "launch" or w.mode == "place_only") and w.mode or "skip"
     local s = { n = i, class = tostring(w.class or ""), context = tostring(w.context or ""), order = w.order or i,
       mode = mode, state = "waiting", existing = false, started = false }
-    if mode == "skip" or s.class == "" or s.context == "?" then s.state, s.started = "skipped", true end
+    -- an unknown profile or project ("?") is never started (it could open the wrong one), but an open window of the app
+    -- is still put back in place: the slot waits for one, like place_only, with no context to match (live 2026-11-22)
+    if s.context == "?" then s.context, s.mode = "", "place_only" end
+    if mode == "skip" or s.class == "" then s.state, s.started = "skipped", true end
     book.slots[i] = s
     if s.context ~= "" and s.state ~= "skipped" then book.gated[s.class:lower()] = true end
   end
