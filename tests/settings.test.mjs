@@ -32,14 +32,14 @@ test("settingChange: numbers within the config limits", () => {
   assert.equal(S.settingChange(specs, "expiry_seconds", "ten").ok, false)
 })
 
-test("settingChange: choices, and the ones coming later are refused", () => {
+test("settingChange: choices, and values outside the list are refused", () => {
   assert.deepEqual(S.settingChange(specs, "session", "off"), { ok: true, value: "off" })
   assert.equal(S.settingChange(specs, "session", true).ok, false)
   assert.deepEqual(S.settingChange(specs, "app_memory", "last_place"), { ok: true, value: "last_place" })
   assert.deepEqual(S.settingChange(specs, "app_memory", "auto"), { ok: true, value: "auto" })
   assert.deepEqual(S.settingChange(specs, "restore_at_login", "off"), { ok: true, value: "off" })
-  assert.match(S.settingChange(specs, "restore_at_login", "ask").why, /coming later/)
-  assert.equal(S.settingChange(specs, "restore_at_login", "ask").ok, false)
+  assert.deepEqual(S.settingChange(specs, "restore_at_login", "ask"), { ok: true, value: "ask" })
+  assert.deepEqual(S.settingChange(specs, "restore_at_login", "auto"), { ok: true, value: "auto" })
   assert.equal(S.settingChange(specs, "existing_default", "copy").ok, false)
 })
 
@@ -150,10 +150,11 @@ test("monitorNames: Omarchy identities, twins numbered by connector, mirrors lef
   assert.deepEqual(S.monitorNames(null), [])
 })
 
-test("monitorChoices adds focused and a rule's unplugged monitor", () => {
-  assert.deepEqual(S.monitorChoices(["A"], "A").map((c) => c.value), ["", "A"])
+test("monitorChoices adds focused, any laptop panel and a rule's unplugged monitor", () => {
+  assert.deepEqual(S.monitorChoices(["A"], "A").map((c) => c.value), ["", "laptop", "A"])
   const c = S.monitorChoices(["A"], "Gone Co 24")
-  assert.equal(c[2].label, "Gone Co 24 (not connected)")
+  assert.equal(c[3].label, "Gone Co 24 (not connected)")
+  assert.equal(S.monitorChoices(["A"], "laptop").length, 3, "the role is never shown as not connected")
 })
 
 test("positionText for floating and tiled windows", () => {

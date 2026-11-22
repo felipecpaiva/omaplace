@@ -165,4 +165,17 @@ do
   eq(how, "model", "by the model step")
 end
 
+-- the role "laptop": any laptop panel, whatever its model; nothing when there is none
+do
+  local other = mon("eDP-1", { description = "Other Panel X9", make = "Other Panel", model = "X9", serial = "" })
+  local got, how = M.resolve({ identity = "laptop" }, { mon("DP-1"), other }, "skip")
+  eq(got and got.name, "eDP-1", "laptop role finds another model of panel")
+  eq(how, "internal", "by the internal step")
+  got, how = M.resolve({ identity = "laptop" }, { mon("DP-1") }, "skip")
+  eq(got, nil, "no panel: nothing")
+  eq(how, "skip", "skip")
+  got = M.resolve({ identity = "Example Panel LP1" }, { mon("DP-1"), other }, "skip")
+  eq(got, nil, "an identity of one panel model does not match another laptop")
+end
+
 print("test_monitors ok (" .. checks .. " checks)")

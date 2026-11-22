@@ -3,11 +3,11 @@
 // profiles from a Chromium `Local State`, live monitor names, and the text the pages show. No files, no clock, no Qt:
 // Service.qml reads the files and hands the text in, so Node can test every function here.
 
-// The top-level keys the window writes, and values it shows but does not offer yet (a later restore at login).
+// The top-level keys the window writes, and values it shows but does not offer yet (none now; kept for the next one).
 const PANEL_KEYS = ["session", "restore_at_login", "app_memory", "existing_default", "missing_monitor_scene",
   "missing_monitor_rule", "ignore", "expiry_seconds", "settle_ms", "launch_tick_ms", "session_debounce_s", "session_keep",
   "context_quiet_ms", "request_timeout_s"]
-const NOT_YET = { restore_at_login: ["ask", "auto"] }
+const NOT_YET = {}
 const TIMING = [
   { key: "expiry_seconds", label: "Wait for a started app (seconds)" },
   { key: "settle_ms", label: "Settle time after an app opens (ms)" },
@@ -114,11 +114,12 @@ function monitorNames(list) {
   })
 }
 
-// Choices for a rule's monitor: the focused monitor (empty), the live ones, and the rule's own when it is not plugged in.
+// Choices for a rule's monitor: the focused monitor (empty), any laptop panel (the role "laptop", lua/monitors.lua
+// wanted), the live ones, and the rule's own when it is not plugged in.
 function monitorChoices(live, current) {
-  const out = [{ value: "", label: "Focused monitor" }]
+  const out = [{ value: "", label: "Focused monitor" }, { value: "laptop", label: "Laptop panel (any laptop)" }]
   for (const n of live || []) out.push({ value: n, label: n })
-  if (current && (live || []).indexOf(current) === -1) out.push({ value: current, label: current + " (not connected)" })
+  if (current && current !== "laptop" && (live || []).indexOf(current) === -1) out.push({ value: current, label: current + " (not connected)" })
   return out
 }
 

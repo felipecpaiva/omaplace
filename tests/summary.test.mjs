@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 const load = (f) => readFileSync(new URL("../js/" + f, import.meta.url), "utf8").replace(".pragma library", "")
-const S = new Function(load("Summary.js") + "; return { validName, answer, parseJson, fromUrl, entryList, appIdOf, isTerminal, joinArgs, terminalFields, sceneCapture, layoutOf, planTarget, runResult, notifyText, ruleFromCapture, sceneList, instanceName, pickSession }")()
+const S = new Function(load("Summary.js") + "; return { validName, answer, parseJson, fromUrl, entryList, appIdOf, isTerminal, joinArgs, terminalFields, sceneCapture, layoutOf, planTarget, runResult, notifyText, ruleFromCapture, sceneList, instanceName, pickSession, loginRestore }")()
 const A = new Function(load("AppResolve.js") + "; return { resolve, defaultStrategies }")()
 const F = new Function(load("ArgFilter.js") + "; return { filter }")()
 
@@ -154,4 +154,15 @@ test("pickSession answers empty for no index, a bad index or only the current in
   assert.equal(S.pickSession(null, "abc_1", ""), "")
   assert.equal(S.pickSession({ a: 1 }, "abc_1", ""), "")
   assert.equal(S.pickSession([{ instance: "abc_1" }, null, { saved_at: 1 }], "abc_1", ""), "")
+})
+
+test("loginRestore: only at a real login, only with a previous session", () => {
+  const idx = [{ instance: "h_1700000000_1", saved_at: 1 }, { instance: "h_1699990000_1", saved_at: 0 }]
+  assert.deepEqual(S.loginRestore("ask", "h_1700000000_1", 1700000100, idx), { action: "ask", instance: "h_1699990000_1" })
+  assert.deepEqual(S.loginRestore("auto", "h_1700000000_1", 1700000100, idx), { action: "auto", instance: "h_1699990000_1" })
+  assert.equal(S.loginRestore("off", "h_1700000000_1", 1700000100, idx).action, "none")
+  assert.equal(S.loginRestore("ask", "h_1700000000_1", 1700000000 + 601, idx).action, "none", "too long after the start: not a login")
+  assert.equal(S.loginRestore("ask", "h_1700000000_1", 1700000100, [{ instance: "h_1700000000_1", saved_at: 1 }]).action, "none", "no previous session")
+  assert.equal(S.loginRestore("ask", "weird", 1700000100, idx).action, "none", "a signature without a start time")
+  assert.equal(S.loginRestore("ask", "", 1700000100, idx).action, "none")
 })

@@ -39,8 +39,8 @@ ColumnLayout {
     panel: page.panel
     title: "Restore at login"
     current: page.settings.restore_at_login || "off"
-    options: [{ value: "off", label: "Off" }, { value: "ask", label: "Ask", later: true }, { value: "auto", label: "Automatic", later: true }]
-    note: "Coming later. For now, restore by hand with the button above or: omaplace restore"
+    options: [{ value: "off", label: "Off" }, { value: "ask", label: "Ask" }, { value: "auto", label: "Automatic" }]
+    note: "After a login or reboot. Ask: one notification with a Restore button. Automatic: the last session comes back by itself. Only right after a login, never after a shell restart. By hand at any time: the button above, or omaplace restore"
     onPicked: function (value) { page.panel.setSetting("restore_at_login", value) }
   }
 

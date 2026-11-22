@@ -171,6 +171,21 @@ function sceneList(doc) {
 // Same rule as lua/omaplace.lua: every character outside [A-Za-z0-9_] becomes "_", cut to 128.
 function instanceName(sig) { return String(sig).replace(/[^A-Za-z0-9_]/g, "_").slice(0, 128) }
 
+// Restore at login (D26). A login is a Hyprland instance at most LOGIN_WINDOW_S old: its signature carries its start time
+// ("<hash>_<unix seconds>_<n>"), so a shell restart, or omaplace turned on later, is never taken for a login. Returns
+// { action: "none" | "ask" | "auto", instance: the previous session to restore }.
+const LOGIN_WINDOW_S = 600
+function loginRestore(mode, sig, nowSec, index) {
+  const none = { action: "none", instance: "" }
+  if (mode !== "ask" && mode !== "auto") return none
+  const m = /^[A-Za-z0-9]+_([0-9]{9,11})_/.exec(String(sig || ""))
+  if (!m) return none
+  const age = Number(nowSec) - Number(m[1])
+  if (!(age >= -60 && age <= LOGIN_WINDOW_S)) return none // -60: a clock set back a little after boot
+  const instance = pickSession(index, instanceName(sig), "")
+  return instance === "" ? none : { action: mode, instance: instance }
+}
+
 // index: sessions.json (newest first, [{instance, saved_at}]). gen "" or "previous" is the newest instance that is not
 // `current`; "1", "2" count the same previous ones; anything else must be an instance name. Returns "" when none fits.
 function pickSession(index, current, gen) {

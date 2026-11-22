@@ -306,7 +306,7 @@ All examples are made up.
 ```toml
 [rule.editor]
 app = "org.example.Editor"      # matched against initialClass
-monitor = "Example Corp EX27"    # identity; empty = the focused monitor (the rule follows focus)
+monitor = "Example Corp EX27"    # identity; "laptop" = any laptop panel (D25); empty = the focused monitor (the rule follows focus)
 slot = 3                        # 1..10 inside that monitor's block
 follow = false                  # true: switch to the workspace when it opens
 enabled = true
@@ -548,7 +548,7 @@ within minutes.
 
 Default source: the newest session file whose instance is **not** the current one (the previous login). `restore GEN`
 picks an older one. Same as 6.3, with `Plan.fromSession`: each window goes to its own saved monitor and slot (not the current one), resolved
-through `monitors.resolve` with policy `focused`. Restore at login is a later setting (`restore_at_login`), off in v1.
+through `monitors.resolve` with policy `focused`. Restore at login: setting `restore_at_login` (D26), off by default.
 
 ## 7. Interfaces (contracts the builders code against)
 
@@ -617,7 +617,7 @@ Placed windows get `omaplace-slot=<run>/<n>`. It stops a window being claimed tw
 | `session_debounce_s` | 15 | |
 | `session_keep` | 5 (Hyprland instances, not writes) | |
 | `request_timeout_s` | 60 | |
-| `restore_at_login` | `off` | later: `ask`, `auto` |
+| `restore_at_login` | `off` | `off`, `ask`, `auto` (D26) |
 | `app_memory` | `scene` | `scene`, `last_place`, `auto`, `off` |
 | `context_quiet_ms` | 2000 | D18 |
 | `tiled_order` | `true` (on tiled and scrolling workspaces, open or move windows one at a time in saved order) | |

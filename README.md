@@ -75,7 +75,7 @@ focused, or the Rules page), or by hand in `~/.config/omaplace/config.toml` (mad
 ```toml
 [rule.editor]
 app = "org.example.Editor"      # the app's initial class
-monitor = "Example Corp EX27"    # the monitor's name as Omarchy knows it; empty = the focused monitor
+monitor = "Example Corp EX27"    # the monitor's name as Omarchy knows it; "laptop" = any laptop panel; empty = the focused monitor
 slot = 3                        # desktop 1 to 10 on that monitor
 follow = false                  # true: switch to that desktop when the app opens
 ```

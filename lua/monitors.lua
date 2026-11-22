@@ -82,6 +82,10 @@ local function shape_gap(fp, lfp)
   return math.abs(lw - fw) / fw + math.abs(lh - fh) / fh
 end
 
+-- The identity "laptop" is a role, not a monitor: any laptop panel. A rule or a scene's rule desktop saved with it
+-- still finds the panel after config.toml is copied to a laptop of another model (an identity is one panel model).
+M.LAPTOP = "laptop"
+
 -- Find the live monitor for a stored fingerprint. Returns `monitor, how`, where how is one of
 -- "identity", "serial", "model", "internal", "shape", "focused"; or nil, "skip" when nothing matches
 -- and `policy` is "skip" (or not "focused"). Ties go to the lowest connector name.
@@ -93,6 +97,7 @@ function M.resolve(fp, live, policy)
   table.sort(list, function(a, b) return a.name < b.name end)
   for i, m in ipairs(list) do fps[i] = M.fingerprint(m, live) end
   if type(fp) ~= "table" then return nil, "skip" end
+  if fp.identity == M.LAPTOP then fp = { internal = true } end
 
   local function first(pred)
     for i, m in ipairs(list) do

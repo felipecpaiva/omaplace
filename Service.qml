@@ -592,10 +592,35 @@ Item {
     root.nextLogin()
   }
 
+  // Restore at login (D26): once per Hyprland instance (its own marker, so the plans' marker does not hide it), only
+  // when the instance is a fresh login (Summary.loginRestore). "ask" sends one notification with a Restore button;
+  // "auto" queues the restore first, so login plans opened after it keep their own desktops.
+  function checkRestore() {
+    if (!root.dirsReady || !/^[A-Za-z0-9_]{1,128}$/.test(root.instance)) return
+    if (root.readNow(restoreMarker) !== "") return
+    let mode = ""
+    try { mode = root.config().settings.restore_at_login } catch (e) { return }
+    let d = Summary.loginRestore(mode, root.instance, Math.floor(Date.now() / 1000), Summary.parseJson(root.readNow(sessionsFile)))
+    if (d.action === "none") return
+    root.writeError = ""
+    restoreMarker.setText(d.action + "\n")
+    if (root.writeError !== "") { console.warn("omaplace: restore at login skipped: " + root.writeError); return }
+    if (d.action === "auto") {
+      root.loginQueue = [{ restore: true }].concat(root.loginQueue)
+      root.nextLogin()
+      return
+    }
+    let bin = root.launcherSource.slice(0, root.launcherSource.lastIndexOf("/")) + "/bin/omaplace"
+    root.notices.push(["omarchy-notification-send", "-g", "\u{F0770}", "omaplace", "Restore the windows of your last session?",
+      "--action", "Restore", bin, "restore"])
+    root.nextNotice()
+  }
+
   // The next login plan, when no request runs (finish() calls this again). Each is checked again against scenes.toml.
   function nextLogin() {
     while (!root.req && root.loginQueue.length > 0) {
       let name = root.loginQueue.shift()
+      if (typeof name === "object") { root.startRestore(""); if (root.req) return; continue } // the restore of D26
       let scene = SceneStore.parse(root.readNow(scenesFile)).scenes[name]
       if (!scene || scene.plan !== true || scene.open_at_login !== true || scene.planError) { console.log("omaplace: login plan skipped: " + name); continue }
       root.begin("open", { name: name, scene: scene, plan: true, user: false })
@@ -979,6 +1004,7 @@ Item {
       // of a start always happens (plansText is empty) and reloads; only a build that failed needs the call here
       if (!root.writePlans()) root.reloadPlans()
       root.checkLogin()
+      root.checkRestore()
       if (root.deskAgain) root.desktopsInfo() // the Desktops page asked before the runtime folder existed
     }
   }
@@ -1109,6 +1135,7 @@ Item {
   // Read only by planUpdate(): Lua sends the move notifications itself.
   FileView { id: planMovesFile; path: root.runtimeDir + "/plan-moves.json"; blockLoading: true; printErrors: false }
   FileView { id: loginFile; path: root.runtimeDir + "/login.json"; blockLoading: true; printErrors: false; watchChanges: true; onFileChanged: { root.checkLogin(); Qt.callLater(root.rearm, loginFile) } }
+  FileView { id: restoreMarker; path: root.runtimeDir + "/restore-done-" + root.instance; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the restore marker" }
   FileView { id: markerFile; path: root.runtimeDir + "/login-done-" + root.instance; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false; onSaveFailed: root.writeError = "cannot write the login marker" }
   FileView { id: launcherFile; path: root.launcherDest; blockLoading: true; blockWrites: true; atomicWrites: true; printErrors: false }
 }
