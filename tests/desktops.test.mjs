@@ -495,3 +495,10 @@ test("names people use, and empty desktops folded", () => {
   assert.equal(f.folded, 2)
   assert.equal(D.cards(live, doc({}), {}).groups[0].label, "Example Corp EX27")
 })
+
+test("monitors with a broken or shared name are told apart", () => {
+  assert.equal(D.monitorLabel("DP-1", "Invalid Vendor Codename - RTK 0x0 0x0"), "Monitor DP-1")
+  assert.equal(D.monitorLabel("DP-1", ""), "Monitor DP-1")
+  const g = D.uniqueLabels([{ name: "DP-1", label: "Example Corp EX27" }, { name: "DP-2", label: "Example Corp EX27" }, { name: "eDP-1", label: "Laptop screen" }])
+  assert.deepEqual(g.map((x) => x.label), ["Example Corp EX27 (DP-1)", "Example Corp EX27 (DP-2)", "Laptop screen"])
+})

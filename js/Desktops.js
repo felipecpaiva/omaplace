@@ -333,7 +333,7 @@ function cards(live, doc, ctx) {
     const slot = Number.isInteger(s.home_slot) ? s.home_slot : 0
     away[id].cards.push(cardOf({ identity: id, name: id, focused: id === "" }, slot, 0, { name, scene: s }, {}, c))
   }
-  return { groups, fallback: c.fallback }
+  return { groups: uniqueLabels(groups), fallback: c.fallback }
 }
 
 // The heading of a plan row on the card.
@@ -451,7 +451,17 @@ function titleOf(card) {
 // A monitor as a person names it (D45, display only, never stored): the laptop's own screen, else its model.
 function monitorLabel(name, identity) {
   if (/^(eDP|LVDS|DSI)/i.test(String(name || ""))) return "Laptop screen"
-  return String(identity || name || "Monitor")
+  // a monitor whose own name is broken (seen live: "Invalid Vendor Codename - RTK ...") reads by its port
+  if (!identity || /invalid vendor|unknown/i.test(String(identity))) return "Monitor " + String(name || "")
+  return String(identity)
+}
+
+// Two monitors that read the same (same model, or both broken) get their port added, so each is told apart.
+function uniqueLabels(groups) {
+  const count = {}
+  for (const g of groups) { if (!g.label) g.label = g.name; count[g.label] = (count[g.label] || 0) + 1 }
+  for (const g of groups) if (count[g.label] > 1 && g.label.indexOf(g.name) === -1) g.label += " (" + g.name + ")"
+  return groups
 }
 
 // The desktops the map shows (D45): those in use or remembered, then the first empty one (so there is always one to

@@ -8,7 +8,7 @@ AbstractButton {
     property var card: ({})
     property bool selected: false
     // one word only where there is something to know (D45): remembered, or changed since; nothing under the others
-    readonly property string word: card.error ? qsTr("Problem") : card.state === "changed" ? qsTr("Changed") : card.plan ? qsTr("Remembered") : ""
+    readonly property string word: card.error ? qsTr("Problem") : card.state === "changed" ? qsTr("Changed") : card.plan ? qsTr("Saved") : ""
     activeFocusOnTab: true
     padding: 3
     Accessible.name: qsTr("Desktop %1, %2").arg(tile.card.slot).arg(tile.card.badge)
