@@ -158,15 +158,19 @@ Then:
 ## Settings
 
 Open **omaplace** from the app launcher, or run `omaplace settings`. It is a normal window: it floats, stays open while
-you arrange your apps, and opening it again brings it to the front. Five pages:
+you arrange your apps, and opening it again brings it to the front. The first time, one button remembers every desktop
+as it is, then one question asks what happens after a restart. Five pages:
 
-- **Desktops:** the map of every desktop on every monitor, and the plan of the one you pick (above).
-- **Apps:** where an app always opens (rules: monitor, desktop, follow, same spot), where apps you open yourself go
-  (app memory), and apps omaplace leaves alone.
-- **Scenes:** open, rename, delete, and see each window. Pick a browser profile or a project folder for a window
-  omaplace could not tell. What a scene does with apps already open and with a missing monitor.
-- **Restore:** restore the last session, restore at login, the snapshot switch, and older sessions.
-- **General:** the Omarchy menu, the timings (Advanced), and About.
+- **Desktops:** a picture of each desktop as it is now, with the desktops you use first. "Remember this desktop" keeps
+  its apps and where they are; later, "Put windows back" or "Update from now" when it changed. Layouts and zones (drawn
+  with the mouse, and shared with omagnet's snapping when omagnet runs) are under "More options".
+- **Apps:** the apps with their own place, one choice each: always on a desktop (pick an open window: its place is
+  filled in), or left alone. Above it, where every other app goes.
+- **Saved:** saved desktops you open on any desktop; "Give it a home" makes one a desktop's own.
+- **After a restart:** ask me, bring them back, or do nothing; bring the last session back now.
+- **General:** the Omarchy menu, the timings, and About.
+
+Changes save at once. Remembering a desktop, or letting it go, can be taken back for 10 seconds.
 
 Keys: Ctrl+1 to Ctrl+5 for the pages, F5 reads the desktops again, ? or F1 lists the keys, Ctrl+W closes.
 
