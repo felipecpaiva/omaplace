@@ -129,3 +129,20 @@ package installed with pacman (Felipe installs it with his password).
 Through the real service, files backed up first and put back byte for byte after: the laptop panel's desktop 1
 (floating, 3 windows) became a Free floating plan for that desktop with the windows' spots; 2 saved, 1 left out (a
 floating terminal app omaplace cannot start again), 1 browser window needing its profile. Pass.
+
+## Settings app redesign on `next`, live 2026-11-22 and 2026-11-23
+
+All through the real service, with Felipe's OK each time. Files were backed up first. Only classes and positions were
+read, never titles.
+
+- **Hyprland's workspace rules (D50, D51).** hyprmoncfg gives laptop 1 to 3, HDMI 4 to 6, DP-1 7 to 9. Before the fix
+  omaplace had placed apps on workspaces 12, 13 and 21. The windows went to 9 and 4, and the workspaces back to their
+  monitors. After the fix the app showed each monitor's own numbers. Pass.
+- **Put windows back on desktop 1.** Chrome had an unknown profile ("?") and was skipped. Fixed in `lua/tickets.lua` and
+  `js/AppResolve.js`: an unknown profile is never started, but its open window is put back. Chrome was moved off and
+  came back full screen; state "done". Pass.
+- **Quick changes (D53) on desktop 1**, 2 floating windows, through the requests the buttons send. "Side by side":
+  left and right halves. One window to "center": it moved, the other stayed. "All full screen": both back, and
+  `scenes.toml` the same as the backup byte for byte. Each move took less than 4 seconds. Pass.
+- **False "Class is a guess" note (feedback 7).** Fixed and checked after a shell restart: the Reddit web app row has no
+  note. The first read straight after a restart can still show it, before the open window list arrives. Pass.
