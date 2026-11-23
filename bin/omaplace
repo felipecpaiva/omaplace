@@ -25,6 +25,7 @@ Usage: omaplace [--json] <command>
   status                show the current or last run
   plan-update <id>      write a hand move of a planned window into its plan (the "Update plan" notification button)
   settings              open the settings app (omaplace-settings)
+  install-app           download the pinned settings app package, check its sha256, then install it with pacman
 
   --json                print the service's JSON answer instead of text
 Exit codes: 0 ok (also a picker closed without a choice), 2 bad usage, 3 not found or nothing to save,
@@ -72,8 +73,9 @@ case $word in
     # one settings app (D36, D40): the omaplace-settings package
     app=${OMAPLACE_SETTINGS_BIN:-omaplace-settings}   # the tests point this at a stand-in, never the real app
     if command -v "$app" >/dev/null; then setsid -f "$app" open >/dev/null 2>&1; exit 0; fi
-    echo "omaplace: the settings app is not installed. Get omaplace-settings from https://github.com/felipecpaiva/omaplace/releases/latest and install it with: sudo pacman -U omaplace-settings-*.pkg.tar.zst" >&2
+    echo "omaplace: the settings app is not installed. Install omaplace-settings with: omaplace install-app" >&2
     exit 3 ;;
+  install-app) need $# 0; exec "$(dirname "$(readlink -f "$0")")/../libexec/install-app" ;;
   list | status) need $# 0; args=("$word") ;;
   plan-update) need $# 1; [[ $1 =~ ^[0-9]+$ ]] || bad "plan-update takes a move id (a number)"; args=(planUpdate "$1") ;;
   rule)

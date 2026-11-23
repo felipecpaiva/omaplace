@@ -145,12 +145,9 @@ Then:
    The `pcall` makes sure a missing or broken file never breaks the rest of your config. Rules are read from
    `~/.config/omaplace/config.toml` when Hyprland loads.
 3. The command line is `bin/omaplace` in the plugin folder. Add it to your PATH or make an alias.
-4. The settings app: download `omaplace-settings-<version>-1-x86_64.pkg.tar.zst` from the
-   [latest release](https://github.com/felipecpaiva/omaplace/releases/latest), then install it:
-
-   ```
-   sudo pacman -U omaplace-settings-*.pkg.tar.zst
-   ```
+4. The settings app: run `omaplace install-app`. It downloads the one package this version of omaplace names (release
+   tag and sha256 are fixed in `app/PINNED`), checks the sha256, and only then runs `sudo pacman -U` on it. If the
+   download fails or the sha256 does not match, nothing is installed.
 
    Or build it from this repository (needs `qt6-base`, `qt6-declarative`, `qt6-wayland`, `gcc`, `make`, `python`):
    `cd app && bin/install`.
