@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Download the settings app package pinned in app/PINNED, check its sha256, and only then install it with pacman.
+# Any download or digest failure installs nothing and runs no privileged command.
+set -euo pipefail
+pin="$(dirname "$0")/../app/PINNED"
+TAG= FILE= SHA256=
+# shellcheck source=/dev/null
+. "$pin"
+[[ $TAG =~ ^v[0-9A-Za-z._-]+$ && $FILE =~ ^omaplace-settings-[0-9A-Za-z._-]+\.pkg\.tar\.zst$ && $SHA256 =~ ^[0-9a-f]{64}$ ]] \
+  || { echo "omaplace: app/PINNED is not valid, nothing installed" >&2; exit 5; }
+
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"' EXIT
+url="https://github.com/felipecpaiva/omaplace/releases/download/$TAG/$FILE"
+curl -fsSL --proto '=https' -o "$tmp/$FILE" "$url" || { echo "omaplace: download failed ($url), nothing installed" >&2; exit 5; }
+got=$(sha256sum "$tmp/$FILE" | cut -d' ' -f1)
+[ "$got" = "$SHA256" ] || { echo "omaplace: the package does not match the pinned sha256 (wanted $SHA256, got $got), nothing installed" >&2; exit 5; }
+echo "omaplace: sha256 ok ($TAG), installing with pacman"
+sudo pacman -U "$tmp/$FILE"

@@ -1,0 +1,5 @@
+# The one settings app package this commit may install (read by libexec/install-app). Update all three lines for every
+# release, after the release asset exists: sha256sum the downloaded file. See docs/releases/README.md.
+TAG=v0.3.0
+FILE=omaplace-settings-0.3.0-1-x86_64.pkg.tar.zst
+SHA256=cf3640c20cff1037fd2f641459ccbab8b7cd860ae039ac0b209692ebdf665fb2
