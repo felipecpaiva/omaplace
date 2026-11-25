@@ -39,6 +39,9 @@ if have shellcheck; then step shellcheck shellcheck tests/*.sh; fi
 if have /usr/lib/qt6/bin/qmllint && [ ${#qml_files[@]} -gt 0 ]; then
   step qmllint /usr/lib/qt6/bin/qmllint "${qml_files[@]}"
 fi
+if have python3 && have quickshell; then
+  step "login startup" python3 tests/login_startup.test.py
+fi
 
 # the settings app (design 17): Qt tests offscreen against a fake shell
 if have qmake6; then step "app tests" bash app/bin/test; fi
