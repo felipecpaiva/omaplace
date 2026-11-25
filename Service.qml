@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import "js/SceneStore.js" as SceneStore
 import "js/ConfigIO.js" as ConfigIO
@@ -86,6 +87,7 @@ Item {
   // new service copy with nothing to do.
   property bool loginBusy: false
   property bool restoreBusy: false
+  property bool loginReady: false
   property var chainNext: null
   property int chainToken: 0
   readonly property string instance: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
@@ -611,10 +613,9 @@ Item {
     } catch (e) { return Summary.answer(root.fail("failed", String(e.message || e))) }
   }
 
-  // Open at login (design 14.8): Lua lists the ticked plans once per Hyprland instance; the marker in the runtime folder
-  // keeps a shell restart from opening them again. The marker is written before the first open.
+  // Lua lists the ticked plans once per Hyprland instance. The marker keeps a shell restart from repeating them.
   function checkLogin() {
-    if (!root.dirsReady || !/^[A-Za-z0-9_]{1,128}$/.test(root.instance)) return
+    if (!root.loginReady || !root.dirsReady || !/^[A-Za-z0-9_]{1,128}$/.test(root.instance)) return
     let login = Summary.parseJson(root.readNow(loginFile))
     if (!login || login.instance !== root.instance || !Array.isArray(login.plans)) return
     if (root.loginBusy || root.readNow(markerFile) !== "") return
@@ -1327,10 +1328,27 @@ Item {
         // reload_plans at every start, even with plans.lua unchanged (Lua's retry of its login.json write): the first write
         // of a start always happens (plansText is empty) and reloads; only a build that failed needs the call here
         if (!root.writePlans()) root.reloadPlans()
-        root.checkRestore() // first: a restore queued before the login plans runs before them (D26)
-        root.checkLogin()
+        if (!root.loginReady) loginSettle.start()
         if (root.deskAgain) root.desktopsInfo() // the Desktops page asked before the runtime folder existed
       })
+    }
+  }
+
+  // Startup monitor and workspace configuration can reload Hyprland while apps are still coming up.
+  // Wait for a quiet period before handing the Lua engine any automatic login work.
+  Timer {
+    id: loginSettle
+    interval: 3000
+    onTriggered: {
+      root.loginReady = true
+      root.checkRestore()
+      root.checkLogin()
+    }
+  }
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (loginSettle.running && event && event.name === "configreloaded") loginSettle.restart()
     }
   }
 
